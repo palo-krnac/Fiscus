@@ -44,6 +44,7 @@ const inv = (cid) => `/api/companies/${cid}/invoices`
 
 export const api = {
   capabilities: () => request('GET', '/api/capabilities'),
+  codes: () => request('GET', '/api/codes'),
   companies: () => request('GET', '/api/companies'),
   createCompany: (c) => request('POST', '/api/companies', c),
   updateCompany: (c) => request('PUT', `/api/companies/${c.id}`, c),

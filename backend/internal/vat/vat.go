@@ -1,7 +1,8 @@
 // Package vat počíta DPH podľa slovenských pravidiel.
 //
-// Sadzby od 1. 1. 2025: 23 % základná, 19 % a 5 % znížené, 0 % (oslobodené
-// plnenie alebo prenesenie daňovej povinnosti). DPH sa počíta zo súčtu
+// Sadzby sú v číselníku Periods s obdobím platnosti (od 1. 1. 2025: 23 %
+// základná, 19 % a 5 % znížené; do 31. 12. 2024: 20 % a 10 %, 5 %).
+// 0 % = oslobodené plnenie alebo prenesenie daňovej povinnosti. DPH sa počíta zo súčtu
 // základov za každú sadzbu a zaokrúhľuje na centy — tak, ako ju
 // zobrazuje rekapitulácia na faktúre.
 package vat
@@ -19,15 +20,58 @@ type Rate int
 const (
 	Rate0  Rate = 0
 	Rate5  Rate = 5
+	Rate10 Rate = 10
 	Rate19 Rate = 19
+	Rate20 Rate = 20
 	Rate23 Rate = 23
 )
 
-// Valid vráti true pre sadzby platné na Slovensku od 2025.
-func (r Rate) Valid() bool {
-	switch r {
-	case Rate0, Rate5, Rate19, Rate23:
-		return true
+// Period je obdobie, v ktorom platí sada sadzieb DPH (číselník).
+type Period struct {
+	From  string `json:"from"`  // vrátane, YYYY-MM-DD
+	To    string `json:"to"`    // vrátane; "" = doteraz
+	Rates []Rate `json:"rates"` // od najvyššej; 0 = oslobodené / prenesenie
+}
+
+// Periods je číselník sadzieb DPH na Slovensku. Pri zmene zákona sa
+// pridá nové obdobie na koniec a ukončí sa predchádzajúce.
+var Periods = []Period{
+	{From: "2023-01-01", To: "2024-12-31", Rates: []Rate{Rate20, Rate10, Rate5, Rate0}},
+	{From: "2025-01-01", Rates: []Rate{Rate23, Rate19, Rate5, Rate0}},
+}
+
+// RatesOn vráti sadzby platné k dátumu dodania (YYYY-MM-DD).
+// Pre dátum pred prvým obdobím vráti sadzby prvého obdobia.
+func RatesOn(date string) []Rate {
+	for _, p := range Periods {
+		if date >= p.From && (p.To == "" || date <= p.To) {
+			return p.Rates
+		}
+	}
+	if date < Periods[0].From {
+		return Periods[0].Rates
+	}
+	return Periods[len(Periods)-1].Rates
+}
+
+// ValidOn vráti true, ak sadzba platila k dátumu dodania.
+func (r Rate) ValidOn(date string) bool {
+	for _, v := range RatesOn(date) {
+		if v == r {
+			return true
+		}
+	}
+	return false
+}
+
+// Known vráti true pre sadzbu, ktorá je v niektorom období číselníka.
+func (r Rate) Known() bool {
+	for _, p := range Periods {
+		for _, v := range p.Rates {
+			if v == r {
+				return true
+			}
+		}
 	}
 	return false
 }
@@ -73,7 +117,7 @@ func LineAmount(l Line) money.Dec { return l.Quantity.Mul(l.UnitPrice).RoundCent
 func Calculate(lines []Line, mode PriceMode, reverseCharge bool) (Summary, error) {
 	sums := map[Rate]money.Dec{}
 	for i, l := range lines {
-		if !l.Rate.Valid() {
+		if !l.Rate.Known() {
 			return Summary{}, fmt.Errorf("položka %d: neplatná sadzba DPH %d %%", i+1, l.Rate)
 		}
 		r := l.Rate

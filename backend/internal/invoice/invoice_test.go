@@ -123,15 +123,6 @@ func TestIssueRejectsInvalid(t *testing.T) {
 	}
 }
 
-func TestFormatNumber(t *testing.T) {
-	if got := FormatNumber(Series(KindInvoice), 2026, 7); got != "FA20260007" {
-		t.Fatal(got)
-	}
-	if got := FormatNumber(Series(KindCreditNote), 2026, 12); got != "DB20260012" {
-		t.Fatal(got)
-	}
-}
-
 func TestNonVATPayerHasNoVAT(t *testing.T) {
 	inv := sample()
 	inv.NonVATPayer = true
@@ -145,5 +136,28 @@ func TestNonVATPayerHasNoVAT(t *testing.T) {
 	inv.Customer.ICDPH = ""
 	if err := inv.Validate(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestPaymentMethod(t *testing.T) {
+	inv := sample()
+	_ = inv.Recalculate()
+	if inv.PaymentMethod != PayTransfer {
+		t.Fatalf("predvolený spôsob úhrady: %q", inv.PaymentMethod)
+	}
+	inv.PaymentMethod = "bitcoin"
+	if !fields(inv.Validate())["paymentMethod"] {
+		t.Fatal("neznámy spôsob úhrady mal byť odmietnutý")
+	}
+	for _, m := range PaymentMethods {
+		if !m.Code.Valid() || m.Label == "" {
+			t.Errorf("číselník: %+v", m)
+		}
+	}
+}
+
+func TestDateDisplay(t *testing.T) {
+	if MustDate("2024-12-05").Display() != "5. 12. 2024" || (Date{}).Display() != "" {
+		t.Fatal(MustDate("2024-12-05").Display())
 	}
 }

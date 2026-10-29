@@ -9,6 +9,8 @@ import InputText from 'primevue/inputtext'
 import Textarea from 'primevue/textarea'
 import DatePicker from 'primevue/datepicker'
 import SelectButton from 'primevue/selectbutton'
+import Select from 'primevue/select'
+import { codes, ratesOn } from '../lib/codes.js'
 import Checkbox from 'primevue/checkbox'
 import AutoComplete from 'primevue/autocomplete'
 import IcoInput from '../components/IcoInput.vue'
@@ -159,14 +161,18 @@ const lineCols = computed(() => [
     field: 'quantity', headerName: 'Množstvo', width: 96, type: 'rightAligned',
     valueFormatter: (p) => formatQuantity(p.value), valueParser: numParser,
   },
-  { field: 'unit', headerName: 'MJ', width: 64 },
+  {
+    field: 'unit', headerName: 'MJ', width: 70,
+    cellEditor: 'agSelectCellEditor',
+    cellEditorParams: (p) => ({ values: [...new Set([...units.value, p.value].filter(Boolean))] }),
+  },
   {
     field: 'unitPrice', headerName: 'Cena za MJ', width: 112, type: 'rightAligned',
     valueFormatter: (p) => formatAmount(p.value), valueParser: numParser,
   },
   {
     field: 'vatRate', headerName: 'DPH', width: 74, type: 'rightAligned', hide: nonVat.value,
-    cellEditor: 'agSelectCellEditor', cellEditorParams: { values: [23, 19, 5, 0] },
+    cellEditor: 'agSelectCellEditor', cellEditorParams: () => ({ values: ratesOn(inv.value?.deliveryDate) }),
     valueFormatter: (p) => `${p.value} %`,
     valueParser: (p) => Number(p.newValue),
   },
@@ -180,6 +186,17 @@ const lineCols = computed(() => [
     cellClass: 'cell-del',
   },
 ])
+
+// merné jednotky z číselníka firmy (staršia firma bez číselníka → predvolené)
+const units = computed(() => (session.company?.units?.length ? session.company.units : codes.defaultUnits))
+// chyby jednotlivých položiek z náhľadu/uloženia: "Položka 2: Sadzba 23 % neplatí…"
+const lineErrors = computed(() => {
+  const src = { ...previewErrors.value, ...errors.value }
+  return Object.entries(src)
+    .filter(([f]) => f.startsWith('lines['))
+    .filter(([f]) => showErrors.value || f.endsWith('.vatRate'))
+    .map(([f, msg]) => `Položka ${Number(f.match(/\d+/)[0]) + 1}: ${msg}`)
+})
 
 const lineDefaults = computed(() => ({ editable: editable.value, sortable: false, resizable: true, suppressMovable: true }))
 
@@ -472,6 +489,21 @@ const customerFields = reactive([
               <button v-for="n in [7, 14, 30]" :key="n" type="button" :class="{ on: dueDays === n }" @click="setDueDays(n)">{{ n }} dní</button>
             </div>
           </div>
+          <div class="fields pay-row">
+            <label>
+              <span>Spôsob úhrady</span>
+              <Select
+                :model-value="inv.paymentMethod || 'transfer'"
+                :options="codes.paymentMethods"
+                option-label="label"
+                option-value="code"
+                :disabled="!editable"
+                size="small"
+                class="pay-method"
+                @update:model-value="upd(inv, 'paymentMethod')($event)"
+              />
+            </label>
+          </div>
           <div v-if="!nonVat" class="fields vat-opts">
             <SelectButton
               :model-value="inv.priceMode"
@@ -511,6 +543,9 @@ const customerFields = reactive([
             />
           </div>
           <small v-if="fieldError('lines')" class="err">{{ fieldError('lines') }}</small>
+          <ul v-if="lineErrors.length" class="line-errors">
+            <li v-for="m in lineErrors" :key="m">{{ m }}</li>
+          </ul>
           <Button v-if="editable" label="Pridať položku" icon="pi pi-plus" text size="small" class="add" @click="addLine" />
         </fieldset>
 
@@ -765,6 +800,24 @@ legend {
 }
 .add {
   margin-top: 4px;
+}
+.line-errors {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: var(--tone-overdue);
+  font-size: var(--fs-sm);
+}
+.pay-row {
+  margin-top: 10px;
+  grid-template-columns: minmax(0, 240px);
+}
+.locked :deep(.p-select.p-disabled) {
+  background: transparent;
+  border-color: transparent;
+  opacity: 1;
+}
+.locked :deep(.p-select.p-disabled .p-select-dropdown) {
+  display: none;
 }
 
 .note {

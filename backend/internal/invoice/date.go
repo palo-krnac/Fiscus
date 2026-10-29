@@ -1,6 +1,7 @@
 package invoice
 
 import (
+	"fmt"
 	"strings"
 	"time"
 )
@@ -40,6 +41,7 @@ func Today() Date {
 
 func (d Date) IsZero() bool         { return d.t.IsZero() }
 func (d Date) Year() int            { return d.t.Year() }
+func (d Date) Month() int           { return int(d.t.Month()) }
 func (d Date) Before(o Date) bool   { return d.t.Before(o.t) }
 func (d Date) After(o Date) bool    { return d.t.After(o.t) }
 func (d Date) AddDays(n int) Date   { return Date{d.t.AddDate(0, 0, n)} }
@@ -49,6 +51,14 @@ func (d Date) String() string {
 		return ""
 	}
 	return d.t.Format(dateLayout)
+}
+
+// Display vráti dátum v slovenskom zápise „20. 12. 2024“.
+func (d Date) Display() string {
+	if d.IsZero() {
+		return ""
+	}
+	return fmt.Sprintf("%d. %d. %d", d.t.Day(), int(d.t.Month()), d.t.Year())
 }
 
 func (d Date) MarshalJSON() ([]byte, error) {

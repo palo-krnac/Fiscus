@@ -12,6 +12,8 @@ import IconField from 'primevue/iconfield'
 import InputIcon from 'primevue/inputicon'
 import FormField from '../components/FormField.vue'
 import IcoInput from '../components/IcoInput.vue'
+import Select from 'primevue/select'
+import { countries } from '../lib/codes.js'
 import { fillFromRegistry } from '../lib/registry.js'
 import { api, ApiError } from '../lib/api.js'
 import { session } from '../lib/session.js'
@@ -96,7 +98,7 @@ const fields = [
   { key: 'ico', label: 'IČO', inputmode: 'numeric' },
   { key: 'dic', label: 'DIČ', inputmode: 'numeric' },
   { key: 'icdph', label: 'IČ DPH' },
-  { key: 'country', label: 'Krajina', hint: 'SK, CZ, DE…' },
+  { key: 'country', label: 'Krajina' },
   { key: 'email', label: 'E-mail', span: 2, autocomplete: 'email' },
   { key: 'phone', label: 'Telefón', span: 2, autocomplete: 'tel' },
   { key: 'iban', label: 'IBAN', span: 2 },
@@ -211,6 +213,17 @@ onBeforeUnmount(() => {
               :invalid="!!errors.ico"
               :auto="!form.id && !form.name"
               @found="(c) => (form = fillFromRegistry(form, c))"
+            />
+            <Select
+              v-else-if="f.key === 'country'"
+              v-model="form.country"
+              :options="countries"
+              option-label="label"
+              option-value="code"
+              filter
+              filter-placeholder="Hľadať krajinu"
+              size="small"
+              :invalid="!!errors.country"
             />
             <InputText v-else v-model="form[f.key]" size="small" :invalid="!!errors[f.key]" :inputmode="f.inputmode" :autocomplete="f.autocomplete" />
           </FormField>

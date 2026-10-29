@@ -6,6 +6,7 @@ package storetest
 import (
 	"context"
 	"errors"
+	"reflect"
 	"sync"
 	"testing"
 
@@ -178,12 +179,21 @@ func Run(t *testing.T, newStore Factory) {
 		s := newStore(t)
 		c, _ := s.CreateCompany(ctx, store.Company{Name: "Alfa", DefaultDueDays: 14})
 		c.Name, c.IBAN, c.VATPayer, c.DefaultDueDays, c.Email = "Alfa s.r.o.", "SK31 1200", true, 30, "a@b.sk"
+		c.Units = []string{"ks", "hod", "m²"}
+		c.NumberFormats = map[string]string{"invoice": "{RRRR}/{NNN}", "credit_note": "DB{RRRR}{NNNN}"}
 		if err := s.UpdateCompany(ctx, c); err != nil {
 			t.Fatal(err)
 		}
 		got, _ := s.GetCompany(ctx, c.ID)
-		if got != c {
-			t.Fatalf("po úprave: %+v", got)
+		if !reflect.DeepEqual(got, c) {
+			t.Fatalf("po úprave:\n got %+v\nwant %+v", got, c)
+		}
+		// zmena načítanej kópie nesmie zmeniť uložené dáta
+		got.Units[0] = "zmenené"
+		got.NumberFormats["invoice"] = "zmenené"
+		again, _ := s.GetCompany(ctx, c.ID)
+		if again.Units[0] != "ks" || again.NumberFormats["invoice"] != "{RRRR}/{NNN}" {
+			t.Fatal("úložisko vracia zdieľané číselníky firmy")
 		}
 		if err := s.UpdateCompany(ctx, store.Company{ID: 9999, Name: "x"}); !errors.Is(err, store.ErrNotFound) {
 			t.Fatalf("neexistujúca firma: %v", err)
@@ -255,9 +265,10 @@ func Run(t *testing.T, newStore Factory) {
 		inv := draft("Odberateľ", "2026-10-01")
 		inv.ContactID = 42
 		inv.NonVATPayer = true
+		inv.PaymentMethod = invoice.PayCash
 		_ = s.SaveInvoice(ctx, c.ID, inv)
 		got, _ := s.GetInvoice(ctx, c.ID, inv.ID)
-		if got.ContactID != 42 || !got.NonVATPayer {
+		if got.ContactID != 42 || !got.NonVATPayer || got.PaymentMethod != invoice.PayCash {
 			t.Fatalf("načítané: contact=%d nonVat=%v", got.ContactID, got.NonVATPayer)
 		}
 	})

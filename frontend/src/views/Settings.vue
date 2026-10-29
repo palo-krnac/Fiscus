@@ -5,6 +5,8 @@ import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import InputNumber from 'primevue/inputnumber'
 import ToggleSwitch from 'primevue/toggleswitch'
+import AutoComplete from 'primevue/autocomplete'
+import { codes, previewNumber } from '../lib/codes.js'
 import FormField from '../components/FormField.vue'
 import IcoInput from '../components/IcoInput.vue'
 import { fillFromRegistry } from '../lib/registry.js'
@@ -12,10 +14,28 @@ import { api, ApiError } from '../lib/api.js'
 import { session, replaceCompany } from '../lib/session.js'
 
 const toast = useToast()
-const form = ref({ ...session.company })
+const clone = (c) => ({ ...c, units: [...(c.units ?? [])], numberFormats: { ...(c.numberFormats ?? {}) } })
+const form = ref(clone(session.company))
 const errors = ref({})
 const busy = ref(false)
 const dirty = computed(() => JSON.stringify(form.value) !== JSON.stringify(session.company))
+
+const seriesFields = [
+  { kind: 'invoice', label: 'Faktúry' },
+  { kind: 'credit_note', label: 'Dobropisy' },
+  { kind: 'proforma', label: 'Zálohové faktúry' },
+]
+const unitSuggestions = ref([])
+function suggestUnits(e) {
+  const q = e.query.trim().toLowerCase()
+  const known = codes.defaultUnits.filter((u) => u.toLowerCase().startsWith(q) && !form.value.units.includes(u))
+  // napísaná jednotka je prvá, aby ju Enter hneď pridal
+  const typed = e.query.trim()
+  unitSuggestions.value = typed && !known.some((u) => u.toLowerCase() === q) ? [typed, ...known] : known
+}
+function resetUnits() {
+  form.value.units = [...codes.defaultUnits]
+}
 
 const companyFields = [
   { key: 'name', label: 'Obchodné meno', span: 2, autocomplete: 'organization' },
@@ -33,7 +53,7 @@ async function save() {
   try {
     const saved = await api.updateCompany(form.value)
     replaceCompany(saved)
-    form.value = { ...saved }
+    form.value = clone(saved)
     errors.value = {}
     toast.add({ severity: 'success', summary: 'Nastavenia uložené', life: 2500 })
   } catch (e) {
@@ -95,6 +115,49 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
       </fieldset>
 
       <fieldset class="form-section">
+        <legend>Číselné rady</legend>
+        <p class="help">
+          Zástupné znaky: <code>{RRRR}</code> rok, <code>{RR}</code> rok dvojciferne, <code>{MM}</code> mesiac,
+          <code>{NNNN}</code> poradové číslo (počet N = počet číslic). Poradie sa každý rok čísluje od 1.
+        </p>
+        <div class="form-grid">
+          <FormField
+            v-for="f in seriesFields"
+            :key="f.kind"
+            :label="f.label"
+            :error="errors[`numberFormats.${f.kind}`]"
+            :hint="`Napr. ${previewNumber(form.numberFormats[f.kind] || codes.defaultFormats[f.kind])}`"
+          >
+            <InputText
+              v-model="form.numberFormats[f.kind]"
+              size="small"
+              :placeholder="codes.defaultFormats[f.kind]"
+              :invalid="!!errors[`numberFormats.${f.kind}`]"
+              spellcheck="false"
+            />
+          </FormField>
+        </div>
+      </fieldset>
+
+      <fieldset class="form-section">
+        <legend>Merné jednotky</legend>
+        <FormField label="Jednotky ponúkané pri položkách faktúry" :error="errors.units" hint="Novú jednotku napíšte a potvrďte Enterom">
+          <AutoComplete
+            v-model="form.units"
+            multiple
+            :typeahead="true"
+            :auto-option-focus="true"
+            :suggestions="unitSuggestions"
+            :show-empty-message="false"
+            fluid
+            size="small"
+            @complete="suggestUnits"
+          />
+        </FormField>
+        <button type="button" class="link" @click="resetUnits">Obnoviť predvolené jednotky</button>
+      </fieldset>
+
+      <fieldset class="form-section">
         <legend>Platby</legend>
         <div class="form-grid">
           <FormField label="IBAN" :span="2" :error="errors.iban" hint="Zobrazí sa na faktúre a v QR kóde">
@@ -149,6 +212,28 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 .switch small {
   color: var(--ink-soft);
   font-size: var(--fs-sm);
+}
+.help {
+  margin: 0 0 10px;
+  font-size: var(--fs-sm);
+  color: var(--ink-soft);
+  max-width: 72ch;
+}
+.help code {
+  font-size: var(--fs-xs);
+  background: var(--rule-soft);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+.link {
+  margin-top: 6px;
+  font: inherit;
+  font-size: var(--fs-sm);
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--blue);
+  cursor: pointer;
 }
 .vat-grid {
   margin-top: 12px;

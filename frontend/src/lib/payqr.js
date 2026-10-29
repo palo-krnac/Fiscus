@@ -10,6 +10,7 @@ import QRCode from 'qrcode'
 export function payModel(invoice, company) {
   if (!invoice || !company?.iban) return null
   if (invoice.status !== 'issued') return null
+  if (invoice.paymentMethod && invoice.paymentMethod !== 'transfer') return null
   const total = invoice.summary?.total
   if (!total || !(Number(total) > 0)) return null
 

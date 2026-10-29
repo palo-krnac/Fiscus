@@ -16,6 +16,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/registry"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 	"github.com/palo-krnac/fiscus/backend/internal/store/memstore"
+	"github.com/palo-krnac/fiscus/backend/internal/vat"
 )
 
 type env struct {
@@ -168,7 +169,7 @@ func TestPreview(t *testing.T) {
 	if out.Summary.Total != "559.65" {
 		t.Fatalf("náhľad: %+v", out)
 	}
-	e.do("POST", fmt.Sprintf("/api/companies/%d/invoices/preview", e.cid), `{"lines":[{"description":"x","quantity":"1","unitPrice":"1","vatRate":20}]}`, 422, nil)
+	e.do("POST", fmt.Sprintf("/api/companies/%d/invoices/preview", e.cid), `{"lines":[{"description":"x","quantity":"1","unitPrice":"1","vatRate":21}]}`, 422, nil)
 }
 
 func TestNotFoundAndIsolation(t *testing.T) {
@@ -268,4 +269,18 @@ func TestRegistryAPI(t *testing.T) {
 	e2.do("GET", "/api/registry/12345674", nil, 404, nil)
 	e2.do("GET", "/api/registry/bad", nil, 400, nil)
 	e2.do("GET", "/api/registry/down", nil, 503, nil)
+}
+
+func TestCodesAPI(t *testing.T) {
+	e := setup(t, edition.Desktop)
+	var codes struct {
+		VATPeriods     []vat.Period `json:"vatPeriods"`
+		PaymentMethods []struct{ Code, Label string }
+		DefaultUnits   []string `json:"defaultUnits"`
+		DefaultFormats map[string]string
+	}
+	e.do("GET", "/api/codes", nil, 200, &codes)
+	if len(codes.VATPeriods) < 2 || len(codes.PaymentMethods) != 5 || codes.DefaultUnits[0] != "ks" || codes.DefaultFormats["invoice"] != "FA{RRRR}{NNNN}" {
+		t.Fatalf("%+v", codes)
+	}
 }

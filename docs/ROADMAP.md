@@ -13,7 +13,10 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 
 ## Etapa 1 — fakturácia a DPH pre živnostníka
 - [x] Nastavenia firmy (údaje, IBAN, platiteľ DPH áno/nie, predvolená splatnosť)
-- [ ] Logo a vlastné číselné rady
+- [x] Číselníky: sadzby DPH s obdobím platnosti (kontrola podľa dátumu dodania), číselné rady s vlastným formátom, merné jednotky, spôsoby úhrady, krajiny
+- [ ] Logo na faktúre
+- [ ] Číselník cenníka / skladových položiek (opakované položky faktúr)
+- [ ] Meny a kurzy ECB (faktúra v cudzej mene, DPH v EUR)
 - [x] Adresár odberateľov a dodávateľov, výber odberateľa vo faktúre, vlastná splatnosť
 - [x] Vyhľadanie firmy v registri (RPO) podľa IČO: názov a adresa
 - [ ] DIČ a IČ DPH z registrov finančnej správy (vyžaduje API kľúč)
@@ -31,7 +34,8 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 
 ## Etapa 2 — účtovníctvo
 - [ ] Jednoduché účtovníctvo (peňažný denník)
-- [ ] Podvojné účtovníctvo: účtový rozvrh, denník, hlavná kniha, automatické účtovanie
+- [ ] Číselníky účtovníctva: rámcová účtová osnova, účtový rozvrh firmy, predkontácie, strediská, zákazky
+- [ ] Podvojné účtovníctvo: denník, hlavná kniha, automatické účtovanie podľa predkontácií
 - [ ] Účtovné obdobia, uzávierky, výkazy, uloženie závierky do RÚZ
 - [ ] Daňové priznanie k dani z príjmov (typ A/B pre FO, PO)
 
