@@ -99,3 +99,38 @@ func (s *Server) openItems(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, out)
 }
+
+func (s *Server) getStatements(w http.ResponseWriter, r *http.Request) {
+	cid, ok := s.company(w, r)
+	if !ok {
+		return
+	}
+	year, _ := strconv.Atoi(r.URL.Query().Get("year"))
+	out, err := s.App.StatementsFor(r.Context(), cid, year)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) setStatementInputs(w http.ResponseWriter, r *http.Request) {
+	cid, ok := s.company(w, r)
+	if !ok {
+		return
+	}
+	year, err := strconv.Atoi(r.PathValue("year"))
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "Neplatný rok", nil)
+		return
+	}
+	var in journal.AssetInputs
+	if !decode(w, r, &in) {
+		return
+	}
+	if err := s.App.SetStatementInputs(r.Context(), cid, year, in); err != nil {
+		fail(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
