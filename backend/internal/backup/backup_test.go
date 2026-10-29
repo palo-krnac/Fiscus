@@ -160,3 +160,50 @@ func TestManagerPrunes(t *testing.T) {
 		t.Fatalf("po rotácii %d záloh, chcem 3", len(list))
 	}
 }
+
+func TestScheduledRestore(t *testing.T) {
+	dir := t.TempDir()
+	src := &fakeSource{content: []byte("DB:stará")}
+	m := &Manager{Dir: filepath.Join(dir, "zalohy"), Password: "heslo", Policy: DefaultPolicy, Source: src}
+	b, err := m.Create(context.Background(), time.Date(2026, 10, 29, 8, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := filepath.Base(b.Path)
+	for _, bad := range []string{"", "../" + name, "iny.fbk", "fiskus-20260101-000000.fbk"} {
+		if _, err := m.Find(bad); !errors.Is(err, ErrNoBackup) {
+			t.Errorf("%q: %v", bad, err)
+		}
+		if err := m.RequestRestore(bad); err == nil {
+			t.Errorf("%q: obnova naplánovaná", bad)
+		}
+	}
+	db := filepath.Join(dir, "fiskus.db")
+	if err := os.WriteFile(db, []byte("DB:nová"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// bez plánu sa nič nedeje
+	if _, ok, err := m.ApplyPending(context.Background(), db); ok || err != nil {
+		t.Fatalf("bez plánu: %v %v", ok, err)
+	}
+	if err := m.RequestRestore(name); err != nil || m.PendingRestore() != name {
+		t.Fatalf("plán: %v %q", err, m.PendingRestore())
+	}
+	if err := m.CancelRestore(); err != nil || m.PendingRestore() != "" {
+		t.Fatal("zrušenie plánu")
+	}
+	_ = m.RequestRestore(name)
+	got, ok, err := m.ApplyPending(context.Background(), db)
+	if err != nil || !ok || got.Path != b.Path {
+		t.Fatalf("obnova: %+v %v %v", got, ok, err)
+	}
+	if data, _ := os.ReadFile(db); string(data) != "DB:stará" {
+		t.Fatalf("obnovená databáza: %q", data)
+	}
+	if prev, _ := os.ReadFile(db + ".pred-obnovou"); string(prev) != "DB:nová" {
+		t.Fatal("pôvodná databáza sa nezachovala")
+	}
+	if m.PendingRestore() != "" {
+		t.Fatal("plán zostal po obnove")
+	}
+}

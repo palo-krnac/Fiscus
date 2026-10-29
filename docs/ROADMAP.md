@@ -37,7 +37,8 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [ ] Opravné a dodatočné priznanie / KV (KOpr, r. 36–37)
 - [ ] Podanie priamo na portál finančnej správy (vyžaduje autentifikáciu)
 - [ ] Upomienky
-- [ ] Obrazovka záloh a obnovy, nastavenie priečinka a hesla
+- [x] Obrazovka Zálohy: stav, ručná záloha, stiahnutie, obnova naplánovaná na ďalšie spustenie, `-restore` zo súboru
+- [ ] Nastavenie priečinka a hesla záloh priamo v rozhraní (zatiaľ parametre a premenná prostredia), záloha do cloudu
 - [ ] Inštalačky: Inno Setup (Windows), DMG (macOS), AppImage (Linux)
 - [x] Licencia pre serverovú verziu s viacerými firmami (offline overenie podpisu Ed25519)
 - [ ] Web fiskus.sk s nákupom licencie

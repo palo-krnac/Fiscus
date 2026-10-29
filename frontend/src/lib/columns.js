@@ -181,3 +181,9 @@ export const cashColumns = [
   t('Stav', (r) => (r.cancelled ? 'stornovaný' : ''), 10),
   t('Poznámka', (r) => r.note, 24),
 ]
+
+export const backupColumns = [
+  t('Záloha', (r) => r.name, 32),
+  t('Čas', (r) => new Date(r.time).toLocaleString('sk-SK'), 20),
+  { header: 'Veľkosť (kB)', value: (r) => Math.round(r.size / 1024), type: 'number', width: 12 },
+]

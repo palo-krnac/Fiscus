@@ -22,6 +22,7 @@ import (
 
 	"github.com/palo-krnac/fiscus/backend/internal/api"
 	"github.com/palo-krnac/fiscus/backend/internal/app"
+	"github.com/palo-krnac/fiscus/backend/internal/backup"
 	"github.com/palo-krnac/fiscus/backend/internal/demo"
 	"github.com/palo-krnac/fiscus/backend/internal/edition"
 	"github.com/palo-krnac/fiscus/backend/internal/mcp"
@@ -35,7 +36,9 @@ import (
 var version = "dev"
 
 // openSQLite nastaví súbor sqlite_on.go (iba pri zostavení s -tags sqlite).
-var openSQLite func(path string, backupDir string) (store.Store, func(), error)
+var openSQLite func(path, backupDir, restoreFile string) (store.Store, *backup.Manager, string, func(), error)
+
+var errNoPassword = errors.New("obnova zo zálohy vyžaduje heslo v premennej FISKUS_BACKUP_PASSWORD")
 
 func main() {
 	mode := flag.String("mode", "desktop", "režim: desktop | server")
@@ -44,6 +47,7 @@ func main() {
 	backupDir := flag.String("backup-dir", "", "priečinok na automatické zálohy (heslo v FISKUS_BACKUP_PASSWORD)")
 	demoData := flag.Bool("demo", false, "spustiť s ukážkovými dátami v pamäti")
 	rpoURL := flag.String("rpo-url", registry.DefaultBaseURL, "adresa API Registra právnických osôb; prázdne = vypnuté")
+	restoreFile := flag.String("restore", "", "pred spustením obnoviť databázu zo zálohy (.fbk); pôvodná sa premenuje na .pred-obnovou")
 	licensePath := flag.String("license", "", "súbor s licenčným kľúčom (server, viac firiem); predvolene fiskus.license vedľa databázy")
 	adminEmail := flag.String("admin-email", "", "e-mail prvého správcu (server); heslo v FISKUS_ADMIN_PASSWORD")
 	flag.Parse()
@@ -56,12 +60,14 @@ func main() {
 
 	var st store.Store
 	cleanup := func() {}
+	var backups *backup.Manager
+	var backupsOff string
 	switch {
 	case *dbPath != "":
 		if openSQLite == nil {
 			log.Fatal("táto binárka je zostavená bez SQLite — použite -tags sqlite alebo -demo")
 		}
-		st, cleanup, err = openSQLite(*dbPath, *backupDir)
+		st, backups, backupsOff, cleanup, err = openSQLite(*dbPath, *backupDir, *restoreFile)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -73,6 +79,10 @@ func main() {
 	defer st.Close()
 
 	a := app.New(st, caps)
+	a.Backups, a.BackupsOff = backups, backupsOff
+	if *demoData {
+		a.BackupsOff = "Ukážkové dáta sú iba v pamäti a nezálohujú sa. Pre ostrú prácu spustite Fiškus s parametrami -db a -backup-dir."
+	}
 	if caps.Mode == edition.Server {
 		setupLicense(a, *licensePath, *dbPath)
 	}

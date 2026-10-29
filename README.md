@@ -91,6 +91,8 @@ Zálohy sa robia automaticky pri štarte, každých 24 hodín a pri ukončení p
 3. Kópia sa zašifruje (AES-256-GCM, heslo cez PBKDF2), znova sa dešifruje a porovná s originálom.
 4. Záloha sa atomicky zapíše a staré zálohy sa zrotujú: 7 denných, 4 týždenné, 12 mesačných.
 
+Na obrazovke **Zálohy** (iba správca) je zoznam záloh, tlačidlo „Zálohovať teraz“, stiahnutie zálohy a obnova. Obnova sa nespraví za behu: naplánuje sa a prebehne pri ďalšom spustení, ešte pred otvorením databázy. Zálohu z iného počítača obnovíte parametrom `-restore subor.fbk`. Každá obnova aj záloha sa zapíše do auditu.
+
 Pri obnove sa pôvodná databáza uloží ako `.pred-obnovou`, takže sa nič nestratí.
 
 ## Vydanie verzie

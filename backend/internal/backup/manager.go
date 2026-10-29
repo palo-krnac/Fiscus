@@ -165,3 +165,70 @@ func (m *Manager) Restore(ctx context.Context, backupPath, dstPath string) error
 	}
 	return os.Rename(tmp, dstPath)
 }
+
+// ErrNoBackup — záloha s daným názvom neexistuje (alebo názov nie je platný).
+var ErrNoBackup = fmt.Errorf("záloha neexistuje")
+
+// restoreMarker je súbor s názvom zálohy, ktorá sa obnoví pri ďalšom štarte.
+const restoreMarker = "obnovit-pri-starte.txt"
+
+// Find vráti zálohu podľa názvu súboru. Názov nesmie obsahovať cestu.
+func (m *Manager) Find(name string) (Info, error) {
+	if name != filepath.Base(name) || !strings.HasPrefix(name, filePrefix) || !strings.HasSuffix(name, fileExt) {
+		return Info{}, ErrNoBackup
+	}
+	list, err := m.List()
+	if err != nil {
+		return Info{}, err
+	}
+	for _, b := range list {
+		if filepath.Base(b.Path) == name {
+			return b, nil
+		}
+	}
+	return Info{}, ErrNoBackup
+}
+
+// RequestRestore naplánuje obnovu zo zálohy pri ďalšom spustení programu
+// (počas behu je databáza otvorená a prepísať sa nedá).
+func (m *Manager) RequestRestore(name string) error {
+	if _, err := m.Find(name); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(m.Dir, restoreMarker), []byte(name+"\n"), 0o600)
+}
+
+// PendingRestore vráti názov zálohy naplánovanej na obnovu ("" = žiadna).
+func (m *Manager) PendingRestore() string {
+	b, err := os.ReadFile(filepath.Join(m.Dir, restoreMarker))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
+}
+
+// CancelRestore zruší naplánovanú obnovu.
+func (m *Manager) CancelRestore() error {
+	err := os.Remove(filepath.Join(m.Dir, restoreMarker))
+	if os.IsNotExist(err) {
+		return nil
+	}
+	return err
+}
+
+// ApplyPending vykoná naplánovanú obnovu do dbPath (volá sa pri štarte pred
+// otvorením databázy). Vráti obnovenú zálohu; ok = false, ak nebola naplánovaná.
+func (m *Manager) ApplyPending(ctx context.Context, dbPath string) (Info, bool, error) {
+	name := m.PendingRestore()
+	if name == "" {
+		return Info{}, false, nil
+	}
+	b, err := m.Find(name)
+	if err != nil {
+		return Info{}, true, fmt.Errorf("naplánovaná obnova %s: %w", name, err)
+	}
+	if err := m.Restore(ctx, b.Path, dbPath); err != nil {
+		return b, true, err
+	}
+	return b, true, m.CancelRestore()
+}
