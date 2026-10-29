@@ -5,7 +5,7 @@ import InputText from 'primevue/inputtext'
 import Password from 'primevue/password'
 import Button from 'primevue/button'
 import { api } from '../lib/api.js'
-import { loadSession } from '../lib/session.js'
+import { loadSession, session } from '../lib/session.js'
 
 const email = ref('')
 const password = ref('')
@@ -16,9 +16,13 @@ const ticket = ref('')
 const code = ref('')
 const useRecovery = ref(false)
 const codeEl = ref(null)
+// desktop chránený PIN-om (bez e-mailu a hesla)
+const pinMode = session.caps.mode === 'desktop'
+const pin = ref('')
 
 async function submit() {
   error.value = ''
+  if (pinMode) return submitPIN()
   if (ticket.value) return submitCode()
   if (!email.value.trim() || !password.value) {
     error.value = 'Zadajte e-mail a heslo'
@@ -37,6 +41,24 @@ async function submit() {
     await loadSession()
   } catch (e) {
     error.value = e.message
+  } finally {
+    busy.value = false
+  }
+}
+
+async function submitPIN() {
+  if (!pin.value) {
+    error.value = 'Zadajte PIN'
+    return
+  }
+  busy.value = true
+  try {
+    await api.unlockPIN(pin.value)
+    pin.value = ''
+    await loadSession()
+  } catch (e) {
+    error.value = e.message
+    pin.value = ''
   } finally {
     busy.value = false
   }
@@ -86,11 +108,15 @@ async function toggleRecovery() {
         </svg>
         <div>
           <h1>Fiškus</h1>
-          <p>{{ ticket ? 'Dvojfázové overenie' : 'Prihlásenie' }}</p>
+          <p>{{ pinMode ? 'Zamknuté' : ticket ? 'Dvojfázové overenie' : 'Prihlásenie' }}</p>
         </div>
       </div>
 
-      <template v-if="!ticket">
+      <label v-if="pinMode" class="field">
+        <span>PIN</span>
+        <Password v-model="pin" :feedback="false" toggle-mask autocomplete="current-password" fluid autofocus input-id="pin" input-class="code" />
+      </label>
+      <template v-else-if="!ticket">
         <label class="field">
           <span>E-mail</span>
           <InputText v-model="email" type="email" autocomplete="username" autofocus fluid />
@@ -123,7 +149,13 @@ async function toggleRecovery() {
 
       <p v-if="error" class="error" role="alert"><i class="pi pi-exclamation-circle" /> {{ error }}</p>
 
-      <Button type="submit" :label="ticket ? 'Overiť' : 'Prihlásiť sa'" :icon="ticket ? 'pi pi-check' : 'pi pi-sign-in'" :loading="busy" fluid />
+      <Button
+        type="submit"
+        :label="pinMode ? 'Odomknúť' : ticket ? 'Overiť' : 'Prihlásiť sa'"
+        :icon="pinMode ? 'pi pi-lock-open' : ticket ? 'pi pi-check' : 'pi pi-sign-in'"
+        :loading="busy"
+        fluid
+      />
       <div v-if="ticket" class="alt">
         <button type="button" class="link" @click="toggleRecovery">
           {{ useRecovery ? 'Použiť kód z aplikácie' : 'Nemám telefón — použiť záložný kód' }}

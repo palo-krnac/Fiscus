@@ -62,6 +62,8 @@ type App struct {
 	mfaTickets mfaTickets
 	// oauth: podpisový kľúč a autorizačné kódy OAuth (oauth.go)
 	oauth oauthState
+	// pins sú odomknuté okná desktopu chráneného PIN-om (security.go)
+	pins pinSessions
 }
 
 // New vytvorí službu.

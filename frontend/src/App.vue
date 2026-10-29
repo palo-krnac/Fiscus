@@ -9,6 +9,7 @@ import { session, loadSession, selectCompany, can, isSuperAdmin } from './lib/se
 import { visibleModules } from './lib/access.js'
 import Login from './views/Login.vue'
 import UserMenu from './components/UserMenu.vue'
+import MFADialog from './components/MFADialog.vue'
 import { api } from './lib/api.js'
 import { startHeartbeat } from './lib/desktop.js'
 
@@ -43,6 +44,12 @@ watch(
 )
 onBeforeUnmount(() => stopHeartbeat?.())
 const stopped = ref(false)
+async function lockApp() {
+  await api.lock().catch(() => {})
+  session.needLogin = true
+  session.me = null
+}
+
 async function quitApp() {
   stopHeartbeat?.()
   stopHeartbeat = null
@@ -103,6 +110,9 @@ const isActive = (path) => route.path === path || route.path.startsWith(path + '
 
       <footer class="edition">
         <span>{{ edition }}</span>
+        <button v-if="session.caps.pin" type="button" class="quit" title="Zamknúť Fiškus (odomknete PIN-om)" @click="lockApp">
+          <i class="pi pi-lock" aria-hidden="true" /> Zamknúť
+        </button>
         <button v-if="session.caps.launcher" type="button" class="quit" title="Ukončiť program Fiškus" @click="quitApp">
           <i class="pi pi-power-off" aria-hidden="true" /> Ukončiť
         </button>
@@ -135,6 +145,7 @@ const isActive = (path) => route.path === path || route.path.startsWith(path + '
         </div>
         <UserMenu />
       </header>
+      <MFADialog v-if="session.me?.mfaRequired" :visible="true" forced @done="loadSession" />
 
       <main class="content">
         <div v-if="session.error" class="fatal">

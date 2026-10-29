@@ -17,7 +17,10 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/license"
 )
 
-const sessionCookie = "fiskus_session"
+const (
+	sessionCookie = "fiskus_session"
+	pinCookie     = "fiskus_pin" // odomknuté okno desktopu s PIN-om
+)
 
 // CSRFHeader musí poslať frontend pri každej zmene (POST/PUT/DELETE).
 // Cudzia stránka ho v prehliadači poslať nevie bez povolenia CORS.
@@ -50,6 +53,14 @@ func (s *Server) authed(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var actor auth.Actor
 		if !s.authRequired() {
+			// desktop s PIN-om: okno musí byť odomknuté
+			if s.App.PINEnabled(r.Context()) {
+				c, err := r.Cookie(pinCookie)
+				if err != nil || !s.App.PINSession(c.Value) {
+					writeErr(w, http.StatusUnauthorized, app.ErrPINLocked.Error(), nil)
+					return
+				}
+			}
 			actor = auth.Local
 			actor.IP = clientIP(r)
 		} else {
@@ -64,9 +75,26 @@ func (s *Server) authed(h http.HandlerFunc) http.HandlerFunc {
 				fail(w, err)
 				return
 			}
+			if actor.MFASetup && !mfaSetupAllowed(r) {
+				writeErr(w, http.StatusForbidden, app.ErrMFASetup.Error(), nil)
+				return
+			}
 		}
 		h(w, r.WithContext(auth.WithActor(r.Context(), actor)))
 	}
+}
+
+// mfaSetupAllowed: čo smie používateľ, kým si nezapne povinné 2FA.
+func mfaSetupAllowed(r *http.Request) bool {
+	p := r.URL.Path
+	switch {
+	case p == "/api/me", p == "/api/auth/logout", p == "/api/auth/password",
+		strings.HasPrefix(p, "/api/me/mfa"):
+		return true
+	case r.Method == http.MethodGet && p == "/api/companies":
+		return true // rozhranie potrebuje zoznam firiem na načítanie
+	}
+	return false
 }
 
 // need overí právo vo firme z cesty {cid}.
@@ -267,6 +295,7 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"user":         map[string]any{"id": act.UserID, "name": act.Name, "superAdmin": act.SuperAdmin},
 		"authRequired": s.authRequired(),
+		"mfaRequired":  act.MFASetup, // musí si najprv zapnúť 2FA
 		"access":       out,
 	})
 }
