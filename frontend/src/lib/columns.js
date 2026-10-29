@@ -1,0 +1,113 @@
+// Stĺpce exportov jednotlivých zoznamov (pozri lib/export.js).
+import { codes, countryName, paymentLabel } from './codes.js'
+import { purchaseStatusOf, statusOf } from './format.js'
+import { actionLabel, channelLabel } from './audit.js'
+
+const t = (header, value, width) => ({ header, value, width })
+const money = (header, value) => ({ header, value, type: 'money', width: 14 })
+const date = (header, value) => ({ header, value, type: 'date', width: 12 })
+const yes = (b) => (b ? 'áno' : '')
+
+export const invoiceColumns = [
+  t('Číslo', (r) => r.number || 'koncept', 14),
+  t('Druh', (r) => (r.kind === 'credit_note' ? 'dobropis' : 'faktúra'), 10),
+  t('Odberateľ', (r) => r.customer?.name, 32),
+  t('IČO', (r) => r.customer?.ico, 11),
+  t('DIČ', (r) => r.customer?.dic, 12),
+  t('IČ DPH', (r) => r.customer?.icdph, 14),
+  t('Obec', (r) => r.customer?.city, 16),
+  t('Krajina', (r) => countryName(r.customer?.country || 'SK'), 12),
+  t('Variabilný symbol', (r) => r.variableSymbol, 12),
+  date('Vystavená', (r) => r.issueDate),
+  date('Dodanie', (r) => r.deliveryDate),
+  date('Splatná', (r) => r.dueDate),
+  date('Uhradená', (r) => r.paidDate),
+  t('Úhrada', (r) => paymentLabel(r.paymentMethod), 16),
+  money('Základ', (r) => r.summary?.base),
+  money('DPH', (r) => r.summary?.vat),
+  money('Spolu', (r) => r.summary?.total),
+  t('Mena', (r) => r.currency || 'EUR', 6),
+  t('Prenesenie DPH', (r) => yes(r.reverseCharge), 8),
+  t('Stav', (r) => statusOf(r).label, 18),
+  t('Poznámka', (r) => r.note, 30),
+]
+
+export const purchaseColumns = [
+  t('Číslo', (r) => r.number, 12),
+  t('Číslo dodávateľa', (r) => r.supplierNumber, 16),
+  t('Dodávateľ', (r) => r.supplier?.name, 32),
+  t('IČO', (r) => r.supplier?.ico, 11),
+  t('IČ DPH', (r) => r.supplier?.icdph, 14),
+  t('Variabilný symbol', (r) => r.variableSymbol, 12),
+  t('Predmet', (r) => r.description, 28),
+  date('Vyhotovená', (r) => r.issueDate),
+  date('Dodanie', (r) => r.deliveryDate),
+  date('Doručená', (r) => r.receivedDate),
+  date('Splatná', (r) => r.dueDate),
+  date('Uhradená', (r) => r.paidDate),
+  money('Základ', (r) => r.summary?.base),
+  money('DPH', (r) => r.summary?.vat),
+  money('Spolu', (r) => r.summary?.total),
+  t('Prenesenie DPH', (r) => yes(r.reverseCharge), 8),
+  t('Bez odpočtu', (r) => yes(r.noDeduction), 8),
+  t('Stav', (r) => purchaseStatusOf(r).label, 18),
+]
+
+export const contactColumns = [
+  t('Názov', (r) => r.name, 32),
+  t('IČO', (r) => r.ico, 11),
+  t('DIČ', (r) => r.dic, 12),
+  t('IČ DPH', (r) => r.icdph, 14),
+  t('Ulica', (r) => r.street, 24),
+  t('PSČ', (r) => r.zip, 8),
+  t('Obec', (r) => r.city, 16),
+  t('Krajina', (r) => countryName(r.country || 'SK'), 12),
+  t('E-mail', (r) => r.email, 24),
+  t('Telefón', (r) => r.phone, 16),
+  t('IBAN', (r) => r.iban, 28),
+  { header: 'Splatnosť (dni)', value: (r) => r.dueDays || '', type: 'number', width: 10 },
+  t('Poznámka', (r) => r.note, 30),
+]
+
+const roleLabel = (code) => codes.roles?.find((r) => r.code === code)?.label ?? code
+
+export const memberColumns = [
+  t('Meno', (r) => r.user.name, 24),
+  t('E-mail', (r) => r.user.email, 28),
+  t('Rola', (r) => roleLabel(r.role), 14),
+  t('Aktívny', (r) => (r.user.active ? 'áno' : 'nie'), 8),
+]
+
+export const companyColumns = [
+  t('Firma', (r) => r.name, 32),
+  t('IČO', (r) => r.ico, 11),
+  t('DIČ', (r) => r.dic, 12),
+  t('IČ DPH', (r) => r.icdph, 14),
+  t('Ulica', (r) => r.street, 24),
+  t('PSČ', (r) => r.zip, 8),
+  t('Obec', (r) => r.city, 16),
+  t('Platiteľ DPH', (r) => yes(r.vatPayer), 8),
+]
+
+const fmtTime = new Intl.DateTimeFormat('sk-SK', {
+  timeZone: 'Europe/Bratislava',
+  dateStyle: 'short',
+  timeStyle: 'medium',
+})
+
+/** Stĺpce auditu; companyName prevedie ID firmy na názov. */
+export function auditColumns(companyName) {
+  const catLabel = (c) => codes.auditCategories?.find((x) => x.code === c)?.label ?? c
+  return [
+    t('Čas', (r) => fmtTime.format(new Date(r.time)), 20),
+    t('Firma', (r) => companyName(r.companyId), 24),
+    t('Kategória', (r) => catLabel(r.category), 16),
+    t('Používateľ', (r) => r.userName, 20),
+    t('Kanál', (r) => channelLabel(r.channel), 10),
+    t('IP adresa', (r) => r.ip, 15),
+    t('Akcia', (r) => actionLabel(r.action), 18),
+    t('Popis', (r) => r.summary, 60),
+    t('Objekt', (r) => (r.entityType ? `${r.entityType} #${r.entityId}` : ''), 14),
+    t('Odtlačok', (r) => r.hash, 20),
+  ]
+}

@@ -33,6 +33,7 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [ ] Obrazovka záloh a obnovy, nastavenie priečinka a hesla
 - [ ] Inštalačky: Inno Setup (Windows), DMG (macOS), AppImage (Linux)
 - [x] Licencia pre serverovú verziu s viacerými firmami (offline overenie podpisu Ed25519)
+- [ ] Web fiskus.sk s nákupom licencie
 - [ ] Predaj cez Paddle: webhook po platbe → automatické vydanie a odoslanie licenčného kľúča e-mailom
 - [ ] Ostrý licenčný kľúč (`fiskus-license keygen`) namiesto vývojového
 - [ ] E-faktúra (UBL / Peppol): pripraviť sa na povinnú e-fakturáciu na Slovensku (termín overiť)

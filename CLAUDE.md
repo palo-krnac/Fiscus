@@ -9,6 +9,7 @@ Komunikácia a texty v rozhraní sú po slovensky. Kód (identifikátory) je po 
 - Každá nová implementácia `store.Store` musí prejsť `storetest.Run`.
 - Všetko s dátami firmy je filtrované cez `companyID`.
 - Vystavená faktúra sa nesmie meniť, opravuje sa dobropisom.
+- Každý zoznam má vždy hľadanie (`lib/search.js`, bez diakritiky, viac slov) a export do Excelu aj CSV (`components/ExportButton.vue`, stĺpce v `lib/columns.js`). Exportuje sa to, čo je po filtri a hľadaní.
 - SQLite kód je za build tagom `sqlite`: `go test -tags sqlite ./...`.
 - QR platba PAY by square sa skladá vo frontende (`lib/payqr.js`, knižnica bysquare) z hotových súm z API; test overuje, že sa QR dá prečítať a dekódovať späť.
 

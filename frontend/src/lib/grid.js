@@ -53,3 +53,13 @@ export const skGridLocale = {
   sortAscending: 'Zoradiť vzostupne',
   sortDescending: 'Zoradiť zostupne',
 }
+
+/** Riadky v poradí, ako ich zobrazuje tabuľka (po zoradení), bez súčtového riadku. */
+export function gridRows(api, fallback) {
+  if (!api || api.isDestroyed?.()) return fallback
+  const out = []
+  api.forEachNodeAfterFilterAndSort((n) => {
+    if (n.data && !n.data._totals) out.push(n.data)
+  })
+  return out
+}

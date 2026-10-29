@@ -17,7 +17,9 @@ import { countries } from '../lib/codes.js'
 import { fillFromRegistry } from '../lib/registry.js'
 import { api, ApiError } from '../lib/api.js'
 import { session, can } from '../lib/session.js'
-import { fiskusGridTheme, skGridLocale } from '../lib/grid.js'
+import { fiskusGridTheme, skGridLocale, gridRows } from '../lib/grid.js'
+import { contactColumns } from '../lib/columns.js'
+import ExportButton from '../components/ExportButton.vue'
 import { filterContacts } from '../lib/contacts.js'
 
 const props = defineProps({ id: String })
@@ -172,13 +174,14 @@ onBeforeUnmount(() => {
         <h1>Adresár</h1>
         <span class="count">{{ contacts.length }}</span>
         <div class="spacer" />
+        <ExportButton name="Adresár" :columns="contactColumns" :rows="() => gridRows(gridApi, rows)" />
         <Button v-if="can('contacts.write')" size="small" @click="router.push('/adresar/novy')">
           <i class="pi pi-plus" /><span>Nový kontakt</span><kbd class="hint">N</kbd>
         </Button>
       </header>
       <IconField class="search">
         <InputIcon class="pi pi-search" />
-        <InputText v-model="search" placeholder="Hľadať názov, IČO, obec" size="small" aria-label="Hľadať v adresári" />
+        <InputText v-model="search" placeholder="Hľadať názov, IČO, obec, e-mail" size="small" aria-label="Hľadať v adresári" />
       </IconField>
       <div class="grid-wrap">
         <AgGridVue

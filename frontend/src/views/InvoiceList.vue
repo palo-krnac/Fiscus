@@ -11,7 +11,10 @@ import SelectButton from 'primevue/selectbutton'
 import { api } from '../lib/api.js'
 import { session, can } from '../lib/session.js'
 import { formatAmount, formatDate, formatMoney, statusOf } from '../lib/format.js'
-import { fiskusGridTheme, skGridLocale } from '../lib/grid.js'
+import { fiskusGridTheme, skGridLocale, gridRows } from '../lib/grid.js'
+import { matches, searchTerms } from '../lib/search.js'
+import { invoiceColumns } from '../lib/columns.js'
+import ExportButton from '../components/ExportButton.vue'
 
 const router = useRouter()
 
@@ -58,11 +61,11 @@ const matchesView = (r) => {
 }
 
 const visibleRows = computed(() => {
-  const q = search.value.trim().toLowerCase()
+  const terms = searchTerms(search.value)
   return rows.value.filter((r) => {
     if (!matchesView(r)) return false
-    if (!q) return true
-    return `${r.number} ${r.customer.name} ${r.customer.ico}`.toLowerCase().includes(q)
+    const c = r.customer ?? {}
+    return matches(terms, [r.number, r.variableSymbol, c.name, c.ico, c.dic, c.icdph, c.city, r.note, r.summary?.total, statusOf(r).label])
   })
 })
 
@@ -106,7 +109,7 @@ const columnDefs = [
   {
     field: 'number',
     headerName: 'Číslo',
-    minWidth: 112,
+    minWidth: 104,
     cellRenderer: (p) => {
       if (p.data._totals) return p.value
       const num = p.value || 'koncept'
@@ -115,7 +118,7 @@ const columnDefs = [
     width: 150,
     cellClass: (p) => (p.data._totals ? '' : p.value ? 'cell-number' : 'cell-draft'),
   },
-  { colId: 'customer', headerName: 'Odberateľ', valueGetter: (p) => p.data.customer.name, flex: 1, minWidth: 180 },
+  { colId: 'customer', headerName: 'Odberateľ', valueGetter: (p) => p.data.customer.name, flex: 1, minWidth: 130 },
   { colId: 'ico', headerName: 'IČO', valueGetter: (p) => p.data.customer?.ico, width: 96 },
   { field: 'issueDate', headerName: 'Vystavená', valueFormatter: (p) => formatDate(p.value), width: 100 },
   { field: 'dueDate', headerName: 'Splatná', valueFormatter: (p) => formatDate(p.value), width: 100 },
@@ -215,8 +218,9 @@ onBeforeUnmount(() => {
       <SelectButton v-model="view" :options="views" option-label="label" option-value="value" :allow-empty="false" size="small" aria-label="Zobraziť" />
       <IconField class="search">
         <InputIcon class="pi pi-search" />
-        <InputText ref="searchEl" v-model="search" placeholder="Hľadať číslo, odberateľa, IČO" size="small" aria-label="Hľadať" />
+        <InputText ref="searchEl" v-model="search" placeholder="Hľadať číslo, odberateľa, IČO, VS, sumu" size="small" aria-label="Hľadať" />
       </IconField>
+      <ExportButton :name="`Vydané faktúry ${year}`" :columns="invoiceColumns" :rows="() => gridRows(gridApi, visibleRows)" />
     </div>
 
     <p v-if="loadError" class="error">{{ loadError }}</p>
@@ -402,7 +406,9 @@ onBeforeUnmount(() => {
     white-space: nowrap;
   }
   .search {
-    width: 100%;
+    flex: 1;
+    width: auto;
+    min-width: 0;
     margin-left: 0;
   }
 }

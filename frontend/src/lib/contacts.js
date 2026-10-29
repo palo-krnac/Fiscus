@@ -1,4 +1,5 @@
 // Pomocné funkcie pre adresár (bez závislosti na Vue — dajú sa testovať).
+import { matches, searchTerms } from './search.js'
 
 const FOLD = {
   á: 'a', ä: 'a', č: 'c', ď: 'd', é: 'e', ě: 'e', í: 'i', ĺ: 'l', ľ: 'l', ň: 'n',
@@ -15,11 +16,11 @@ export function searchKey(s) {
     .join(' ')
 }
 
-/** Filtruje kontakty podľa názvu, IČO a obce. */
+/** Filtruje kontakty podľa názvu, IČO, DIČ, IČ DPH, adresy, e-mailu a telefónu. */
 export function filterContacts(list, query) {
-  const q = searchKey(query)
-  if (!q) return list
-  return list.filter((c) => searchKey(`${c.name} ${c.ico} ${c.city}`).includes(q))
+  const terms = searchTerms(query)
+  if (!terms) return list
+  return list.filter((c) => matches(terms, [c.name, c.ico, c.dic, c.icdph, c.street, c.city, c.zip, c.email, c.phone, c.note]))
 }
 
 /** Kontakt z adresára → odberateľ na faktúre (kópia údajov). */

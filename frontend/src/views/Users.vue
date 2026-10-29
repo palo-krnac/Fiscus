@@ -12,6 +12,11 @@ import { api } from '../lib/api.js'
 import { codes } from '../lib/codes.js'
 import { session } from '../lib/session.js'
 import FormField from '../components/FormField.vue'
+import ExportButton from '../components/ExportButton.vue'
+import IconField from 'primevue/iconfield'
+import InputIcon from 'primevue/inputicon'
+import { matches, searchTerms } from '../lib/search.js'
+import { memberColumns } from '../lib/columns.js'
 
 const toast = useToast()
 const confirm = useConfirm()
@@ -25,6 +30,11 @@ const busy = ref(false)
 const cid = computed(() => session.companyId)
 const meId = computed(() => session.me?.user?.id)
 const server = computed(() => session.caps.mode === 'server')
+const search = ref('')
+const visible = computed(() => {
+  const terms = searchTerms(search.value)
+  return members.value.filter((m) => matches(terms, [m.user.name, m.user.email, roleInfo(m.role)?.label]))
+})
 const roleInfo = (code) => codes.roles?.find((r) => r.code === code)
 
 async function load() {
@@ -99,6 +109,7 @@ function remove(m) {
       <h1>Používatelia</h1>
       <span class="count">{{ members.length }}</span>
       <div class="spacer" />
+      <ExportButton :name="`Používatelia ${session.company?.name ?? ''}`" :columns="memberColumns" :rows="visible" />
       <Button v-if="server" size="small" icon="pi pi-user-plus" label="Pridať používateľa" @click="openAdd" />
     </header>
 
@@ -107,6 +118,11 @@ function remove(m) {
       Desktopová verzia má jedného lokálneho používateľa so všetkými právami. Používateľov a roly pre účtovnú kanceláriu
       spravuje serverová verzia.
     </p>
+
+    <IconField class="search">
+      <InputIcon class="pi pi-search" />
+      <InputText v-model="search" placeholder="Hľadať meno, e-mail, rolu" size="small" aria-label="Hľadať používateľa" />
+    </IconField>
 
     <table class="users">
       <thead>
@@ -120,7 +136,8 @@ function remove(m) {
       <tbody>
         <tr v-if="loading"><td colspan="4" class="empty">Načítavam…</td></tr>
         <tr v-else-if="!members.length"><td colspan="4" class="empty">Vo firme zatiaľ nie je nikto ďalší.</td></tr>
-        <tr v-for="m in members" :key="m.user.id">
+        <tr v-else-if="!visible.length"><td colspan="4" class="empty">Nikto nevyhovuje hľadaniu.</td></tr>
+        <tr v-for="m in visible" :key="m.user.id">
           <td class="name" data-label="Meno">
             {{ m.user.name }}
             <span v-if="m.user.id === meId" class="badge">vy</span>
@@ -228,6 +245,12 @@ function remove(m) {
   border-left: 3px solid var(--blue);
   font-size: var(--fs-sm);
   color: var(--ink-soft);
+}
+.search {
+  max-width: 320px;
+}
+.search :deep(input) {
+  width: 100%;
 }
 .users {
   width: 100%;
