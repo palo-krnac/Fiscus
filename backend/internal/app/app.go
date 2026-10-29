@@ -49,7 +49,7 @@ type App struct {
 	// BackupSetup umožní nastaviť priečinok a heslo záloh v programe (nil = iba parametrami).
 	BackupSetup *BackupSetup
 	// ECBURL je adresa kurzov ECB ("" = nesťahovať); FetchRates ju v testoch nahradí.
-	ECBURL     string
+	ECBURL string
 	// ECBRateURL je séria základnej úrokovej sadzby ECB (CSV) pre úrok
 	// z omeškania ("" = nesťahovať, sadzby sa zadávajú ručne).
 	ECBRateURL string
