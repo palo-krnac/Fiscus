@@ -206,3 +206,49 @@ func TestPartialAdvance(t *testing.T) {
 		t.Fatalf("DPH: %+v %v", ret.Rows, err)
 	}
 }
+
+func TestTwoAdvancesOneFinal(t *testing.T) {
+	a, c := newApp(t, edition.Desktop)
+	mk := func() invoice.Invoice {
+		dr, _ := a.SaveDraft(ctx, c.ID, proformaDraft()) // 492 €
+		p, err := a.Issue(ctx, c.ID, dr.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		p, err = a.MarkPaid(ctx, c.ID, p.ID, invoice.MustDate("2026-10-10"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	p1, p2 := mk(), mk()
+	f, err := a.SettleAdvance(ctx, c.ID, p1.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cands, err := a.AdvanceCandidates(ctx, c.ID, f.ID)
+	if err != nil || len(cands) != 1 || cands[0].ID != p2.ID || cands[0].Paid.String() != "492.00" {
+		t.Fatalf("návrhy: %+v %v", cands, err)
+	}
+	f, err = a.AddAdvanceToFinal(ctx, c.ID, f.ID, p2.ID)
+	if err != nil || len(f.Advance.Deductions) != 2 || !f.Summary.Total.IsZero() {
+		t.Fatalf("pridanie: %+v %v", f.Summary, err)
+	}
+	if cands, _ := a.AdvanceCandidates(ctx, c.ID, f.ID); len(cands) != 0 {
+		t.Fatalf("pridaná záloha medzi návrhmi: %+v", cands)
+	}
+	final, err := a.Issue(ctx, c.ID, f.ID)
+	if err != nil || final.Status != invoice.StatusPaid { // celé plnenie uhradené zálohami
+		t.Fatalf("vystavenie: %s %v", final.Status, err)
+	}
+	for _, id := range []int64{p1.ID, p2.ID} {
+		p, _ := a.Store.GetInvoice(ctx, c.ID, id)
+		if p.Advance.FinalNumber != final.Number {
+			t.Fatalf("záloha %d bez odkazu na vyúčtovanie: %+v", id, p.Advance)
+		}
+	}
+	// z vystaveného vyúčtovania sa záloha neodoberie
+	if _, err := a.RemoveAdvanceFromFinal(ctx, c.ID, final.ID, p2.ID); !fieldErr(err, "advance") {
+		t.Fatalf("odobratie z vystaveného: %v", err)
+	}
+}

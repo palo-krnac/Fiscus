@@ -3,6 +3,7 @@ package invoice
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/palo-krnac/fiscus/backend/internal/money"
 	"github.com/palo-krnac/fiscus/backend/internal/party"
@@ -76,11 +77,13 @@ func (inv *Invoice) Settled() bool {
 // Deduction je odpočet zálohy vo vyúčtovacej faktúre: základ a daň po sadzbách
 // presne podľa dokladu k prijatej platbe (nie prepočítané).
 type Deduction struct {
-	ReceiptID int64             `json:"receiptId,omitempty"` // 0 = neplatiteľ DPH (bez dokladu k platbe)
-	Number    string            `json:"number"`              // číslo dokladu k platbe, inak zálohovej faktúry
-	Date      Date              `json:"date"`                // deň prijatia platby
-	Rates     []vat.RateSummary `json:"rates"`
-	Total     money.Dec         `json:"total"`
+	ProformaID     int64             `json:"proformaId,omitempty"` // zálohová faktúra, ku ktorej odpočet patrí
+	ProformaNumber string            `json:"proformaNumber,omitempty"`
+	ReceiptID      int64             `json:"receiptId,omitempty"` // 0 = neplatiteľ DPH (bez dokladu k platbe)
+	Number         string            `json:"number"`              // číslo dokladu k platbe, inak zálohovej faktúry
+	Date           Date              `json:"date"`                // deň prijatia platby
+	Rates          []vat.RateSummary `json:"rates"`
+	Total          money.Dec         `json:"total"`
 }
 
 var (
@@ -175,44 +178,9 @@ func NewFinalInvoice(proforma Invoice, receipts []Invoice, issue Date, dueDays i
 	if proforma.Kind != KindProforma {
 		return Invoice{}, ErrNotAdvance
 	}
-	paid := proforma.Paid()
-	if (proforma.Status != StatusPaid && proforma.Status != StatusIssued) || paid.Sign() <= 0 {
-		return Invoice{}, ErrAdvanceNotPaid
-	}
-	if proforma.Advance != nil && proforma.Advance.FinalID != 0 {
-		return Invoice{}, ErrAlreadySettled
-	}
-	if proforma.AnyReverse() || party.Foreign(proforma.Customer.Country) || proforma.Foreign() {
-		return Invoice{}, ErrForeignAdvance
-	}
-	var deductions []Deduction
-	switch {
-	case len(receipts) > 0:
-		var covered money.Dec
-		for _, r := range receipts {
-			deductions = append(deductions, Deduction{ReceiptID: r.ID, Number: r.Number, Date: r.DeliveryDate,
-				Rates: append([]vat.RateSummary(nil), r.Summary.Rates...), Total: r.Summary.Total})
-			covered = covered.Add(r.Summary.Total)
-		}
-		if !covered.Equal(paid) {
-			return Invoice{}, fmt.Errorf("k platbám zálohy (%s €) chýba daňový doklad k prijatej platbe — doklady pokrývajú %s €", paid.Display(), covered.Display())
-		}
-	case proforma.NonVATPayer:
-		// neplatiteľ: odpočíta sa uhradená suma (bez DPH)
-		date := proforma.PaidDate
-		if date.IsZero() && len(proforma.Payments) > 0 {
-			date = proforma.Payments[len(proforma.Payments)-1].Date
-		}
-		d := Deduction{Number: proforma.Number, Date: date, Total: paid}
-		for _, r := range splitByRates(proforma.Summary, paid) {
-			if r.Base.IsZero() && r.VAT.IsZero() {
-				r.Base = r.Total // pri čiastočnej úhrade: neplatiteľ nemá DPH
-			}
-			d.Rates = append(d.Rates, r)
-		}
-		deductions = []Deduction{d}
-	default:
-		return Invoice{}, errors.New("chýba daňový doklad k prijatej platbe")
+	deductions, err := advanceDeductions(proforma, receipts)
+	if err != nil {
+		return Invoice{}, err
 	}
 	inv := Invoice{
 		Kind: KindInvoice, Status: StatusDraft,
@@ -229,6 +197,135 @@ func NewFinalInvoice(proforma Invoice, receipts []Invoice, issue Date, dueDays i
 		return Invoice{}, err
 	}
 	return inv, nil
+}
+
+// advanceDeductions vráti odpočty zálohovej faktúry podľa dokladov k platbám
+// (neplatiteľ: uhradená suma). Záloha musí byť aspoň čiastočne uhradená,
+// ešte nevyúčtovaná a tuzemská.
+func advanceDeductions(proforma Invoice, receipts []Invoice) ([]Deduction, error) {
+	paid := proforma.Paid()
+	if (proforma.Status != StatusPaid && proforma.Status != StatusIssued) || paid.Sign() <= 0 {
+		return nil, ErrAdvanceNotPaid
+	}
+	if proforma.Advance != nil && proforma.Advance.FinalID != 0 {
+		return nil, ErrAlreadySettled
+	}
+	if proforma.AnyReverse() || party.Foreign(proforma.Customer.Country) || proforma.Foreign() {
+		return nil, ErrForeignAdvance
+	}
+	var deductions []Deduction
+	switch {
+	case len(receipts) > 0:
+		var covered money.Dec
+		for _, r := range receipts {
+			deductions = append(deductions, Deduction{ProformaID: proforma.ID, ProformaNumber: proforma.Number, ReceiptID: r.ID, Number: r.Number, Date: r.DeliveryDate,
+				Rates: append([]vat.RateSummary(nil), r.Summary.Rates...), Total: r.Summary.Total})
+			covered = covered.Add(r.Summary.Total)
+		}
+		if !covered.Equal(paid) {
+			return nil, fmt.Errorf("k platbám zálohy (%s €) chýba daňový doklad k prijatej platbe — doklady pokrývajú %s €", paid.Display(), covered.Display())
+		}
+	case proforma.NonVATPayer:
+		// neplatiteľ: odpočíta sa uhradená suma (bez DPH)
+		date := proforma.PaidDate
+		if date.IsZero() && len(proforma.Payments) > 0 {
+			date = proforma.Payments[len(proforma.Payments)-1].Date
+		}
+		d := Deduction{ProformaID: proforma.ID, ProformaNumber: proforma.Number, Number: proforma.Number, Date: date, Total: paid}
+		for _, r := range splitByRates(proforma.Summary, paid) {
+			if r.Base.IsZero() && r.VAT.IsZero() {
+				r.Base = r.Total // pri čiastočnej úhrade: neplatiteľ nemá DPH
+			}
+			d.Rates = append(d.Rates, r)
+		}
+		deductions = []Deduction{d}
+	default:
+		return nil, errors.New("chýba daňový doklad k prijatej platbe")
+	}
+	return deductions, nil
+}
+
+// ProformaIDs vráti zálohové faktúry odpočítané vo vyúčtovacej faktúre.
+func (inv *Invoice) ProformaIDs() []int64 {
+	if inv.Advance == nil {
+		return nil
+	}
+	var ids []int64
+	seen := map[int64]bool{}
+	add := func(id int64) {
+		if id != 0 && !seen[id] {
+			seen[id] = true
+			ids = append(ids, id)
+		}
+	}
+	add(inv.Advance.ProformaID)
+	for _, d := range inv.Advance.Deductions {
+		add(d.ProformaID)
+	}
+	return ids
+}
+
+// ErrOtherCustomer — zálohu iného odberateľa nemožno pridať do vyúčtovania.
+var ErrOtherCustomer = errors.New("zálohová faktúra patrí inému odberateľovi")
+
+// SameCustomer: zálohu možno odpočítať vo vyúčtovaní (rovnaký odberateľ
+// podľa IČO alebo názvu, rovnaká mena a režim neplatiteľa).
+func (inv *Invoice) SameCustomer(p Invoice) bool {
+	a, b := inv.Customer, p.Customer
+	same := a.ICO != "" && a.ICO == b.ICO
+	if a.ICO == "" || b.ICO == "" {
+		same = strings.EqualFold(strings.TrimSpace(a.Name), strings.TrimSpace(b.Name))
+	}
+	return same && inv.Currency == p.Currency && inv.NonVATPayer == p.NonVATPayer
+}
+
+// AddAdvance pridá do konceptu vyúčtovacej faktúry ďalšiu zálohu: jej
+// odpočty a položky (dajú sa upraviť).
+func (inv *Invoice) AddAdvance(proforma Invoice, receipts []Invoice) error {
+	if inv.Status != StatusDraft || inv.Kind != KindInvoice || inv.Advance == nil || len(inv.Advance.Deductions) == 0 {
+		return errors.New("zálohu možno pridať iba do konceptu vyúčtovacej faktúry")
+	}
+	for _, id := range inv.ProformaIDs() {
+		if id == proforma.ID {
+			return errors.New("záloha " + proforma.Number + " už je vo vyúčtovaní")
+		}
+	}
+	if !inv.SameCustomer(proforma) {
+		return ErrOtherCustomer
+	}
+	ds, err := advanceDeductions(proforma, receipts)
+	if err != nil {
+		return err
+	}
+	inv.Advance.Deductions = append(inv.Advance.Deductions, ds...)
+	inv.Lines = append(inv.Lines, proforma.Lines...)
+	inv.Note = strings.TrimSpace(inv.Note + " Vyúčtovanie zálohovej faktúry " + proforma.Number + ".")
+	return inv.Recalculate()
+}
+
+// RemoveAdvance odoberie z konceptu vyúčtovania pridanú zálohu (pôvodnú,
+// z ktorej vyúčtovanie vzniklo, nie). Položky zálohy ostanú na úpravu.
+func (inv *Invoice) RemoveAdvance(proformaID int64) error {
+	if inv.Status != StatusDraft || inv.Advance == nil {
+		return errors.New("zálohu možno odobrať iba z konceptu vyúčtovacej faktúry")
+	}
+	if proformaID == inv.Advance.ProformaID {
+		return errors.New("vyúčtovanie vzniklo z tejto zálohy — odobrať ju nemožno")
+	}
+	kept := inv.Advance.Deductions[:0]
+	removed := false
+	for _, d := range inv.Advance.Deductions {
+		if d.ProformaID == proformaID {
+			removed = true
+			continue
+		}
+		kept = append(kept, d)
+	}
+	if !removed {
+		return errors.New("záloha nie je vo vyúčtovaní")
+	}
+	inv.Advance.Deductions = kept
+	return inv.Recalculate()
 }
 
 // applyDeductions odpočíta zálohy od rekapitulácie po sadzbách. Do DPH

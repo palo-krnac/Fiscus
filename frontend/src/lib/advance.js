@@ -35,3 +35,18 @@ export function receiptsOf(inv) {
   if (a.receipts?.length) return a.receipts
   return a.receiptId ? [{ id: a.receiptId, number: a.receiptNumber, date: inv.paidDate, amount: inv.summary?.total }] : []
 }
+
+/** Zálohové faktúry odpočítané vo vyúčtovaní: [{ id, number, total }] (sumy zo servera). */
+export function settledAdvances(inv) {
+  const a = inv?.advance
+  if (!a?.deductions?.length) return []
+  const out = new Map()
+  for (const d of a.deductions) {
+    const id = d.proformaId || a.proformaId
+    const cur = out.get(id) ?? { id, number: d.proformaNumber || (id === a.proformaId ? a.proformaNumber : ''), total: 0, docs: [] }
+    cur.total += Number(d.total)
+    cur.docs.push(d.number)
+    out.set(id, cur)
+  }
+  return [...out.values()]
+}
