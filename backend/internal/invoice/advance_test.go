@@ -2,6 +2,7 @@ package invoice
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	m "github.com/palo-krnac/fiscus/backend/internal/money"
@@ -206,5 +207,64 @@ func TestFinalInvoice(t *testing.T) {
 	foreign.Customer.Country = "CZ"
 	if _, err := NewFinalInvoice(foreign, []Invoice{r}, MustDate("2026-10-20"), 14); !errors.Is(err, ErrForeignAdvance) {
 		t.Fatalf("zahraničie: %v", err)
+	}
+}
+
+func TestAddRemoveAdvance(t *testing.T) {
+	p1 := paidProforma(t, ln("Rozvádzač", "1", "1000", 23))
+	p2 := paidProforma(t, ln("Montáž", "1", "200", 23))
+	p2.ID, p2.Number = 8, "ZF20260004"
+	r1, _ := NewAdvanceReceipt(p1, p1.Summary.Total, p1.PaidDate, p1.PaidDate)
+	r2, _ := NewAdvanceReceipt(p2, p2.Summary.Total, p2.PaidDate, p2.PaidDate)
+	r1.ID, r1.Number, r2.ID, r2.Number = 11, "ZD1", 12, "ZD2"
+	f, err := NewFinalInvoice(p1, []Invoice{r1}, MustDate("2026-10-20"), 14)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.Advance.Deductions[0].ProformaID != 7 {
+		t.Fatalf("odpočet bez zálohy: %+v", f.Advance.Deductions)
+	}
+	other := p2
+	other.Customer.Name = "Iný odberateľ"
+	tests := []struct {
+		name string
+		p    Invoice
+		want string
+	}{
+		{"iný odberateľ", other, "inému odberateľovi"},
+		{"tá istá záloha", p1, "už je vo vyúčtovaní"},
+	}
+	for _, tt := range tests {
+		x := f
+		x.Advance = &Advance{ProformaID: f.Advance.ProformaID, Deductions: append([]Deduction(nil), f.Advance.Deductions...)}
+		if err := x.AddAdvance(tt.p, []Invoice{r2}); err == nil || !strings.Contains(err.Error(), tt.want) {
+			t.Errorf("%s: %v", tt.name, err)
+		}
+	}
+	if err := f.AddAdvance(p2, []Invoice{r2}); err != nil {
+		t.Fatal(err)
+	}
+	if ids := f.ProformaIDs(); len(ids) != 2 || ids[1] != 8 || len(f.Lines) != 2 || !f.Summary.Total.IsZero() ||
+		!strings.Contains(f.Note, "ZF20260004") {
+		t.Fatalf("po pridaní: %v %+v", ids, f.Summary)
+	}
+	if err := f.RemoveAdvance(7); err == nil {
+		t.Fatal("pôvodnú zálohu nemožno odobrať")
+	}
+	if err := f.RemoveAdvance(8); err != nil || len(f.Advance.Deductions) != 1 || f.Summary.Total.String() != "246.00" {
+		t.Fatalf("po odobraní: %v %+v", err, f.Summary)
+	}
+	if err := f.RemoveAdvance(8); err == nil {
+		t.Fatal("dvakrát odobraná")
+	}
+	issued := f
+	issued.Status = StatusIssued
+	if err := issued.AddAdvance(p2, []Invoice{r2}); err == nil {
+		t.Fatal("pridanie do vystavenej")
+	}
+	// IČO rozhoduje pred názvom
+	a := Invoice{Customer: Party{ICO: "123", Name: "A"}}
+	if !a.SameCustomer(Invoice{Customer: Party{ICO: "123", Name: "A s.r.o."}}) || a.SameCustomer(Invoice{Customer: Party{ICO: "999", Name: "A"}}) {
+		t.Fatal("rovnaký odberateľ podľa IČO")
 	}
 }

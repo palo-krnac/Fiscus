@@ -37,4 +37,30 @@ func TestAdvanceAPI(t *testing.T) {
 		t.Fatalf("vyúčtovanie: %+v", f)
 	}
 	e.do("POST", base, `{"kind":"advance_receipt","customer":{"name":"X"}}`, 422, nil)
+
+	// druhá záloha toho istého odberateľa → do vyúčtovania
+	var p2 doc
+	e.do("POST", base, `{"kind":"proforma","customer":{"name":"Zákazník s.r.o.","country":"SK"},"issueDate":"2026-10-02","deliveryDate":"2026-10-02",`+
+		`"dueDate":"2026-10-09","lines":[{"description":"Záloha na montáž","quantity":"1","unit":"ks","unitPrice":"200","vatRate":23}]}`, 201, &p2)
+	e.do("POST", fmt.Sprintf("%s/%d/issue", base, p2.ID), nil, 200, &p2)
+	var cands []struct{ ID int64 }
+	e.do("GET", fmt.Sprintf("%s/%d/advances", base, f.ID), nil, 200, &cands)
+	if len(cands) != 0 {
+		t.Fatalf("neuhradená záloha medzi návrhmi: %+v", cands)
+	}
+	e.do("POST", fmt.Sprintf("%s/%d/pay", base, p2.ID), nil, 200, &p2)
+	e.do("GET", fmt.Sprintf("%s/%d/advances", base, f.ID), nil, 200, &cands)
+	if len(cands) != 1 || cands[0].ID != p2.ID {
+		t.Fatalf("návrhy: %+v", cands)
+	}
+	e.do("POST", fmt.Sprintf("%s/%d/advances/%d", base, f.ID, p2.ID), nil, 200, &f)
+	if len(f.Advance.Deductions) != 2 || f.Summary.Total != "0.00" {
+		t.Fatalf("dve zálohy: %+v", f)
+	}
+	e.do("POST", fmt.Sprintf("%s/%d/advances/%d", base, f.ID, p2.ID), nil, 422, nil) // už je vo vyúčtovaní
+	e.do("DELETE", fmt.Sprintf("%s/%d/advances/%d", base, f.ID, p.ID), nil, 422, nil) // pôvodná záloha
+	e.do("DELETE", fmt.Sprintf("%s/%d/advances/%d", base, f.ID, p2.ID), nil, 200, &f)
+	if len(f.Advance.Deductions) != 1 {
+		t.Fatalf("po odobraní: %+v", f)
+	}
 }
