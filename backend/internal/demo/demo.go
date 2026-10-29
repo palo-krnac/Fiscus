@@ -212,6 +212,9 @@ func Seed(ctx context.Context, a *app.App) (store.Company, error) {
 	if err := seedQuotes(ctx, a, c, contactIDs); err != nil {
 		return c, fmt.Errorf("demo ponuky: %w", err)
 	}
+	if err := seedAdvances(ctx, a, c, contactIDs); err != nil {
+		return c, fmt.Errorf("demo zálohy: %w", err)
+	}
 	if err := seedRecurring(ctx, a, c, contactIDs); err != nil {
 		return c, fmt.Errorf("demo pravidelná fakturácia: %w", err)
 	}
@@ -227,6 +230,36 @@ func Seed(ctx context.Context, a *app.App) (store.Company, error) {
 		}
 	}
 	return c, nil
+}
+
+// seedAdvances pripraví zálohovú faktúru uhradenú (s dokladom k prijatej
+// platbe a konceptom vyúčtovania) a jednu čakajúcu na úhradu.
+func seedAdvances(ctx context.Context, a *app.App, c store.Company, contactIDs []int64) error {
+	today := a.Today()
+	mk := func(ci int, desc, price string, day int) (invoice.Invoice, error) {
+		cu := customers[ci]
+		issue := today.AddDays(-day)
+		d, err := a.SaveDraft(ctx, c.ID, invoice.Invoice{Kind: invoice.KindProforma,
+			Customer:  invoice.Party{Name: cu.name, City: cu.city, Country: "SK", ICO: cu.ico, ICDPH: cu.icdph},
+			ContactID: contactIDs[ci], IssueDate: issue, DeliveryDate: issue, DueDate: issue.AddDays(7),
+			Lines: []invoice.Line{{Description: desc, Unit: "ks", Quantity: m.MustParse("1"), UnitPrice: m.MustParse(price), Rate: vat.Rate23}}})
+		if err != nil {
+			return d, err
+		}
+		return a.Issue(ctx, c.ID, d.ID)
+	}
+	p, err := mk(5, "Záloha 50 % – rozvádzač RM2 podľa ponuky", "2400", 12)
+	if err != nil {
+		return err
+	}
+	if p, err = a.MarkPaid(ctx, c.ID, p.ID, today.AddDays(-6)); err != nil {
+		return err
+	}
+	if _, err := a.SettleAdvance(ctx, c.ID, p.ID); err != nil {
+		return err
+	}
+	_, err = mk(6, "Záloha na materiál – kabeláž a prístroje", "850", 2)
+	return err
 }
 
 // seedRecurring pripraví pravidelné faktúry: mesačný paušál (dnes sa vystaví),

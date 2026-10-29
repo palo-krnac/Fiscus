@@ -56,8 +56,8 @@ func (a *App) candidates(ctx context.Context, companyID int64) ([]bank.Candidate
 		if inv.Kind == invoice.KindCreditNote {
 			// dobropis vraciame odberateľovi
 			c.Amount, c.Direction = inv.Summary.Total.Neg(), bank.Out
-		} else if inv.Kind != invoice.KindInvoice {
-			continue
+		} else if inv.Kind != invoice.KindInvoice && inv.Kind != invoice.KindProforma {
+			continue // doklad k prijatej platbe je už uhradený
 		}
 		out = append(out, c)
 	}

@@ -291,6 +291,9 @@ func Run(t *testing.T, newStore Factory) {
 		if p, _ := s.GetInvoice(ctx, c.ID, plain.ID); p.Correction != nil {
 			t.Fatal("bežná faktúra nemá mať údaje dobropisu")
 		}
+		if got.Advance != nil {
+			t.Fatal("dobropis nemá zálohu")
+		}
 		if got.ContactID != 42 || !got.NonVATPayer || got.PaymentMethod != invoice.PayCash || got.SupplyKind != invoice.SupplyServices {
 			t.Fatalf("načítané: contact=%d nonVat=%v", got.ContactID, got.NonVATPayer)
 		}
@@ -610,6 +613,31 @@ func Run(t *testing.T, newStore Factory) {
 		}
 		if _, err := s.GetLogo(ctx, a.ID); !errors.Is(err, store.ErrNotFound) {
 			t.Fatal("po zmazaní")
+		}
+	})
+
+	t.Run("väzby záloh", func(t *testing.T) {
+		s := newStore(t)
+		c, _ := s.CreateCompany(ctx, store.Company{Name: "Alfa"})
+		inv := draft("Odberateľ", "2026-10-20")
+		full := vat.Summary{Rates: []vat.RateSummary{{Rate: 23, Base: m.MustParse("100"), VAT: m.MustParse("23"), Total: m.MustParse("123")}},
+			Base: m.MustParse("100"), VAT: m.MustParse("23"), Total: m.MustParse("123")}
+		inv.Advance = &invoice.Advance{ProformaID: 3, ProformaNumber: "ZF20260001", Supply: &full,
+			Deductions: []invoice.Deduction{{ReceiptID: 4, Number: "ZD20260001", Date: invoice.MustDate("2026-10-10"),
+				Rates: full.Rates, Total: full.Total}}}
+		if err := s.SaveInvoice(ctx, c.ID, inv); err != nil {
+			t.Fatal(err)
+		}
+		got, err := s.GetInvoice(ctx, c.ID, inv.ID)
+		if err != nil || !reflect.DeepEqual(got.Advance, inv.Advance) {
+			t.Fatalf("záloha:\n got %+v\nwant %+v", got.Advance, inv.Advance)
+		}
+		got.Advance = &invoice.Advance{FinalID: 9, FinalNumber: "FA20260009"}
+		if err := s.SaveInvoice(ctx, c.ID, &got); err != nil {
+			t.Fatal(err)
+		}
+		if g, _ := s.GetInvoice(ctx, c.ID, inv.ID); g.Advance == nil || g.Advance.FinalID != 9 || g.Advance.Supply != nil {
+			t.Fatalf("zmena väzby: %+v", g.Advance)
 		}
 	})
 

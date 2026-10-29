@@ -86,6 +86,7 @@ func (s *Server) Handler() http.Handler {
 	need("POST /api/companies/{cid}/invoices/{id}/pay", auth.PermInvoicesWrite, s.pay)
 	need("POST /api/companies/{cid}/invoices/{id}/cancel", auth.PermInvoicesWrite, s.cancel)
 	need("POST /api/companies/{cid}/invoices/{id}/credit-note", auth.PermInvoicesWrite, s.creditNote)
+	need("POST /api/companies/{cid}/invoices/{id}/settle", auth.PermInvoicesWrite, s.settleAdvance)
 
 	need("GET /api/companies/{cid}/quotes", auth.PermInvoicesRead, s.listQuotes)
 	need("GET /api/companies/{cid}/quotes/{id}", auth.PermInvoicesRead, s.getQuote)
@@ -197,7 +198,7 @@ func fail(w http.ResponseWriter, err error) {
 		writeErr(w, http.StatusUnprocessableEntity, "Doklad obsahuje chyby", ve.Fields)
 	case errors.Is(err, store.ErrNotFound):
 		writeErr(w, http.StatusNotFound, "Záznam neexistuje", nil)
-	case errors.Is(err, invoice.ErrLocked), errors.Is(err, invoice.ErrBadTransition):
+	case errors.Is(err, invoice.ErrLocked), errors.Is(err, invoice.ErrBadTransition), errors.Is(err, app.ErrReceiptIssued):
 		writeErr(w, http.StatusConflict, err.Error(), nil)
 	case errors.Is(err, app.ErrCompanyLimit), errors.Is(err, app.ErrForbidden), errors.Is(err, app.ErrReadOnly):
 		writeErr(w, http.StatusForbidden, err.Error(), nil)
