@@ -187,6 +187,12 @@ export const api = {
   recurringAction: (cid, id, action) => request('POST', `/api/companies/${cid}/recurring/${id}/${action}`),
   deleteRecurring: (cid, id) => request('DELETE', `/api/companies/${cid}/recurring/${id}`),
   overdue: (cid) => request('GET', `/api/companies/${cid}/overdue`),
+  items: (cid) => request('GET', `/api/companies/${cid}/items`),
+  saveItem: (cid, it) =>
+    it.id
+      ? request('PUT', `/api/companies/${cid}/items/${it.id}`, it)
+      : request('POST', `/api/companies/${cid}/items`, it),
+  deleteItem: (cid, id) => request('DELETE', `/api/companies/${cid}/items/${id}`),
   legal: () => request('GET', '/api/legal'),
   saveLegal: (p) => request('PUT', '/api/legal', p),
   resetLegal: () => request('POST', '/api/legal/reset'),

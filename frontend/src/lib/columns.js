@@ -261,3 +261,15 @@ export const vatPeriodColumns = [
   date('Platí do', (r) => r.to),
   t('Sadzby DPH (%)', (r) => (r.rates ?? []).join(', '), 20),
 ]
+
+export const itemColumns = [
+  t('Kód', (r) => r.code, 10),
+  t('Názov', (r) => r.name, 40),
+  t('MJ', (r) => r.unit, 6),
+  money('Cena bez DPH', (r) => r.priceNet),
+  { header: 'DPH (%)', value: (r) => r.vatRate, type: 'number', width: 8 },
+  money('Cena s DPH', (r) => r.priceGross),
+  t('Zadaná cena', (r) => (r.priceMode === 'gross' ? 's DPH' : 'bez DPH'), 10),
+  t('Archivovaná', (r) => yes(r.archived), 10),
+  t('Poznámka', (r) => r.note, 30),
+]

@@ -26,6 +26,7 @@ import { contactFromCustomer, customerFromContact, dueDaysFor, filterContacts } 
 import { quoteActions, quoteStatusOf, validDays as quoteValidDays } from '../lib/quotes.js'
 import { firstOfNextMonth, intervals, placeholders, recurringStatusOf } from '../lib/recurring.js'
 import InputNumber from 'primevue/inputnumber'
+import { filterItems, lineFromItem } from '../lib/catalog.js'
 
 // Ten istý editor slúži aj cenovej ponuke (quote) a šablóne pravidelnej faktúry
 // (recurring): rovnaké položky a výpočet DPH, iné dátumy a akcie.
@@ -314,6 +315,26 @@ function onLineCell(e) {
     if (!lines.value.length) lines.value = [blankLine()]
     changed()
   }
+}
+
+// ---- cenník ----
+const catalogItems = shallowRef([])
+const itemSuggestions = ref([])
+const itemQuery = ref('')
+onMounted(async () => {
+  catalogItems.value = await api.items(session.companyId).catch(() => [])
+})
+function searchItems(e) {
+  itemSuggestions.value = filterItems(catalogItems.value, e.query).slice(0, 15)
+}
+function pickItem(e) {
+  const line = withKey(lineFromItem(e.value, { priceMode: inv.value.priceMode, nonVat: nonVat.value }))
+  const ls = lines.value
+  // prázdny prvý riadok novej faktúry sa nahradí
+  const onlyBlank = ls.length === 1 && !ls[0].description && !Number(ls[0].unitPrice)
+  lines.value = onlyBlank ? [line] : [...ls, line]
+  setTimeout(() => (itemQuery.value = ''), 0)
+  changed()
 }
 
 function addLine() {
@@ -886,7 +907,29 @@ const customerFields = reactive([
           <ul v-if="lineErrors.length" class="line-errors">
             <li v-for="m in lineErrors" :key="m">{{ m }}</li>
           </ul>
-          <Button v-if="editable" label="Pridať položku" icon="pi pi-plus" text size="small" class="add" @click="addLine" />
+          <div v-if="editable" class="add-row">
+            <Button label="Pridať položku" icon="pi pi-plus" text size="small" class="add" @click="addLine" />
+            <AutoComplete
+              v-if="catalogItems.length"
+              v-model="itemQuery"
+              :suggestions="itemSuggestions"
+              option-label="name"
+              :delay="60"
+              placeholder="Z cenníka – kód alebo názov"
+              size="small"
+              class="from-catalog"
+              aria-label="Pridať položku z cenníka"
+              @complete="searchItems"
+              @option-select="pickItem"
+            >
+              <template #option="{ option }">
+                <div class="sugg item-sugg">
+                  <strong>{{ option.code ? `${option.code} · ` : '' }}{{ option.name }}</strong>
+                  <span>{{ formatAmount(!nonVat && inv.priceMode === 'gross' ? option.priceGross : option.priceNet) }} € / {{ option.unit }}</span>
+                </div>
+              </template>
+            </AutoComplete>
+          </div>
           <p v-if="isRecurring && editable" class="tokens">
             V popise a poznámke môžete použiť
             <span v-for="p in placeholders" :key="p.token"><code>{{ p.token }}</code> ({{ p.hint }})</span>
@@ -1202,6 +1245,26 @@ legend {
 }
 .add {
   margin-top: 4px;
+}
+.add-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.add-row .add {
+  margin-top: 0;
+}
+.from-catalog {
+  width: 300px;
+  max-width: 100%;
+}
+.from-catalog :deep(input) {
+  width: 100%;
+}
+.item-sugg {
+  min-width: 260px;
 }
 .correction .corrects {
   margin: 0 0 8px;

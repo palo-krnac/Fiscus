@@ -6,6 +6,7 @@ package storetest
 import (
 	"context"
 	"errors"
+	"github.com/palo-krnac/fiscus/backend/internal/catalog"
 	"reflect"
 	"sync"
 	"testing"
@@ -509,6 +510,66 @@ func Run(t *testing.T, newStore Factory) {
 		}
 		if _, err := s.GetSetting(ctx, "iny"); !errors.Is(err, store.ErrNotFound) {
 			t.Fatal("iný kľúč")
+		}
+	})
+
+	t.Run("cenník", func(t *testing.T) {
+		s := newStore(t)
+		a, _ := s.CreateCompany(ctx, store.Company{Name: "Alfa"})
+		b, _ := s.CreateCompany(ctx, store.Company{Name: "Beta"})
+		items := []*catalog.Item{
+			{Code: "SV1", Name: "Servisný výjazd", Unit: "km", Price: m.MustParse("0.45"), PriceMode: vat.PriceNet, Rate: 23, Note: "pozn."},
+			{Name: "Úprava HMI", Unit: "hod", Price: m.MustParse("51.66"), PriceMode: vat.PriceGross, Rate: 23, Archived: true},
+			{Code: "M1", Name: "montáž", Unit: "hod", Price: m.MustParse("40"), PriceMode: vat.PriceNet, Rate: 23},
+		}
+		for _, it := range items {
+			if err := s.SaveItem(ctx, a.ID, it); err != nil || it.ID == 0 || it.CompanyID != a.ID {
+				t.Fatalf("uloženie: %v", err)
+			}
+		}
+		got, err := s.GetItem(ctx, a.ID, items[1].ID)
+		if err != nil || !reflect.DeepEqual(got, *items[1]) {
+			t.Fatalf("načítanie:\n got %+v\nwant %+v", got, *items[1])
+		}
+		list, _ := s.ListItems(ctx, a.ID)
+		if len(list) != 3 || list[0].Name != "montáž" || list[1].Name != "Servisný výjazd" || list[2].Name != "Úprava HMI" {
+			t.Fatalf("poradie podľa názvu bez diakritiky: %+v", list)
+		}
+		if _, err := s.GetItem(ctx, b.ID, items[0].ID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("položka inej firmy")
+		}
+		if other, _ := s.ListItems(ctx, b.ID); len(other) != 0 {
+			t.Fatal("cenník inej firmy")
+		}
+		dup := catalog.Item{Code: "sv1", Name: "Iný", Unit: "ks", PriceMode: vat.PriceNet, Rate: 23}
+		if err := s.SaveItem(ctx, a.ID, &dup); !errors.Is(err, store.ErrDuplicate) {
+			t.Fatalf("rovnaký kód: %v", err)
+		}
+		if err := s.SaveItem(ctx, b.ID, &dup); err != nil {
+			t.Fatalf("rovnaký kód v inej firme: %v", err)
+		}
+		items[2].Code = "SV1"
+		if err := s.SaveItem(ctx, a.ID, items[2]); !errors.Is(err, store.ErrDuplicate) {
+			t.Fatalf("zmena na existujúci kód: %v", err)
+		}
+		items[2].Code, items[2].Price = "M1", m.MustParse("42")
+		if err := s.SaveItem(ctx, a.ID, items[2]); err != nil {
+			t.Fatal(err)
+		}
+		if g, _ := s.GetItem(ctx, a.ID, items[2].ID); !g.Price.Equal(m.MustParse("42")) {
+			t.Fatal("úprava ceny")
+		}
+		if err := s.SaveItem(ctx, b.ID, items[0]); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("úprava položky inej firmy")
+		}
+		if err := s.DeleteItem(ctx, b.ID, items[0].ID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("zmazanie položky inej firmy")
+		}
+		if err := s.DeleteItem(ctx, a.ID, items[0].ID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.GetItem(ctx, a.ID, items[0].ID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("po zmazaní")
 		}
 	})
 

@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"github.com/palo-krnac/fiscus/backend/internal/catalog"
 	"strings"
 	"testing"
 
@@ -117,7 +118,7 @@ func TestProtocol(t *testing.T) {
 			t.Errorf("%s: schéma", x.Name)
 		}
 	}
-	for name, ro := range map[string]bool{"list_invoices": true, "list_quotes": true, "list_recurring_invoices": true, "vat_return": true, "create_invoice_draft": false, "issue_invoice": false} {
+	for name, ro := range map[string]bool{"list_invoices": true, "list_quotes": true, "list_catalog_items": true, "list_recurring_invoices": true, "vat_return": true, "create_invoice_draft": false, "issue_invoice": false} {
 		if got, ok := names[name]; !ok || got != ro {
 			t.Errorf("%s: readOnly=%v (%v)", name, got, ok)
 		}
@@ -256,5 +257,24 @@ func TestRecurringTool(t *testing.T) {
 	res := callTool(t, s, ctx, "list_recurring_invoices", map[string]any{})
 	if res.IsError || res.Structured["count"].(float64) != 1 || !strings.Contains(res.Content[0].Text, `"next_date": "2026-11-01"`) {
 		t.Fatalf("%+v", res)
+	}
+}
+
+func TestCatalogTool(t *testing.T) {
+	s, ctx, cid := setup(t)
+	for _, it := range []catalog.Item{
+		{Code: "PLC", Name: "Programovanie PLC", Unit: "hod", Price: money.MustParse("48"), Rate: 23},
+		{Name: "Starý výjazd", Unit: "km", Price: money.MustParse("0.40"), Rate: 23, Archived: true},
+	} {
+		if _, err := s.App.SaveItem(ctx, cid, it); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r := callTool(t, s, ctx, "list_catalog_items", map[string]any{"query": "plc"})
+	if r.IsError || r.Structured["count"].(float64) != 1 || !strings.Contains(r.Content[0].Text, `"price_gross": "59.04"`) {
+		t.Fatalf("%+v", r)
+	}
+	if r := callTool(t, s, ctx, "list_catalog_items", map[string]any{}); r.Structured["count"].(float64) != 1 {
+		t.Fatal("archivovaná položka sa nemá ponúkať")
 	}
 }
