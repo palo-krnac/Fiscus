@@ -43,8 +43,10 @@ claude mcp add --transport http fiskus http://127.0.0.1:48080/mcp --header "Auth
 Most `fiskus-mcp` sa predvolene pripája na `http://127.0.0.1:48080/mcp` (iná adresa: `-url`). Ak aplikácia nebeží, most ju spustí na pozadí bez okna prehliadača; kým asistent pracuje, aplikácia sa neukončí.
 
 Nástroje:
-- čítanie: `list_companies`, `company_overview`, `list_invoices`, `get_invoice`, `list_purchases`, `list_contacts`, `list_bank_transactions`, `vat_return`
-- zmeny: `create_invoice_draft`, `issue_invoice`, `mark_invoice_paid`, `create_contact`
+- čítanie: `list_companies`, `company_overview`, `list_invoices`, `get_invoice`, `list_quotes`, `list_recurring_invoices`, `list_catalog_items`, `list_purchases`, `list_contacts`, `list_bank_transactions`, `bank_match_suggestions`, `cash_book`, `list_overdue`, `vat_return`
+- zmeny: `create_invoice_draft`, `issue_invoice`, `mark_invoice_paid`, `create_credit_note`, `create_purchase`, `mark_purchase_paid`, `match_bank_transaction`, `create_reminder`, `create_contact`
+
+DPH, súčty, úroky z omeškania aj limity dobropisu počíta Fiškus; asistent iba zadáva údaje. Vystavenie faktúry a upomienka idú iba na výslovný pokyn používateľa, každé volanie je v audite.
 
 ## E-faktúra (od 1. 1. 2027)
 

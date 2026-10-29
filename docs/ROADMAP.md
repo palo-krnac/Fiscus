@@ -70,7 +70,8 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] API kľúče používateľa (len na čítanie / ako používateľ), iba hash v databáze, zrušenie
 - [x] MCP server pre AI asistentov (POST /mcp, Streamable HTTP) + most `fiskus-mcp` pre stdio; práva používateľa, každé volanie v audite
 - [x] MCP: zoznam cenových ponúk (`list_quotes`) a pravidelných faktúr (`list_recurring_invoices`)
-- [ ] Ďalšie MCP nástroje: prijaté faktúry (zaevidovanie), párovanie platieb, dobropis, upomienky; OAuth pre vzdialených klientov
+- [x] MCP: zaevidovanie a úhrada prijatej faktúry, návrhy a párovanie bankových platieb, dobropis (celý aj časť položiek), faktúry po splatnosti a upomienky; kontrola povinných argumentov
+- [ ] MCP: OAuth pre vzdialených klientov (Claude na webe a v mobile)
 
 ## Etapa 2 — účtovníctvo
 - [ ] Jednoduché účtovníctvo (peňažný denník)
