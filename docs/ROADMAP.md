@@ -24,7 +24,9 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [ ] Odoslanie faktúry e-mailom (PDF na serveri + SMTP)
 - [x] Dobropis (opravná faktúra) k vystavenej faktúre: celý aj čiastočný, kontrola limitu, sadzby k pôvodnému dodaniu
 - [x] Cenová ponuka: vlastný číselný rad (CP), platnosť, stavy odoslaná / prijatá / odmietnutá / po platnosti, kópia ako nová verzia, tlač, jedným klikom koncept faktúry; nezapočíta sa do DPH
-- [ ] Zálohová faktúra a daňový doklad k prijatej platbe, pravidelná fakturácia
+- [x] Pravidelná fakturácia: šablóna faktúry s intervalom (mesačne, štvrťročne, polročne, ročne), koncom, splatnosťou a texty {obdobie} / {mesiac} / {rok} / {minule_obdobie}; Fiškus faktúru vytvorí a vystaví sám (pri štarte a každú hodinu), dobehnuté staršie obdobia ostanú ako koncepty; pozastavenie, faktúra hneď, história
+- [ ] Pravidelná fakturácia: automatické odoslanie e-mailom, upozornenie na koncepty na kontrolu
+- [ ] Zálohová faktúra a daňový doklad k prijatej platbe
 - [ ] Cenová ponuka: odoslanie e-mailom, prijatie zákazníkom cez odkaz, objednávka
 - [x] Prijaté faktúry: evidencia z rekapitulácie DPH dodávateľa, odpočet / bez odpočtu, prenesenie, kontrola duplicít, úhrady
 - [ ] AI vyťaženie prijatých faktúr z PDF (AI iba navrhuje, účtuje pevne naprogramovaný automat)
@@ -56,7 +58,7 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] Audit všetkých zmien (kto, kedy, kanál, čo, pred/po), nemenný reťazec s odtlačkami; filter podľa firmy a kategórie
 - [x] API kľúče používateľa (len na čítanie / ako používateľ), iba hash v databáze, zrušenie
 - [x] MCP server pre AI asistentov (POST /mcp, Streamable HTTP) + most `fiskus-mcp` pre stdio; práva používateľa, každé volanie v audite
-- [x] MCP: zoznam cenových ponúk (`list_quotes`)
+- [x] MCP: zoznam cenových ponúk (`list_quotes`) a pravidelných faktúr (`list_recurring_invoices`)
 - [ ] Ďalšie MCP nástroje: prijaté faktúry (zaevidovanie), párovanie platieb, dobropis, upomienky; OAuth pre vzdialených klientov
 
 ## Etapa 2 — účtovníctvo

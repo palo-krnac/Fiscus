@@ -19,8 +19,12 @@ func TestSeed(t *testing.T) {
 		t.Fatal(err)
 	}
 	list, _ := a.Store.ListInvoices(context.Background(), c.ID, store.InvoiceFilter{})
-	if len(list) != 43 { // vrátane konceptu faktúry z prijatej ponuky
+	if len(list) != 44 { // vrátane konceptu z ponuky a dnešnej pravidelnej faktúry
 		t.Fatalf("%d faktúr", len(list))
+	}
+	rec, _ := a.Recurring(context.Background(), c.ID)
+	if len(rec) != 3 || rec[0].Generated != 1 || rec[0].History[0].Number == "" || rec[2].Active {
+		t.Fatalf("pravidelné: %+v", rec)
 	}
 	quotes, _ := a.Quotes(context.Background(), c.ID, 0)
 	states := map[string]int{}

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"github.com/palo-krnac/fiscus/backend/internal/backup"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -39,6 +40,7 @@ type App struct {
 	Backups    *backup.Manager
 	BackupsOff string
 	lic        atomic.Pointer[license.License]
+	recurMu    sync.Mutex // jeden beh pravidelnej fakturácie naraz
 }
 
 // New vytvorí službu.
