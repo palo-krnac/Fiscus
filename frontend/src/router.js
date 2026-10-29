@@ -3,6 +3,7 @@ import InvoiceList from './views/InvoiceList.vue'
 import InvoiceEdit from './views/InvoiceEdit.vue'
 import OAuthConsent from './views/OAuthConsent.vue'
 import JournalBook from './views/JournalBook.vue'
+import OpenItems from './views/OpenItems.vue'
 import Placeholder from './views/Placeholder.vue'
 import Contacts from './views/Contacts.vue'
 import Settings from './views/Settings.vue'
@@ -63,6 +64,7 @@ export const modules = [
     group: 'Účtovníctvo',
     items: [
       { path: '/dennik', label: 'Peňažný denník', icon: 'pi-book', ready: true, perm: 'ledger.read' },
+      { path: '/pohladavky-zavazky', label: 'Pohľadávky a záväzky', icon: 'pi-list', ready: true, perm: 'ledger.read' },
       { path: '/hlavna-kniha', label: 'Hlavná kniha', icon: 'pi-table', stage: 2, perm: 'purchases.read' },
       { path: '/majetok', label: 'Majetok', icon: 'pi-car', stage: 3, perm: 'purchases.read' },
       { path: '/sklad', label: 'Sklad', icon: 'pi-box', stage: 3, perm: 'purchases.read' },
@@ -116,6 +118,7 @@ export const router = createRouter({
     { path: '/emaily', component: Emails, meta: { title: 'E-maily', perm: 'invoices.read' } },
     { path: '/upomienky/:id(\\d+)/tlac', component: ReminderPrint, props: true, meta: { title: 'Upomienka', bare: true, perm: 'invoices.read' } },
     { path: '/prijate', component: PurchaseList, meta: { title: 'Prijaté faktúry', perm: 'purchases.read' } },
+    { path: '/pohladavky-zavazky', component: OpenItems, meta: { title: 'Pohľadávky a záväzky', perm: 'ledger.read' } },
     { path: '/dennik', component: JournalBook, meta: { title: 'Peňažný denník', perm: 'ledger.read' } },
     { path: '/prijate/nova', component: PurchaseEdit, meta: { title: 'Nová prijatá faktúra', perm: 'purchases.write' } },
     { path: '/prijate/:id(\\d+)', component: PurchaseEdit, props: true, meta: { title: 'Prijatá faktúra', perm: 'purchases.read' } },

@@ -126,3 +126,21 @@ func TestSum(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 }
+
+func TestBalances(t *testing.T) {
+	es := []Entry{
+		{Means: Bank, Account: "sk31 1200 0000 1987 4263 7541", Amount: m.MustParse("492")},
+		{Means: Bank, Account: "SK3112000000198742637541", Amount: m.MustParse("-123")},
+		{Means: Bank, Account: "SK8975000000000012345671", Amount: m.MustParse("-10")},
+		{Means: Cash, Account: "Pokladnica", Amount: m.MustParse("-30")},
+	}
+	got := Balances(es, m.MustParse("100"), map[string]m.Dec{"SK3112000000198742637541": m.MustParse("1000")}, []string{"SK3112000000198742637541"})
+	if len(got) != 3 {
+		t.Fatalf("%+v", got)
+	}
+	cash, main, other := got[0], got[1], got[2]
+	if cash.Closing.String() != "70.00" || main.Opening.String() != "1000.00" || main.In.String() != "492.00" ||
+		main.Closing.String() != "1369.00" || other.Account != "SK8975000000000012345671" || other.Closing.String() != "-10.00" {
+		t.Fatalf("%+v", got)
+	}
+}
