@@ -23,6 +23,9 @@ type Actor struct {
 	ReadOnly bool `json:"readOnly,omitempty"`
 	// KeyID je API kľúč, ktorým sa actor prihlásil (0 = nie kľúčom).
 	KeyID int64 `json:"keyId,omitempty"`
+	// MFASetup: inštalácia vyžaduje 2FA a používateľ ho ešte nemá — smie
+	// iba nastaviť dvojfázové overenie alebo sa odhlásiť.
+	MFASetup bool `json:"-"`
 }
 
 // System je actor pre akcie programu.

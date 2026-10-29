@@ -100,6 +100,11 @@ func (s *Server) Handler() http.Handler {
 	open("POST /api/me/mfa/recovery", s.recoveryMFA)
 	open("POST /api/users/{uid}/mfa-reset", s.resetMFA)
 	open("POST /api/auth/logout", s.logout)
+	public("POST /api/auth/pin", s.unlockPIN)
+	public("POST /api/auth/lock", s.lockPIN)
+	open("GET /api/security", s.getSecurity)
+	open("PUT /api/security/pin", s.setPIN)
+	open("PUT /api/security/require-mfa", s.setRequireMFA)
 	open("POST /api/auth/password", s.changePassword)
 	open("GET /api/me", s.me)
 	open("GET /api/license", s.getLicense)
@@ -326,14 +331,15 @@ func (s *Server) company(w http.ResponseWriter, r *http.Request) (int64, bool) {
 // ---- handlery ----
 
 // capabilities je verejné (aj pred prihlásením), preto bez údajov o držiteľovi licencie.
-func (s *Server) capabilities(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) capabilities(w http.ResponseWriter, r *http.Request) {
 	c := s.App.Capabilities()
 	c.License = nil
 	writeJSON(w, http.StatusOK, struct {
 		edition.Capabilities
 		Launcher bool   `json:"launcher"` // desktop z inštalátora: okno sa ozýva, dá sa ukončiť
 		Version  string `json:"version"`
-	}{c, s.Desktop != nil, s.Version})
+		PIN      bool   `json:"pin"` // desktop je chránený PIN-om
+	}{c, s.Desktop != nil, s.Version, s.App.PINEnabled(r.Context())})
 }
 
 func (s *Server) listCompanies(w http.ResponseWriter, r *http.Request) {

@@ -104,7 +104,9 @@ func (a *App) SessionActor(ctx context.Context, token string, channel auth.Chann
 	if err != nil || !u.Active {
 		return auth.Actor{}, ErrNoSession
 	}
-	return actorOf(u, auth.Actor{Channel: channel, IP: ip}), nil
+	act := actorOf(u, auth.Actor{Channel: channel, IP: ip})
+	act.MFASetup = !u.MFA.Enabled && a.RequireMFA(ctx)
+	return act, nil
 }
 
 // Logout zruší reláciu.

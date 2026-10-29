@@ -108,6 +108,12 @@ export const api = {
   mfaEnable: (code) => request('POST', '/api/me/mfa/enable', { code }),
   mfaDisable: (password, code) => request('POST', '/api/me/mfa/disable', { password, code }),
   mfaRecovery: (password) => request('POST', '/api/me/mfa/recovery', { password }),
+  // zabezpečenie: PIN desktopu, povinné 2FA servera
+  unlockPIN: (pin) => request('POST', '/api/auth/pin', { pin }),
+  lock: () => request('POST', '/api/auth/lock'),
+  security: () => request('GET', '/api/security'),
+  setPIN: (current, pin) => request('PUT', '/api/security/pin', { current, pin }),
+  setRequireMFA: (on) => request('PUT', '/api/security/require-mfa', { on }),
   // súhlas s pripojením aplikácie cez OAuth (query = parametre /oauth/authorize)
   oauthRequest: (query) => request('GET', `/api/oauth/request?${query}`),
   oauthDecision: (query, allow, readOnly) => request('POST', '/api/oauth/decision', { query, allow, readOnly }),

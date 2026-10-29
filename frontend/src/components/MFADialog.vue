@@ -12,6 +12,9 @@ import { session } from '../lib/session.js'
 import { formatSecret, mfaQR, recoveryFile } from '../lib/mfa.js'
 
 const visible = defineModel('visible', { type: Boolean, default: false })
+// forced: správca vyžaduje 2FA — okno sa nedá zavrieť, po zapnutí ohlási „done“
+const props = defineProps({ forced: { type: Boolean, default: false } })
+const emit = defineEmits(['done'])
 const toast = useToast()
 
 // krok: status | password | scan | codes | disable | recovery
@@ -36,7 +39,7 @@ watch(visible, async (v) => {
   } catch (e) {
     error.value = e.message
   }
-})
+}, { immediate: true })
 
 function reset(s) {
   step.value = s
@@ -118,6 +121,7 @@ function finish() {
   toast.add({ severity: 'success', summary: 'Dvojfázové overenie je zapnuté', detail: 'Pri ďalšom prihlásení zadáte aj kód z aplikácie.', life: 5000 })
   reset('status')
   visible.value = false
+  emit('done')
 }
 
 const header = computed(
@@ -132,7 +136,7 @@ const header = computed(
 </script>
 
 <template>
-  <Dialog v-model:visible="visible" :header="header" modal :closable="step !== 'codes'" :style="{ width: '28rem' }" :breakpoints="{ '520px': '94vw' }">
+  <Dialog v-model:visible="visible" :header="header" modal :closable="step !== 'codes' && !props.forced" :style="{ width: '28rem' }" :breakpoints="{ '520px': '94vw' }">
     <!-- stav -->
     <div v-if="step === 'status'" class="mfa">
       <p v-if="!status" class="muted">Načítavam…</p>
@@ -150,6 +154,9 @@ const header = computed(
       </template>
       <template v-else>
         <p class="state">Vypnuté</p>
+        <p v-if="props.forced" class="forced">
+          <i class="pi pi-shield" /> Správca vyžaduje dvojfázové overenie. Kým si ho nezapnete, k dokladom sa nedostanete.
+        </p>
         <p>
           S dvojfázovým overením nestačí na prihlásenie iba heslo. Treba aj kód z aplikácie v telefóne, napríklad Google
           Authenticator, Microsoft Authenticator alebo Aegis.
@@ -252,6 +259,12 @@ const header = computed(
 .mfa label > span {
   font-size: var(--fs-sm);
   color: var(--ink-soft);
+}
+.forced {
+  padding: 8px 10px;
+  background: var(--tone-draft-bg);
+  color: var(--tone-draft);
+  border-radius: var(--radius);
 }
 .muted {
   color: var(--ink-faint);
