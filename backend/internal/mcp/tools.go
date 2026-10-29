@@ -132,6 +132,10 @@ type invoiceRow struct {
 }
 
 func (s *Server) allTools() []Tool {
+	return append(s.baseTools(), s.moreTools()...)
+}
+
+func (s *Server) baseTools() []Tool {
 	a := s.App
 	return []Tool{
 		{
@@ -686,7 +690,7 @@ func (s *Server) allTools() []Tool {
 		},
 		{
 			Name: "issue_invoice", Title: "Vystaviť faktúru", Write: true,
-			Description: "Vystaví koncept faktúry: pridelí číslo a variabilný symbol. Vystavená faktúra sa už nedá meniť (opravuje sa dobropisom). Použi iba na výslovný pokyn používateľa.",
+			Description: "Vystaví koncept faktúry alebo dobropisu: pridelí číslo a variabilný symbol. Vystavenú faktúru možno v programe upraviť, kým nie je uhradená, priznaná v DPH ani odoslaná ako e-faktúra; potom sa opravuje dobropisom. Použi iba na výslovný pokyn používateľa.",
 			Props:       map[string]any{"company_id": pCompany, "id": pID}, Required: []string{"id"},
 			Run: func(c *callCtx, args json.RawMessage) (any, error) {
 				var p struct {

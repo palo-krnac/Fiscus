@@ -166,6 +166,29 @@ func (s *Server) dispatch(ctx context.Context, req request) (any, *rpcError) {
 	return nil, &rpcError{codeMethodNotFound, "neznáma metóda " + req.Method}
 }
 
+// checkRequired odmietne volanie bez povinných argumentov zo schémy
+// (prázdny reťazec alebo prázdny zoznam sa počíta ako chýbajúci).
+func checkRequired(t *Tool, args json.RawMessage) (any, error) {
+	if len(t.Required) == 0 {
+		return nil, nil
+	}
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(args, &m); err != nil {
+		return nil, fmt.Errorf("neplatné argumenty: %v", err)
+	}
+	var miss []string
+	for _, k := range t.Required {
+		v, ok := m[k]
+		if s := strings.TrimSpace(string(v)); !ok || s == "null" || s == `""` || s == "[]" {
+			miss = append(miss, k)
+		}
+	}
+	if len(miss) > 0 {
+		return nil, fmt.Errorf("chýbajú povinné argumenty: %s", strings.Join(miss, ", "))
+	}
+	return nil, nil
+}
+
 func (s *Server) tool(name string) *Tool {
 	for i := range s.tools {
 		if s.tools[i].Name == name {
@@ -182,7 +205,10 @@ func (s *Server) call(ctx context.Context, t *Tool, args json.RawMessage) map[st
 	}
 	var c callCtx
 	c.ctx, c.s = ctx, s
-	out, err := t.Run(&c, args)
+	out, err := checkRequired(t, args)
+	if err == nil {
+		out, err = t.Run(&c, args)
+	}
 
 	summary := "MCP " + t.Name
 	if err != nil {
