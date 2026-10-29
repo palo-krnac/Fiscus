@@ -1,7 +1,7 @@
 // Package license overuje licenčné kľúče Fiškusa bez pripojenia na internet.
 //
 // Desktopová verzia a serverová verzia pre jednu firmu sú zadarmo. Licencia
-// (39 € ročne cez Paddle) odomkne serverovú verziu pre viac firiem.
+// (99 € ročne cez Paddle) odomkne serverovú verziu pre viac firiem.
 //
 // Kľúč má tvar  FISKUS1.<údaje base64url>.<podpis Ed25519 base64url>.
 // Podpisuje ho licenčná služba súkromným kľúčom; program obsahuje iba

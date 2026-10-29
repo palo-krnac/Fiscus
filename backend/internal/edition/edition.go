@@ -6,7 +6,7 @@
 // Ceny Fiškusa:
 //   - desktopová verzia: zadarmo (jedna firma)
 //   - serverová verzia pre jednu firmu: zadarmo (s používateľmi a rolami)
-//   - serverová verzia pre viac firiem: licencia 39 € ročne (Paddle)
+//   - serverová verzia pre viac firiem: licencia 99 € ročne (Paddle)
 package edition
 
 import (
@@ -33,7 +33,7 @@ const (
 )
 
 // PriceMulti je cena licencie pre viac firiem (na zobrazenie).
-const PriceMulti = "39 € ročne"
+const PriceMulti = "99 € ročne"
 
 // Capabilities sú povolené funkcie.
 type Capabilities struct {
