@@ -172,8 +172,21 @@ func TestInvoiceFlow(t *testing.T) {
 	if issued.Number != "FA20260001" {
 		t.Fatalf("číslo %s", issued.Number)
 	}
-	// vystavená sa nedá meniť
-	e.do("PUT", fmt.Sprintf("%s/%d", base, draft.ID), issued, 409, nil)
+	// vystavená, neuhradená sa dá upraviť (číslo ostane)
+	var got struct {
+		invoice.Invoice
+		Amendable  bool
+		LockReason string
+	}
+	e.do("GET", fmt.Sprintf("%s/%d", base, draft.ID), nil, 200, &got)
+	if !got.Amendable || got.LockReason != "" {
+		t.Fatalf("upraviteľná: %+v", got)
+	}
+	issued.Note = "Upravená poznámka"
+	e.do("PUT", fmt.Sprintf("%s/%d", base, draft.ID), issued, 200, &issued)
+	if issued.Number != "FA20260001" || issued.Note != "Upravená poznámka" {
+		t.Fatalf("úprava: %+v", issued)
+	}
 
 	var rows []invoiceRow
 	e.do("GET", base+"?year=2026", nil, 200, &rows)
@@ -183,6 +196,12 @@ func TestInvoiceFlow(t *testing.T) {
 
 	var paid invoice.Invoice
 	e.do("POST", fmt.Sprintf("%s/%d/pay", base, draft.ID), `{"date":"2026-11-01"}`, 200, &paid)
+	// uhradená sa už nemení — 409 a dôvod pri faktúre
+	e.do("PUT", fmt.Sprintf("%s/%d", base, draft.ID), paid, 409, nil)
+	e.do("GET", fmt.Sprintf("%s/%d", base, draft.ID), nil, 200, &got)
+	if got.Amendable || !strings.Contains(got.LockReason, "uhradená") {
+		t.Fatalf("zamknutá: %+v", got)
+	}
 	if paid.Status != invoice.StatusPaid || paid.PaidDate.String() != "2026-11-01" {
 		t.Fatalf("úhrada: %+v", paid)
 	}

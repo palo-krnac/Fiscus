@@ -6,6 +6,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/license/licensetest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/palo-krnac/fiscus/backend/internal/edition"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
@@ -127,17 +128,98 @@ func TestIssueNumbersSequentially(t *testing.T) {
 	}
 }
 
-func TestIssuedInvoiceIsLocked(t *testing.T) {
-	a, c := newApp(t, edition.Desktop)
-	d, _ := a.SaveDraft(ctx, c.ID, validDraft())
-	inv, _ := a.Issue(ctx, c.ID, d.ID)
-	inv.Customer.Name = "Zmenené"
-	if _, err := a.SaveDraft(ctx, c.ID, inv); !errors.Is(err, invoice.ErrLocked) {
-		t.Fatalf("vystavená faktúra sa nesmie meniť: %v", err)
+func TestAmendIssuedInvoice(t *testing.T) {
+	cases := []struct {
+		name    string
+		prepare func(t *testing.T, a *App, c store.Company, inv *invoice.Invoice)
+		blocked string // časť dôvodu; "" = úprava prejde
+	}{
+		{"neuhradená sa dá upraviť", nil, ""},
+		{"uhradená", func(t *testing.T, a *App, c store.Company, inv *invoice.Invoice) {
+			if _, err := a.MarkPaid(ctx, c.ID, inv.ID, invoice.MustDate("2026-10-28")); err != nil {
+				t.Fatal(err)
+			}
+		}, "uhradená"},
+		{"čiastočná úhrada", func(t *testing.T, a *App, c store.Company, inv *invoice.Invoice) {
+			if _, err := a.AddPayment(ctx, c.ID, inv.ID, invoice.Payment{Date: invoice.MustDate("2026-10-28"), Amount: m.MustParse("10"), Source: invoice.PaymentManual}, false); err != nil {
+				t.Fatal(err)
+			}
+		}, "zaplatenú časť"},
+		{"odoslaná e-faktúra", func(t *testing.T, a *App, c store.Company, inv *invoice.Invoice) {
+			_ = a.Store.AddEInvoice(ctx, c.ID, &store.EInvoice{Direction: "out", DocID: inv.ID, Created: time.Now()})
+		}, "e-faktúra"},
+		{"existuje dobropis", func(t *testing.T, a *App, c store.Company, inv *invoice.Invoice) {
+			if _, err := a.CreateCreditNote(ctx, c.ID, inv.ID); err != nil {
+				t.Fatal(err)
+			}
+		}, "dobropis"},
+		{"obdobie DPH už priznané", func(t *testing.T, a *App, c store.Company, inv *invoice.Invoice) {
+			old := *inv
+			old.DeliveryDate = invoice.MustDate("2026-09-10")
+			_ = a.Store.SaveInvoice(ctx, c.ID, &old)
+			*inv = old
+		}, "priznané"},
 	}
-	stored, _ := a.Store.GetInvoice(ctx, c.ID, inv.ID)
-	if stored.Customer.Name != "Odberateľ s.r.o." {
-		t.Fatal("vystavená faktúra bola prepísaná")
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			a, c := newApp(t, edition.Desktop)
+			d, _ := a.SaveDraft(ctx, c.ID, validDraft())
+			inv, err := a.Issue(ctx, c.ID, d.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tt.prepare != nil {
+				tt.prepare(t, a, c, &inv)
+				inv, _ = a.Store.GetInvoice(ctx, c.ID, inv.ID)
+			}
+			edit := inv
+			edit.Customer.Name = "Zmenené s.r.o."
+			edit.Lines = append([]invoice.Line(nil), inv.Lines...)
+			edit.Lines[0].Quantity = m.MustParse("12")
+			edit.Number, edit.Status = "INÉ", invoice.StatusDraft // klient číslo ani stav nezmení
+			got, err := a.SaveDraft(ctx, c.ID, edit)
+			stored, _ := a.Store.GetInvoice(ctx, c.ID, inv.ID)
+			if tt.blocked != "" {
+				if !errors.Is(err, ErrAmend) || !strings.Contains(err.Error(), tt.blocked) || stored.Customer.Name == "Zmenené s.r.o." {
+					t.Fatalf("má byť zamknutá (%s): %v", tt.blocked, err)
+				}
+				if reason := a.AmendBlock(ctx, c.ID, stored); !strings.Contains(reason, tt.blocked) {
+					t.Fatalf("dôvod %q", reason)
+				}
+				return
+			}
+			if err != nil || got.Number != inv.Number || got.Status != invoice.StatusIssued || stored.Customer.Name != "Zmenené s.r.o." ||
+				stored.Summary.Base.String() != "480.00" {
+				t.Fatalf("úprava: %+v %v", stored, err)
+			}
+			if a.AmendBlock(ctx, c.ID, stored) != "" {
+				t.Fatal("neuhradená má zostať upraviteľná")
+			}
+			// úprava musí prejsť kontrolou ako pri vystavení
+			bad := stored
+			bad.Customer.Name = ""
+			if _, err := a.SaveDraft(ctx, c.ID, bad); !fieldErr(err, "customer.name") {
+				t.Fatalf("kontrola pri úprave: %v", err)
+			}
+		})
+	}
+}
+
+func TestVATDeadline(t *testing.T) {
+	for _, tt := range []struct {
+		date      string
+		quarterly bool
+		want      string
+	}{
+		{"2026-09-10", false, "2026-10-25"},
+		{"2026-10-01", false, "2026-11-25"},
+		{"2026-12-31", false, "2027-01-25"},
+		{"2026-08-10", true, "2026-10-25"},
+		{"2026-10-01", true, "2027-01-25"},
+	} {
+		if got := VATDeadline(invoice.MustDate(tt.date), tt.quarterly).Format("2006-01-02"); got != tt.want {
+			t.Errorf("%s štvrťročne=%v: %s, chcem %s", tt.date, tt.quarterly, got, tt.want)
+		}
 	}
 }
 

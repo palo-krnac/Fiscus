@@ -120,7 +120,10 @@ const errors = ref({}) // pole → správa
 const previewErrors = ref({})
 
 const canWrite = computed(() => can('invoices.write'))
-const editable = computed(() => canWrite.value && (!inv.value?.status || inv.value.status === 'draft'))
+// koncept; vystavenú faktúru tiež, kým nie je uhradená (amendable zo servera)
+const isDraftDoc = computed(() => !inv.value?.status || inv.value.status === 'draft')
+const amending = computed(() => !isDraftDoc.value && !isQuote.value && !isRecurring.value && !!inv.value?.amendable)
+const editable = computed(() => canWrite.value && (isDraftDoc.value || amending.value))
 // neplatiteľ DPH: faktúra bez DPH (o režime rozhoduje backend podľa nastavení firmy)
 const nonVat = computed(() => !!inv.value?.nonVatPayer)
 const status = computed(() => {
@@ -482,11 +485,13 @@ async function save({ quiet = false } = {}) {
   try {
     const saved = await (isQuote.value ? api.saveQuote : isRecurring.value ? api.saveRecurring : api.saveInvoice)(session.companyId, payload())
     const wasNew = !inv.value.id
-    inv.value = saved
+    const wasAmend = amending.value
+    // úprava vystavenej: odpoveď neobsahuje stav zámku — ostáva upraviteľná
+    inv.value = wasAmend ? { ...saved, amendable: true } : saved
     lines.value = saved.lines.length ? saved.lines.map(withKey) : [blankLine()]
     dirty.value = false
     errors.value = {}
-    if (!quiet) toast.add({ severity: 'success', summary: isRecurring.value ? 'Pravidelná faktúra uložená' : 'Koncept uložený', life: 2500 })
+    if (!quiet) toast.add({ severity: 'success', summary: isRecurring.value ? 'Pravidelná faktúra uložená' : wasAmend ? `Faktúra ${saved.number} upravená` : 'Koncept uložený', life: 2500 })
     if (wasNew) router.replace(`${base.value}/${saved.id}`)
     return saved
   } catch (e) {
@@ -502,7 +507,7 @@ function issue() {
     header: isQuote.value ? 'Vystaviť ponuku' : 'Vystaviť faktúru',
     message: isQuote.value
       ? 'Ponuka dostane číslo z radu ponúk a už sa nebude dať upravovať. Novú verziu vytvoríte kópiou.'
-      : 'Faktúra dostane číslo z radu a už sa nebude dať upravovať. Opraviť ju bude možné iba dobropisom.',
+      : 'Faktúra dostane číslo z radu. Upravovať ju pôjde, kým nie je uhradená a kým jej obdobie nie je priznané v DPH; potom už iba dobropisom.',
     acceptProps: { label: 'Vystaviť' },
     rejectProps: { label: 'Zrušiť', severity: 'secondary', outlined: true },
     accept: async () => {
@@ -809,7 +814,9 @@ const customerFields = reactive([
         v-tooltip.bottom="'Odoslať odberateľovi cez digitálneho poštára (Peppol)'" @click="sendEInvoice" />
       <Button v-if="canEInvoice" icon="pi pi-file-export" :label="einvMode ? undefined : 'E-faktúra'" aria-label="Stiahnuť e-faktúru XML" severity="secondary" text size="small" :loading="busyUBL && !einvMode"
         v-tooltip.bottom="'Stiahnuť e-faktúru XML (UBL, Peppol BIS 3.0) — od 1. 1. 2027 povinná medzi platiteľmi DPH'" @click="downloadEInvoice" />
-      <template v-if="editable && !isRecurring">
+      <Button v-if="amending && canWrite" label="Uložiť zmeny" icon="pi pi-check" :severity="dirty ? undefined : 'secondary'" :outlined="!dirty" size="small" :loading="busy"
+        :disabled="!dirty" v-tooltip.bottom="'Vystavená faktúra sa dá upravovať, kým nie je uhradená (Ctrl+S)'" @click="save()" />
+      <template v-if="editable && isDraftDoc && !isRecurring">
         <Button label="Uložiť koncept" severity="secondary" outlined size="small" :loading="busy" @click="save()" v-tooltip.bottom="'Ctrl+S'" />
         <Button label="Vystaviť" icon="pi pi-check" size="small" :disabled="busy" @click="issue" />
       </template>
@@ -843,6 +850,8 @@ const customerFields = reactive([
 
     <div class="body">
       <div class="form">
+        <p v-if="amending" class="advance-note"><i class="pi pi-pencil" /> <span>Vystavená faktúra sa dá upravovať, kým nie je uhradená. Číslo ostane; ak ste ju už poslali, pošlite odberateľovi opravenú.</span></p>
+        <p v-else-if="!isDraftDoc && inv.lockReason && !isQuote && !isRecurring" class="advance-note"><i class="pi pi-lock" /> <span>{{ inv.lockReason }}</span></p>
         <p v-if="einvStatus" class="advance-note einv-status"><i class="pi pi-send" /> <span>{{ einvStatus }}</span></p>
         <p v-if="isProforma" class="advance-note">
           <i class="pi pi-info-circle" />

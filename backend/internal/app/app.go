@@ -261,6 +261,10 @@ func (a *App) SaveDraft(ctx context.Context, companyID int64, inv invoice.Invoic
 			return inv, err
 		}
 		before = &old
+		if old.Status == invoice.StatusIssued || old.Status == invoice.StatusPaid {
+			// vystavená, neuhradená faktúra sa dá upraviť (číslo ostane)
+			return a.amendIssued(ctx, companyID, old, inv)
+		}
 		if !old.Editable() {
 			return inv, invoice.ErrLocked
 		}
