@@ -45,15 +45,23 @@ import (
 var version = "dev"
 
 // openSQLite nastaví súbor sqlite_on.go (iba pri zostavení s -tags sqlite).
-var openSQLite func(path, backupDir, restoreFile string) (store.Store, *backup.Manager, string, func(), error)
+var openSQLite func(path string, o backupOpts) (store.Store, *backup.Manager, *app.BackupSetup, func(), error)
 
-var errNoPassword = errors.New("obnova zo zálohy vyžaduje heslo v premennej FISKUS_BACKUP_PASSWORD")
+// backupOpts sú parametre záloh z príkazového riadka.
+type backupOpts struct {
+	Dir      string // priečinok záloh (-backup-dir alebo predvolený)
+	DirFixed bool   // zadaný parametrom — v programe sa nedá zmeniť
+	Restore  string // -restore
+	Home     string // domovský priečinok (desktop) pre návrh cloudových priečinkov
+}
+
+var errNoPassword = errors.New("obnova zo zálohy vyžaduje heslo záloh (premenná FISKUS_BACKUP_PASSWORD alebo nastavené v programe)")
 
 func main() {
 	mode := flag.String("mode", "desktop", "režim: desktop | server")
 	addr := flag.String("addr", "127.0.0.1:8080", "adresa HTTP servera")
 	dbPath := flag.String("db", "", "cesta k databáze SQLite")
-	backupDir := flag.String("backup-dir", "", "priečinok na automatické zálohy (heslo v FISKUS_BACKUP_PASSWORD)")
+	backupDir := flag.String("backup-dir", "", "priečinok na automatické zálohy (inak sa nastaví v programe); heslo v FISKUS_BACKUP_PASSWORD alebo v programe")
 	demoData := flag.Bool("demo", false, "spustiť s ukážkovými dátami v pamäti")
 	rpoURL := flag.String("rpo-url", registry.DefaultBaseURL, "adresa API Registra právnických osôb; prázdne = vypnuté")
 	viesURL := flag.String("vies-url", registry.VIESBaseURL, "adresa VIES na overenie IČ DPH; prázdne = vypnuté")
@@ -68,6 +76,8 @@ func main() {
 	openBrowser := flag.Bool("open", true, "aplikácia: otvoriť prehliadač po spustení (most fiskus-mcp spúšťa bez neho)")
 	appMode := flag.Bool("app", false, "aplikácia (spustenie z inštalátora): dáta v priečinku používateľa, otvorí prehliadač, skončí po zatvorení okna")
 	flag.Parse()
+	dirFixed := false
+	flag.Visit(func(f *flag.Flag) { dirFixed = dirFixed || f.Name == "backup-dir" })
 	if *showVersion {
 		fmt.Println("Fiskus", version)
 		return
@@ -117,12 +127,17 @@ func main() {
 	cleanup := func() {}
 	var backups *backup.Manager
 	var backupsOff string
+	var backupSetup *app.BackupSetup
 	switch {
 	case *dbPath != "":
 		if openSQLite == nil {
 			log.Fatal("táto binárka je zostavená bez SQLite — použite -tags sqlite alebo -demo")
 		}
-		st, backups, backupsOff, cleanup, err = openSQLite(*dbPath, *backupDir, *restoreFile)
+		o := backupOpts{Dir: *backupDir, DirFixed: dirFixed, Restore: *restoreFile}
+		if caps.Mode == edition.Desktop {
+			o.Home, _ = os.UserHomeDir()
+		}
+		st, backups, backupSetup, cleanup, err = openSQLite(*dbPath, o)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -137,7 +152,7 @@ func main() {
 	a.PublicURL = *publicURL
 	a.ECBURL = *ecbURL
 	a.AIBaseURL = *claudeURL
-	a.Backups, a.BackupsOff = backups, backupsOff
+	a.Backups, a.BackupsOff, a.BackupSetup = backups, backupsOff, backupSetup
 	if err := a.LoadLegal(context.Background()); err != nil {
 		log.Fatalf("legislatíva: %v", err)
 	}

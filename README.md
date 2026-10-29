@@ -98,6 +98,8 @@ bin/fiskus -mode server -addr :8080 -db /data/fiskus.db    # server
 FISKUS_BACKUP_PASSWORD=… bin/fiskus -db fiskus.db -backup-dir ~/Fiskus-zalohy
 ```
 
+Zálohy: priečinok a heslo sa dajú nastaviť v programe (Zálohy) — uložia sa do súboru `fiskus-zalohy.json` vedľa databázy (práva 0600). Parameter `-backup-dir` a premenná `FISKUS_BACKUP_PASSWORD` majú prednosť a v programe sa potom nedajú zmeniť. Bez parametra je priečinok `zalohy` vedľa databázy.
+
 Vývoj s okamžitým obnovovaním: `make dev-api` v jednom termináli a `make dev-web` v druhom (http://localhost:5173).
 
 ### Aplikácia z inštalátora

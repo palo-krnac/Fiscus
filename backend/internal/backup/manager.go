@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -18,13 +19,47 @@ type Source interface {
 	Verify(ctx context.Context, path string) error
 }
 
-// Manager spravuje zálohy v jednom priečinku.
+// Manager spravuje zálohy v jednom priečinku. Priečinok a heslo sa dajú
+// zmeniť za behu (Configure); Dir a Password sa po spustení priamo nemenia.
 type Manager struct {
+	mu       sync.RWMutex
 	Dir      string
 	Password string
 	Policy   Policy
 	Source   Source
 }
+
+// Configure nastaví priečinok a heslo (napr. po zmene v programe).
+func (m *Manager) Configure(dir, password string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.Dir, m.Password = dir, password
+}
+
+// conf vráti aktuálny priečinok a heslo.
+func (m *Manager) conf() (string, string) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.Dir, m.Password
+}
+
+// Settings vráti priečinok a heslo (heslo iba pre nastavenie v programe, nikdy do API).
+func (m *Manager) Settings() (dir, password string) { return m.conf() }
+
+// Folder vráti priečinok záloh.
+func (m *Manager) Folder() string {
+	dir, _ := m.conf()
+	return dir
+}
+
+// Ready: zálohy sa dajú vytvárať (je priečinok aj heslo).
+func (m *Manager) Ready() bool {
+	dir, pw := m.conf()
+	return dir != "" && pw != ""
+}
+
+// ErrNotReady — chýba priečinok alebo heslo záloh.
+var ErrNotReady = fmt.Errorf("zálohy nie sú nastavené — chýba priečinok alebo heslo")
 
 const (
 	filePrefix = "fiskus-"
@@ -41,7 +76,11 @@ type Info struct {
 
 // Create vytvorí, overí, zašifruje a uloží zálohu, potom spustí rotáciu.
 func (m *Manager) Create(ctx context.Context, now time.Time) (Info, error) {
-	if err := os.MkdirAll(m.Dir, 0o700); err != nil {
+	dir, password := m.conf()
+	if dir == "" || password == "" {
+		return Info{}, ErrNotReady
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return Info{}, err
 	}
 	tmp, err := os.MkdirTemp("", "fiskus-backup-")
@@ -63,17 +102,17 @@ func (m *Manager) Create(ctx context.Context, now time.Time) (Info, error) {
 	}
 
 	var buf bytes.Buffer
-	if err := Encrypt(&buf, plain, m.Password); err != nil {
+	if err := Encrypt(&buf, plain, password); err != nil {
 		return Info{}, err
 	}
 	// Overenie zapísanej zálohy: dešifrovať a porovnať.
-	back, err := Decrypt(buf.Bytes(), m.Password)
+	back, err := Decrypt(buf.Bytes(), password)
 	if err != nil || !bytes.Equal(back, plain) {
 		return Info{}, fmt.Errorf("overenie zálohy zlyhalo: %v", err)
 	}
 
 	name := filePrefix + now.UTC().Format(timeLayout) + fileExt
-	final := filepath.Join(m.Dir, name)
+	final := filepath.Join(dir, name)
 	part := final + ".part"
 	if err := os.WriteFile(part, buf.Bytes(), 0o600); err != nil {
 		return Info{}, err
@@ -89,7 +128,11 @@ func (m *Manager) Create(ctx context.Context, now time.Time) (Info, error) {
 
 // List vráti zálohy, najnovšie prvé.
 func (m *Manager) List() ([]Info, error) {
-	entries, err := os.ReadDir(m.Dir)
+	dir := m.Folder()
+	if dir == "" {
+		return nil, nil
+	}
+	entries, err := os.ReadDir(dir)
 	if os.IsNotExist(err) {
 		return nil, nil
 	}
@@ -110,7 +153,7 @@ func (m *Manager) List() ([]Info, error) {
 		if err != nil {
 			continue
 		}
-		out = append(out, Info{Path: filepath.Join(m.Dir, n), Time: t, Size: fi.Size()})
+		out = append(out, Info{Path: filepath.Join(dir, n), Time: t, Size: fi.Size()})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Time.After(out[j].Time) })
 	return out, nil
@@ -146,7 +189,8 @@ func (m *Manager) Restore(ctx context.Context, backupPath, dstPath string) error
 	if err != nil {
 		return err
 	}
-	plain, err := Decrypt(data, m.Password)
+	_, password := m.conf()
+	plain, err := Decrypt(data, password)
 	if err != nil {
 		return err
 	}
@@ -195,12 +239,16 @@ func (m *Manager) RequestRestore(name string) error {
 	if _, err := m.Find(name); err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(m.Dir, restoreMarker), []byte(name+"\n"), 0o600)
+	return os.WriteFile(filepath.Join(m.Folder(), restoreMarker), []byte(name+"\n"), 0o600)
 }
 
 // PendingRestore vráti názov zálohy naplánovanej na obnovu ("" = žiadna).
 func (m *Manager) PendingRestore() string {
-	b, err := os.ReadFile(filepath.Join(m.Dir, restoreMarker))
+	dir := m.Folder()
+	if dir == "" {
+		return ""
+	}
+	b, err := os.ReadFile(filepath.Join(dir, restoreMarker))
 	if err != nil {
 		return ""
 	}
@@ -209,7 +257,7 @@ func (m *Manager) PendingRestore() string {
 
 // CancelRestore zruší naplánovanú obnovu.
 func (m *Manager) CancelRestore() error {
-	err := os.Remove(filepath.Join(m.Dir, restoreMarker))
+	err := os.Remove(filepath.Join(m.Folder(), restoreMarker))
 	if os.IsNotExist(err) {
 		return nil
 	}

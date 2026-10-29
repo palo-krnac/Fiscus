@@ -11,6 +11,7 @@ import { api } from '../lib/api.js'
 import { matches, searchTerms } from '../lib/search.js'
 import { backupColumns } from '../lib/columns.js'
 import ExportButton from '../components/ExportButton.vue'
+import BackupSettingsForm from '../components/BackupSettingsForm.vue'
 
 const toast = useToast()
 const confirm = useConfirm()
@@ -36,6 +37,11 @@ const visible = computed(() => {
   return (st.value?.backups ?? []).filter((b) => matches(terms, [b.name, fmtTime.format(new Date(b.time))]))
 })
 const last = computed(() => st.value?.backups?.[0])
+const showSettings = ref(false)
+function onSaved(s) {
+  st.value = s
+  showSettings.value = false
+}
 
 async function backupNow() {
   busy.value = true
@@ -94,9 +100,12 @@ async function cancelRestore() {
       <section v-if="!st.enabled" class="card off">
         <h2><i class="pi pi-exclamation-triangle" /> Zálohovanie nie je zapnuté</h2>
         <p>{{ st.reason }}</p>
-        <pre>FISKUS_BACKUP_PASSWORD=… fiskus -db fiskus.db -backup-dir zalohy</pre>
-        <p class="muted">Heslo si dobre uschovajte — bez neho sa zo zálohy nedá obnoviť.</p>
+        <template v-if="!st.settings">
+          <pre>FISKUS_BACKUP_PASSWORD=… fiskus -db fiskus.db -backup-dir zalohy</pre>
+          <p class="muted">Heslo si dobre uschovajte — bez neho sa zo zálohy nedá obnoviť.</p>
+        </template>
       </section>
+      <BackupSettingsForm v-if="!st.enabled && st.settings" :status="st" @saved="onSaved" />
 
       <template v-else>
         <section v-if="st.pending" class="card banner" role="status">
@@ -124,7 +133,9 @@ async function cancelRestore() {
         <p class="muted">
           Zálohy sa robia automaticky pri spustení, raz denne a pri ukončení programu. Sú šifrované (AES-256) a pred uložením
           sa overí, že sa dajú obnoviť. Priečinok: <code>{{ st.dir }}</code>. Pre istotu si zálohu občas stiahnite aj mimo počítača.
+          <Button v-if="st.settings && !showSettings" label="Zmeniť priečinok alebo heslo" text size="small" class="inline" @click="showSettings = true" />
         </p>
+        <BackupSettingsForm v-if="st.settings && showSettings" :status="st" @saved="onSaved" />
 
         <div class="toolbar">
           <IconField class="search">
@@ -180,6 +191,10 @@ async function cancelRestore() {
 .error {
   color: var(--tone-overdue);
   margin: 0;
+}
+.inline {
+  padding: 0 4px;
+  vertical-align: baseline;
 }
 .card {
   background: var(--sheet);
