@@ -11,6 +11,8 @@ import Textarea from 'primevue/textarea'
 import IconField from 'primevue/iconfield'
 import InputIcon from 'primevue/inputicon'
 import FormField from '../components/FormField.vue'
+import IcoInput from '../components/IcoInput.vue'
+import { fillFromRegistry } from '../lib/registry.js'
 import { api, ApiError } from '../lib/api.js'
 import { session } from '../lib/session.js'
 import { fiskusGridTheme, skGridLocale } from '../lib/grid.js'
@@ -203,7 +205,14 @@ onBeforeUnmount(() => {
       <div class="panel-body">
         <div class="form-grid">
           <FormField v-for="f in fields" :key="f.key" :label="f.label" :span="f.span" :hint="f.hint" :error="errors[f.key]">
-            <InputText v-model="form[f.key]" size="small" :invalid="!!errors[f.key]" :inputmode="f.inputmode" :autocomplete="f.autocomplete" />
+            <IcoInput
+              v-if="f.key === 'ico'"
+              v-model="form.ico"
+              :invalid="!!errors.ico"
+              :auto="!form.id && !form.name"
+              @found="(c) => (form = fillFromRegistry(form, c))"
+            />
+            <InputText v-else v-model="form[f.key]" size="small" :invalid="!!errors[f.key]" :inputmode="f.inputmode" :autocomplete="f.autocomplete" />
           </FormField>
           <FormField label="Vlastná splatnosť" :span="2" :error="errors.dueDays" :hint="`Prázdne = predvolená (${session.company?.defaultDueDays || 14} dní)`">
             <InputNumber v-model="form.dueDays" :min="0" :max="365" suffix=" dní" size="small" :invalid="!!errors.dueDays" />

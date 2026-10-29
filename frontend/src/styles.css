@@ -166,3 +166,12 @@ kbd {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* toasty na mobile cez celú šírku, nech nepretekajú mimo obrazovky */
+@media (max-width: 760px) {
+  .p-toast.p-toast-bottom-right {
+    left: 12px !important;
+    right: 12px !important;
+    width: auto !important;
+  }
+}

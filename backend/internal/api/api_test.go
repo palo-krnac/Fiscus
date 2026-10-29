@@ -13,6 +13,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/app"
 	"github.com/palo-krnac/fiscus/backend/internal/edition"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
+	"github.com/palo-krnac/fiscus/backend/internal/registry"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 	"github.com/palo-krnac/fiscus/backend/internal/store/memstore"
 )
@@ -230,4 +231,41 @@ func TestUpdateCompanyAPI(t *testing.T) {
 	}
 	e.do("PUT", path, `{"name":""}`, 422, nil)
 	e.do("PUT", "/api/companies/999", `{"name":"x"}`, 404, nil)
+}
+
+type fakeRegistry map[string]registry.Company
+
+func (f fakeRegistry) ByICO(_ context.Context, ico string) (registry.Company, error) {
+	switch ico {
+	case "bad":
+		return registry.Company{}, registry.ErrInvalidICO
+	case "down":
+		return registry.Company{}, registry.ErrUnavailable
+	}
+	if c, ok := f[ico]; ok {
+		return c, nil
+	}
+	return registry.Company{}, registry.ErrNotFound
+}
+
+func TestRegistryAPI(t *testing.T) {
+	e := setup(t, edition.Desktop)
+	// bez registra
+	e.do("GET", "/api/registry/31322832", nil, 501, nil)
+
+	caps, _ := edition.For(edition.Desktop)
+	a := app.New(memstore.New(), caps)
+	srv := httptest.NewServer((&Server{App: a, Registry: fakeRegistry{
+		"31322832": {ICO: "31322832", Name: "SLOVNAFT, a.s.", City: "Bratislava"},
+	}}).Handler())
+	t.Cleanup(srv.Close)
+	e2 := &env{t: t, srv: srv}
+	var c registry.Company
+	e2.do("GET", "/api/registry/31322832", nil, 200, &c)
+	if c.Name != "SLOVNAFT, a.s." {
+		t.Fatalf("%+v", c)
+	}
+	e2.do("GET", "/api/registry/12345674", nil, 404, nil)
+	e2.do("GET", "/api/registry/bad", nil, 400, nil)
+	e2.do("GET", "/api/registry/down", nil, 503, nil)
 }

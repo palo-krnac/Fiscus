@@ -47,6 +47,7 @@ export const api = {
   companies: () => request('GET', '/api/companies'),
   createCompany: (c) => request('POST', '/api/companies', c),
   updateCompany: (c) => request('PUT', `/api/companies/${c.id}`, c),
+  registry: (ico) => request('GET', `/api/registry/${encodeURIComponent(ico)}`),
 
   contacts: (cid, q) => request('GET', `/api/companies/${cid}/contacts` + (q ? `?q=${encodeURIComponent(q)}` : '')),
   contact: (cid, id) => request('GET', `/api/companies/${cid}/contacts/${id}`),

@@ -40,6 +40,10 @@ FISKUS_BACKUP_PASSWORD=… bin/fiskus -db fiskus.db -backup-dir ~/Fiskus-zalohy
 
 Vývoj s okamžitým obnovovaním: `make dev-api` v jednom termináli a `make dev-web` v druhom (http://localhost:5173).
 
+## Register firiem
+
+Pri zadaní IČO (adresár, faktúra, nastavenia) sa názov a adresa doplnia z verejného [Registra právnických osôb](https://api.statistics.sk/rpo/v1) Štatistického úradu SR (dáta pod licenciou CC BY 4.0). Do registra sa posiela iba IČO. Výsledky sa 12 hodín držia v pamäti. Bez internetu program funguje ďalej, len sa údaje nedoplnia. Vypnutie: `-rpo-url ""`.
+
 ## Zálohy
 
 Zálohy sa robia automaticky pri štarte, každých 24 hodín a pri ukončení programu. Postup:

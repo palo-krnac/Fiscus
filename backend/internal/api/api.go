@@ -13,6 +13,7 @@ import (
 
 	"github.com/palo-krnac/fiscus/backend/internal/app"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
+	"github.com/palo-krnac/fiscus/backend/internal/registry"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 )
 
@@ -20,6 +21,8 @@ import (
 type Server struct {
 	App *app.App
 	Web fs.FS // zostavený frontend (index.html, assets/...); môže byť nil
+	// Registry je vyhľadávanie firiem podľa IČO (RPO); nil = vypnuté.
+	Registry registry.Lookup
 }
 
 // Handler vráti http.Handler s celým API.
@@ -29,6 +32,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/companies", s.listCompanies)
 	mux.HandleFunc("POST /api/companies", s.createCompany)
 	mux.HandleFunc("PUT /api/companies/{cid}", s.updateCompany)
+	mux.HandleFunc("GET /api/registry/{ico}", s.lookupICO)
 	mux.HandleFunc("POST /api/companies/{cid}/invoices/preview", s.preview)
 	mux.HandleFunc("GET /api/companies/{cid}/contacts", s.listContacts)
 	mux.HandleFunc("POST /api/companies/{cid}/contacts", s.saveContact)
