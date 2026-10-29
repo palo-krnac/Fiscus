@@ -9,6 +9,7 @@ import { session } from '../lib/session.js'
 import { formatAmount, formatDate, formatMoney, formatQuantity } from '../lib/format.js'
 import { payBySquare, qrSvg } from '../lib/payqr.js'
 import { countryName, paymentLabel, vatExemptionNote } from '../lib/codes.js'
+import CompanyLogo from '../components/CompanyLogo.vue'
 
 const props = defineProps({ id: String, quote: Boolean })
 const back = computed(() => `${props.quote ? '/ponuky' : '/faktury'}/${props.id}`)
@@ -72,6 +73,7 @@ const ids = (p) =>
 
       <header class="head">
         <div>
+          <CompanyLogo class="logo" />
           <p class="kind">{{ docTitle }}</p>
           <h1 class="number">{{ inv.number || 'Koncept' }}</h1>
         </div>
@@ -257,6 +259,9 @@ const ids = (p) =>
   gap: 10mm;
   padding-bottom: 5mm;
   border-bottom: 2.5pt solid #1f3a5c;
+}
+.logo {
+  margin-bottom: 4mm;
 }
 .kind {
   margin: 0;

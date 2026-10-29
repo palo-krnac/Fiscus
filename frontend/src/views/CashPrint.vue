@@ -7,6 +7,7 @@ import { api } from '../lib/api.js'
 import { session } from '../lib/session.js'
 import { formatAmount, formatDate } from '../lib/format.js'
 import { amountInWords } from '../lib/words.js'
+import CompanyLogo from '../components/CompanyLogo.vue'
 
 const props = defineProps({ id: String })
 const print = () => window.print()
@@ -42,6 +43,7 @@ const addr = (c) => [c.street, [c.zip, c.city].filter(Boolean).join(' ')].filter
       <div v-if="doc.cancelled" class="stamp">Stornovaný</div>
       <header class="head">
         <div>
+          <CompanyLogo class="logo" height="12mm" />
           <p class="kind">{{ title }}</p>
           <h1>{{ doc.number }}</h1>
         </div>
@@ -142,6 +144,9 @@ const addr = (c) => [c.street, [c.zip, c.city].filter(Boolean).join(' ')].filter
   gap: 10mm;
   border-bottom: 2px solid #1f3a5c;
   padding-bottom: 4mm;
+}
+.logo {
+  margin-bottom: 3mm;
 }
 .kind {
   margin: 0;

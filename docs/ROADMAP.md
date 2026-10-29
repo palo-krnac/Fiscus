@@ -14,7 +14,7 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 ## Etapa 1 — fakturácia a DPH pre živnostníka
 - [x] Nastavenia firmy (údaje, IBAN, platiteľ DPH áno/nie, predvolená splatnosť)
 - [x] Číselníky: sadzby DPH s obdobím platnosti (kontrola podľa dátumu dodania), číselné rady s vlastným formátom, merné jednotky, spôsoby úhrady, krajiny
-- [ ] Logo na faktúre
+- [x] Logo firmy na faktúre, cenovej ponuke, upomienke a pokladničnom doklade (PNG, JPEG, WebP do 512 kB; SVG nie kvôli bezpečnosti)
 - [x] Cenník: položky s kódom, MJ, cenou bez DPH alebo s DPH a sadzbou; výber z cenníka vo faktúre, ponuke aj pravidelnej faktúre; archivácia; MCP `list_catalog_items`
 - [ ] Cenník: import z Excelu/CSV, uloženie riadku faktúry do cenníka, skladové položky (etapa 3)
 - [ ] Meny a kurzy ECB (faktúra v cudzej mene, DPH v EUR)

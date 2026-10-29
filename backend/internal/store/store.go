@@ -12,6 +12,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/bank"
 	"github.com/palo-krnac/fiscus/backend/internal/cash"
 	"github.com/palo-krnac/fiscus/backend/internal/catalog"
+	"time"
 
 	"github.com/palo-krnac/fiscus/backend/internal/audit"
 	"github.com/palo-krnac/fiscus/backend/internal/auth"
@@ -103,6 +104,13 @@ type BankFilter struct {
 	Status bank.Status // "" = všetky
 }
 
+// Logo je obrázok loga firmy.
+type Logo struct {
+	ContentType string
+	Data        []byte
+	Updated     time.Time
+}
+
 // Store je úložisko.
 type Store interface {
 	ListCompanies(ctx context.Context) ([]Company, error)
@@ -126,6 +134,11 @@ type Store interface {
 	// v jednej firme → ErrDuplicate.
 	SaveItem(ctx context.Context, companyID int64, it *catalog.Item) error
 	DeleteItem(ctx context.Context, companyID, id int64) error
+
+	// Logo firmy na dokladoch. GetLogo a DeleteLogo vrátia ErrNotFound, ak logo nie je.
+	GetLogo(ctx context.Context, companyID int64) (Logo, error)
+	SaveLogo(ctx context.Context, companyID int64, l Logo) error
+	DeleteLogo(ctx context.Context, companyID int64) error
 
 	ListInvoices(ctx context.Context, companyID int64, f InvoiceFilter) ([]invoice.Invoice, error)
 	GetInvoice(ctx context.Context, companyID, id int64) (invoice.Invoice, error)

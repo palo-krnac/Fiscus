@@ -42,6 +42,7 @@ type Store struct {
 	reminders map[int64]reminder.Reminder
 	settings  map[string]string
 	items     map[int64]catalog.Item
+	logos     map[int64]store.Logo
 	users     map[int64]auth.User
 	members   map[memKey]auth.Role
 	sessions  map[string]auth.Session

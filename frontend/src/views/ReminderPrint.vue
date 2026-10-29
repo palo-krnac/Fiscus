@@ -8,6 +8,7 @@ import { session } from '../lib/session.js'
 import { formatAmount, formatDate, formatMoney } from '../lib/format.js'
 import { countryName } from '../lib/codes.js'
 import { introText, legalNotes, levelTitle } from '../lib/reminders.js'
+import CompanyLogo from '../components/CompanyLogo.vue'
 
 const props = defineProps({ id: String })
 const router = useRouter()
@@ -42,6 +43,7 @@ const print = () => window.print()
     <article v-else-if="r" class="sheet">
       <header class="head">
         <div class="from">
+          <CompanyLogo class="logo" height="14mm" />
           <strong>{{ company.name }}</strong>
           <span>{{ addressLines(company).join(', ') }}</span>
           <span>
@@ -180,6 +182,10 @@ const print = () => window.print()
   color: #4e5866;
   border-top: 2.5pt solid #1f3a5c;
   padding-top: 2mm;
+}
+.from .logo {
+  align-self: flex-start;
+  margin-bottom: 3mm;
 }
 .from strong {
   font-size: 11pt;
