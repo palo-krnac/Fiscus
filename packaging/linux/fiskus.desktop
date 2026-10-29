@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Fiškus
+GenericName=Účtovný program
+Comment=Faktúry, DPH, banka a pokladňa
+Exec=/usr/bin/fiskus -app
+Icon=fiskus
+Terminal=false
+Categories=Office;Finance;
+Keywords=faktúry;účtovníctvo;DPH;fakturácia;
+StartupNotify=false

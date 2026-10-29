@@ -31,7 +31,17 @@ type Server struct {
 	// MCP je server pre AI asistentov (POST /mcp); nil = vypnuté.
 	MCP *mcp.Server
 
+	// Desktop je spúšťač desktopovej verzie z inštalátora (okno sa ozýva,
+	// tlačidlo Ukončiť); nil pri spustení z príkazového riadka a na serveri.
+	Desktop Launcher
+
 	limit limiter // pokusy o prihlásenie
+}
+
+// Launcher ukončí program po zatvorení okna alebo na pokyn používateľa.
+type Launcher interface {
+	Ping()
+	Quit()
 }
 
 // Handler vráti http.Handler s celým API.
@@ -49,6 +59,16 @@ func (s *Server) Handler() http.Handler {
 
 	public("GET /api/capabilities", s.capabilities)
 	public("GET /api/codes", s.codes)
+	if s.Desktop != nil {
+		public("POST /api/desktop/ping", func(w http.ResponseWriter, _ *http.Request) {
+			s.Desktop.Ping()
+			w.WriteHeader(http.StatusNoContent)
+		})
+		public("POST /api/desktop/quit", func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNoContent)
+			s.Desktop.Quit()
+		})
+	}
 	if s.MCP != nil {
 		mux.HandleFunc("/mcp", s.mcpHandler)
 	}
@@ -282,7 +302,10 @@ func (s *Server) company(w http.ResponseWriter, r *http.Request) (int64, bool) {
 func (s *Server) capabilities(w http.ResponseWriter, _ *http.Request) {
 	c := s.App.Capabilities()
 	c.License = nil
-	writeJSON(w, http.StatusOK, c)
+	writeJSON(w, http.StatusOK, struct {
+		edition.Capabilities
+		Launcher bool `json:"launcher"` // desktop z inštalátora: okno sa ozýva, dá sa ukončiť
+	}{c, s.Desktop != nil})
 }
 
 func (s *Server) listCompanies(w http.ResponseWriter, r *http.Request) {

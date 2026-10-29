@@ -69,6 +69,8 @@ export function query(params = {}) {
 
 export const api = {
   capabilities: () => request('GET', '/api/capabilities'),
+  desktopPing: () => request('POST', '/api/desktop/ping'),
+  desktopQuit: () => request('POST', '/api/desktop/quit'),
   me: () => request('GET', '/api/me'),
   keys: () => request('GET', '/api/me/keys'),
   backups: () => request('GET', '/api/backups'),

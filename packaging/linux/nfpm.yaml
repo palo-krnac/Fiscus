@@ -1,0 +1,27 @@
+# Balíky .deb a .rpm (nfpm): FISKUS_VERSION a GOARCH nastaví release.yml.
+name: fiskus
+arch: ${GOARCH}
+platform: linux
+version: ${FISKUS_VERSION}
+section: misc
+priority: optional
+maintainer: Pavol Krnáč <info@fiskus.sk>
+description: |
+  Fiškus — slovenský účtovný program: faktúry, DPH, kontrolný výkaz,
+  banka a pokladňa. Beží v prehliadači, dáta ostávajú v počítači.
+vendor: Pavol Krnáč
+homepage: https://fiskus.sk
+license: Proprietary
+contents:
+  - src: ./dist/fiskus-linux-${GOARCH}
+    dst: /usr/bin/fiskus
+    file_info:
+      mode: 0755
+  - src: ./dist/fiskus-mcp-linux-${GOARCH}
+    dst: /usr/bin/fiskus-mcp
+    file_info:
+      mode: 0755
+  - src: ./packaging/linux/fiskus.desktop
+    dst: /usr/share/applications/fiskus.desktop
+  - src: ./packaging/icons/fiskus.png
+    dst: /usr/share/icons/hicolor/512x512/apps/fiskus.png

@@ -3,6 +3,8 @@
 //	fiskus -demo                          ukážkové dáta v pamäti
 //	fiskus -db fiskus.db                  SQLite (zostaviť s -tags sqlite)
 //	fiskus -mode server -addr :8080 ...   serverový režim (viac firiem)
+//	fiskus                                aplikácia (ako z inštalátora): dáta
+//	                                      v priečinku používateľa, otvorí prehliadač
 //
 // V serverovom režime sa prvý správca vytvorí cez -admin-email a heslo
 // v premennej FISKUS_ADMIN_PASSWORD (iba ak ešte nie je žiadny používateľ).
@@ -12,7 +14,10 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
+	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -24,6 +29,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/app"
 	"github.com/palo-krnac/fiscus/backend/internal/backup"
 	"github.com/palo-krnac/fiscus/backend/internal/demo"
+	"github.com/palo-krnac/fiscus/backend/internal/desktop"
 	"github.com/palo-krnac/fiscus/backend/internal/edition"
 	"github.com/palo-krnac/fiscus/backend/internal/fx"
 	"github.com/palo-krnac/fiscus/backend/internal/mcp"
@@ -53,7 +59,45 @@ func main() {
 	restoreFile := flag.String("restore", "", "pred spustením obnoviť databázu zo zálohy (.fbk); pôvodná sa premenuje na .pred-obnovou")
 	licensePath := flag.String("license", "", "súbor s licenčným kľúčom (server, viac firiem); predvolene fiskus.license vedľa databázy")
 	adminEmail := flag.String("admin-email", "", "e-mail prvého správcu (server); heslo v FISKUS_ADMIN_PASSWORD")
+	showVersion := flag.Bool("version", false, "vypíše verziu a skončí")
+	appMode := flag.Bool("app", false, "aplikácia (spustenie z inštalátora): dáta v priečinku používateľa, otvorí prehliadač, skončí po zatvorení okna")
 	flag.Parse()
+	if *showVersion {
+		fmt.Println("Fiskus", version)
+		return
+	}
+	set := map[string]bool{}
+	flag.Visit(func(f *flag.Flag) { set[f.Name] = true })
+
+	// desktop bez -db a -demo (dvojklik, ikona z inštalátora) = aplikácia
+	if *mode == string(edition.Desktop) && *dbPath == "" && !*demoData {
+		*appMode = true
+	}
+	if *appMode {
+		if !set["addr"] {
+			*addr = desktop.Addr
+		}
+		if desktop.Running(context.Background(), *addr) {
+			// druhé spustenie: iba otvoriť okno bežiaceho programu
+			_ = desktop.Open("http://" + *addr)
+			return
+		}
+		dir, err := desktop.DataDir()
+		if err != nil {
+			log.Fatalf("priečinok dát: %v", err)
+		}
+		if f, err := desktop.LogFile(dir); err == nil {
+			log.SetOutput(io.MultiWriter(f, quietStderr{}))
+			defer f.Close()
+		}
+		if *dbPath == "" && !*demoData {
+			*dbPath = filepath.Join(dir, "fiskus.db")
+		}
+		if *backupDir == "" {
+			*backupDir = filepath.Join(dir, "zalohy")
+		}
+		log.Printf("aplikácia: dáta v %s", dir)
+	}
 
 	log.Printf("Fiskus %s", version)
 	caps, err := edition.For(edition.Mode(*mode))
@@ -126,18 +170,35 @@ func main() {
 	if webFS == nil {
 		log.Print("upozornenie: frontend nie je zostavený, beží iba API")
 	}
+	apiSrv := &api.Server{App: a, Web: webFS, Registry: lookup, MCP: mcp.New(a, version)}
+	var watchdog *desktop.Watchdog
+	if *appMode {
+		watchdog = desktop.NewWatchdog()
+		apiSrv.Desktop = watchdog
+	}
 	srv := &http.Server{
 		Addr:              *addr,
-		Handler:           (&api.Server{App: a, Web: webFS, Registry: lookup, MCP: mcp.New(a, version)}).Handler(),
+		Handler:           apiSrv.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
-
+	ln, err := net.Listen("tcp", *addr)
+	if err != nil {
+		if *appMode {
+			log.Fatalf("%v: %s — ukončite program, ktorý ho používa, alebo spustite Fiškus s -addr 127.0.0.1:<iný port>", desktop.ErrBusy, *addr)
+		}
+		log.Fatal(err)
+	}
 	go func() {
 		log.Printf("režim %s, otvorte http://%s", caps.Mode, *addr)
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatal(err)
 		}
 	}()
+	if *appMode {
+		if err := desktop.Open("http://" + *addr); err != nil {
+			log.Printf("prehliadač sa neotvoril (%v) — otvorte http://%s", err, *addr)
+		}
+	}
 
 	runCtx, stopRecurring := context.WithCancel(context.Background())
 	go recurringLoop(runCtx, a)
@@ -145,8 +206,15 @@ func main() {
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-	<-stop
-	log.Print("ukončujem…")
+	if watchdog != nil {
+		// aplikácia skončí aj po zatvorení posledného okna alebo cez „Ukončiť“
+		sigCtx, cancelSig := context.WithCancel(context.Background())
+		go func() { <-stop; cancelSig() }()
+		log.Printf("ukončujem (%s)…", watchdog.Wait(sigCtx, 5*time.Second))
+	} else {
+		<-stop
+		log.Print("ukončujem…")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	stopRecurring()
@@ -230,4 +298,13 @@ func recurringLoop(ctx context.Context, a *app.App) {
 			t.Reset(time.Hour)
 		}
 	}
+}
+
+// quietStderr píše denník aj do konzoly, ak existuje; aplikácia na Windows
+// (bez konzoly) chybu zápisu ignoruje, aby sa denník do súboru nezastavil.
+type quietStderr struct{}
+
+func (quietStderr) Write(p []byte) (int, error) {
+	_, _ = os.Stderr.Write(p)
+	return len(p), nil
 }

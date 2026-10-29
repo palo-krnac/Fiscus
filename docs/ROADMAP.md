@@ -38,7 +38,8 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [ ] Pokladňa: DPH na pokladničných dokladoch (B.3), viac pokladní, cudzia mena, ERP / e-kasa (D.1)
 - [x] **Priznanie k DPH (DPHv25) a kontrolný výkaz (KVDPHv25)**: výpočet z dokladov, XML pre eDane, mesačne aj štvrťročne
 - [x] Súhrnný výkaz (SVDPHv20): tovar do EÚ (kód 0), služby do EÚ (kód 2); r. 13–15 pre dodanie do EÚ a vývoz; nadobudnutie tovaru z EÚ (r. 05–08) a služby zo zahraničia (r. 09–10)
-- [ ] A.2 a tuzemské prenesenie pri dodaní (§ 69 ods. 12), trojstranný obchod (kód 1), call-off stock, dovoz s DPH na colnici (r. 22–23)
+- [x] A.2 a tuzemské prenesenie pri dodaní (§ 69 ods. 12) pri položkách: druhy a) až j), kód colného sadzobníka, hranica 5 000 €, XML
+- [ ] Dobropis k A.2 (kód opravy), trojstranný obchod (kód 1), call-off stock, dovoz s DPH na colnici (r. 22–23)
 - [ ] Dobropisy od dodávateľov (C.2, r. 28), zjednodušené faktúry a pokladničné doklady (B.3, D.1), čiastočný odpočet (koeficient)
 - [ ] Opravné a dodatočné priznanie / KV (KOpr, r. 36–37)
 - [ ] Podanie priamo na portál finančnej správy (vyžaduje autentifikáciu)
@@ -48,7 +49,8 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [ ] Ďalšie zákonné hodnoty do Legislatívy podľa potreby (limity, sadzby pre mzdy a odvody v etape 4)
 - [x] Obrazovka Zálohy: stav, ručná záloha, stiahnutie, obnova naplánovaná na ďalšie spustenie, `-restore` zo súboru
 - [ ] Nastavenie priečinka a hesla záloh priamo v rozhraní (zatiaľ parametre a premenná prostredia), záloha do cloudu
-- [ ] Inštalačky: Inno Setup (Windows), DMG (macOS), AppImage (Linux)
+- [x] Inštalačky: Inno Setup (Windows), DMG s Fiškus.app (macOS), .deb a .rpm (Linux); aplikácia s dátami v priečinku používateľa, otvorí prehliadač, skončí po zatvorení okna
+- [ ] Podpísané inštalačky (Authenticode, notarizácia Apple), automatická aktualizácia, AppImage
 - [x] Licencia pre serverovú verziu s viacerými firmami (offline overenie podpisu Ed25519)
 - [ ] Web fiskus.sk s nákupom licencie
 - [ ] Predaj cez Paddle: webhook po platbe → automatické vydanie a odoslanie licenčného kľúča e-mailom

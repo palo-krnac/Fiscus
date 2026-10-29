@@ -72,12 +72,21 @@ make demo                 # ukážkové dáta, http://127.0.0.1:8080
 make test                 # všetky testy (Go + frontend)
 make build                # bin/fiskus so SQLite a vloženým frontendom
 
-bin/fiskus -db fiskus.db                                   # desktop
+bin/fiskus                                                 # aplikácia ako z inštalátora
+bin/fiskus -db fiskus.db                                   # desktop, vlastná databáza
 bin/fiskus -mode server -addr :8080 -db /data/fiskus.db    # server
 FISKUS_BACKUP_PASSWORD=… bin/fiskus -db fiskus.db -backup-dir ~/Fiskus-zalohy
 ```
 
 Vývoj s okamžitým obnovovaním: `make dev-api` v jednom termináli a `make dev-web` v druhom (http://localhost:5173).
+
+### Aplikácia z inštalátora
+
+Ikona z inštalátora spustí `fiskus -app` (rovnako sa správa `fiskus` bez `-db` a `-demo`):
+
+- dáta sú v priečinku používateľa — Windows `%APPDATA%\Fiskus`, macOS `~/Library/Application Support/Fiskus`, Linux `~/.local/share/fiskus` (databáza `fiskus.db`, zálohy v `zalohy`, denník `fiskus.log`);
+- program beží na `http://127.0.0.1:48080` a sám otvorí prehliadač; druhé spustenie iba otvorí okno bežiaceho programu;
+- otvorená stránka sa programu ozýva — po zatvorení posledného okna sa program asi o 1,5 minúty sám ukončí; v menu je aj tlačidlo **Ukončiť**.
 
 ## Register firiem
 
@@ -107,6 +116,15 @@ Pri obnove sa pôvodná databáza uloží ako `.pred-obnovou`, takže sa nič ne
 
 ## Vydanie verzie
 
-`git tag v0.1.0 && git push --tags`. GitHub Actions potom postaví binárky pre Windows, macOS (Intel aj Apple Silicon) a Linux a pripojí ich k vydaniu. Inštalačky (Inno Setup, DMG) pribudnú neskôr.
+`git tag v0.1.0 && git push --tags`. GitHub Actions (`release.yml`) potom postaví a pripojí k vydaniu:
+
+| Systém | Súbor | Poznámka |
+|---|---|---|
+| Windows | `fiskus-0.1.0-windows-setup.exe` | Inno Setup, inštalácia pre používateľa bez práv správcu, ikona v ponuke Štart |
+| macOS | `fiskus-0.1.0-macos.dmg` | `Fiškus.app` pre Apple Silicon aj Intel; bez podpisu Apple — prvé spustenie cez pravé tlačidlo → Otvoriť |
+| Linux | `fiskus_0.1.0_amd64.deb`, `.rpm` (aj arm64) | ikona v ponuke aplikácií |
+| všetky | `fiskus-v0.1.0-<os>-<arch>` | samostatné binárky pre server a príkazový riadok |
+
+Balenie je v priečinku `packaging/`. Pri zmene balenia v pull requeste sa inštalátory zostavia a overia (inštalácia na Windows, obsah balíka .deb) bez zverejnenia. Podpisovanie (Windows Authenticode, Apple notarizácia) zatiaľ chýba — vyžaduje certifikáty.
 
 Plán funkcií: [docs/ROADMAP.md](docs/ROADMAP.md).
