@@ -27,8 +27,6 @@ type Payment struct {
 var (
 	// ErrBadPayment — nulová suma alebo suma s opačným znamienkom.
 	ErrBadPayment = errors.New("suma úhrady musí byť kladná (pri dobropise vrátená suma)")
-	// ErrPartialAdvance — zálohová faktúra sa uhrádza celá (daňový doklad k platbe).
-	ErrPartialAdvance = errors.New("zálohovú faktúru zatiaľ označte ako uhradenú až po prijatí celej sumy")
 )
 
 // Paid vráti uhradenú sumu. Faktúra uhradená pred evidenciou úhrad je uhradená celá.
@@ -76,8 +74,8 @@ func (inv *Invoice) AddPayment(p Payment) error {
 	if !total.IsZero() && (p.Amount.IsZero() || p.Amount.Sign() != total.Sign()) {
 		return ErrBadPayment
 	}
-	if inv.Kind == KindProforma && p.Amount.Cmp(inv.Remaining()) < 0 {
-		return ErrPartialAdvance
+	if inv.Kind == KindProforma && inv.Advance != nil && inv.Advance.FinalID != 0 {
+		return ErrAlreadySettled // ďalšia platba patrí k vyúčtovacej faktúre
 	}
 	if !p.Amount.IsZero() {
 		inv.Payments = append(inv.Payments, p)

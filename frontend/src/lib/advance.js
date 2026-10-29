@@ -24,5 +24,14 @@ export function editorTitle(inv) {
 /** Do nového dokladu sa smie dobropis iba k faktúre a dokladu k platbe — nie k zálohe. */
 export const canCredit = (inv) => inv.kind === 'invoice' || inv.kind === 'advance_receipt'
 
-/** Zálohu možno vyúčtovať, ak je uhradená a ešte nemá vyúčtovanie. */
-export const canSettle = (inv) => inv.kind === 'proforma' && inv.status === 'paid' && !inv.advance?.finalId
+/** Zálohu možno vyúčtovať, ak je uhradená aspoň časť a ešte nemá vyúčtovanie. */
+export const canSettle = (inv) =>
+  inv.kind === 'proforma' && !inv.advance?.finalId && (inv.status === 'paid' || (inv.status === 'issued' && Number(inv.paidAmount) > 0))
+
+/** Doklady k prijatým platbám zálohy (aj zo starších údajov s jedným dokladom). */
+export function receiptsOf(inv) {
+  const a = inv?.advance
+  if (!a) return []
+  if (a.receipts?.length) return a.receipts
+  return a.receiptId ? [{ id: a.receiptId, number: a.receiptNumber, date: inv.paidDate, amount: inv.summary?.total }] : []
+}

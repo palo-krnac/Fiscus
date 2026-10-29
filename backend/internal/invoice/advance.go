@@ -20,14 +20,57 @@ type Advance struct {
 	// na doklade k prijatej platbe a vyúčtovacej faktúre: zálohová faktúra
 	ProformaID     int64  `json:"proformaId,omitempty"`
 	ProformaNumber string `json:"proformaNumber,omitempty"`
-	// na zálohovej faktúre: doklad k platbe a vyúčtovanie
-	ReceiptID     int64  `json:"receiptId,omitempty"`
-	ReceiptNumber string `json:"receiptNumber,omitempty"`
-	FinalID       int64  `json:"finalId,omitempty"`
-	FinalNumber   string `json:"finalNumber,omitempty"`
+	// na zálohovej faktúre: doklad k platbe a vyúčtovanie. ReceiptID je prvý
+	// doklad (staršie údaje); Receipts sú doklady ku všetkým platbám.
+	ReceiptID     int64        `json:"receiptId,omitempty"`
+	ReceiptNumber string       `json:"receiptNumber,omitempty"`
+	Receipts      []ReceiptRef `json:"receipts,omitempty"`
+	FinalID       int64        `json:"finalId,omitempty"`
+	FinalNumber   string       `json:"finalNumber,omitempty"`
 	// na vyúčtovacej faktúre: odpočítané zálohy a celá dodávka pred odpočtom
 	Deductions []Deduction  `json:"deductions,omitempty"`
 	Supply     *vat.Summary `json:"supply,omitempty"`
+}
+
+// ReceiptRef je daňový doklad k jednej prijatej platbe zálohy.
+type ReceiptRef struct {
+	ID     int64     `json:"id"`
+	Number string    `json:"number"`
+	Date   Date      `json:"date"`   // deň prijatia platby
+	Amount money.Dec `json:"amount"` // prijatá platba
+}
+
+// AllReceipts vráti doklady k platbám zálohovej faktúry (aj zo starších
+// údajov, kde bol iba jeden doklad k úhrade celej zálohy).
+func (inv *Invoice) AllReceipts() []ReceiptRef {
+	a := inv.Advance
+	if a == nil {
+		return nil
+	}
+	if len(a.Receipts) == 0 && a.ReceiptID != 0 {
+		return []ReceiptRef{{ID: a.ReceiptID, Number: a.ReceiptNumber, Date: inv.PaidDate, Amount: inv.Summary.Total}}
+	}
+	return a.Receipts
+}
+
+// AddReceipt zapíše do zálohovej faktúry doklad k prijatej platbe.
+func (inv *Invoice) AddReceipt(r ReceiptRef) {
+	if inv.Advance == nil {
+		inv.Advance = &Advance{}
+	}
+	if len(inv.Advance.Receipts) == 0 && inv.Advance.ReceiptID != 0 {
+		inv.Advance.Receipts = inv.AllReceipts()
+	}
+	inv.Advance.Receipts = append(inv.Advance.Receipts, r)
+	if inv.Advance.ReceiptID == 0 {
+		inv.Advance.ReceiptID, inv.Advance.ReceiptNumber = r.ID, r.Number
+	}
+}
+
+// Settled: zálohová faktúra je vyúčtovaná (vystavená vyúčtovacia faktúra) —
+// neuhradený zvyšok zálohy sa už nevymáha, doplatok je na vyúčtovaní.
+func (inv *Invoice) Settled() bool {
+	return inv.Kind == KindProforma && inv.Advance != nil && inv.Advance.FinalNumber != ""
 }
 
 // Deduction je odpočet zálohy vo vyúčtovacej faktúre: základ a daň po sadzbách
@@ -59,20 +102,20 @@ func (inv *Invoice) NeedsReceipt() bool {
 	return inv.Kind == KindProforma && !inv.NonVATPayer && !inv.AnyReverse() && !party.Foreign(inv.Customer.Country) && !inv.Foreign()
 }
 
-// NewAdvanceReceipt vyhotoví daňový doklad k prijatej platbe za uhradenú
-// zálohovú faktúru. Daň sa vypočíta z prijatej platby („zhora“) po sadzbách
-// zálohovej faktúry; dátum dodania = deň prijatia platby.
-func NewAdvanceReceipt(proforma Invoice, issue Date) (Invoice, error) {
+// NewAdvanceReceipt vyhotoví daňový doklad k prijatej platbe (aj čiastočnej)
+// k zálohovej faktúre. Platba sa rozdelí na sadzby v pomere súm zálohovej
+// faktúry a daň sa vypočíta z platby („zhora“); dátum dodania = deň prijatia
+// platby (§ 19 ods. 4).
+func NewAdvanceReceipt(proforma Invoice, amount money.Dec, paid, issue Date) (Invoice, error) {
 	if proforma.Kind != KindProforma {
 		return Invoice{}, ErrNotAdvance
 	}
-	if proforma.Status != StatusPaid || proforma.PaidDate.IsZero() {
+	if amount.Sign() <= 0 || paid.IsZero() {
 		return Invoice{}, ErrAdvanceNotPaid
 	}
 	if !proforma.NeedsReceipt() {
 		return Invoice{}, ErrForeignAdvance
 	}
-	paid := proforma.PaidDate
 	r := Invoice{
 		Kind: KindAdvanceReceipt, Status: StatusDraft,
 		Customer: proforma.Customer, ContactID: proforma.ContactID,
@@ -87,11 +130,8 @@ func NewAdvanceReceipt(proforma Invoice, issue Date) (Invoice, error) {
 	if len(proforma.Lines) > 0 && proforma.Lines[0].Description != "" {
 		what += " – " + proforma.Lines[0].Description
 	}
-	for _, rs := range proforma.Summary.Rates {
-		if rs.Total.IsZero() {
-			continue
-		}
-		r.Lines = append(r.Lines, Line{Description: what, Quantity: money.FromInt(1), Unit: "", UnitPrice: rs.Total, Rate: rs.Rate})
+	for _, part := range splitByRates(proforma.Summary, amount) {
+		r.Lines = append(r.Lines, Line{Description: what, Quantity: money.FromInt(1), Unit: "", UnitPrice: part.Total, Rate: part.Rate})
 	}
 	if len(r.Lines) == 0 {
 		return Invoice{}, errors.New("zálohová faktúra nemá sumu")
@@ -102,14 +142,41 @@ func NewAdvanceReceipt(proforma Invoice, issue Date) (Invoice, error) {
 	return r, nil
 }
 
+// splitByRates rozdelí sumu na sadzby v pomere súm (s DPH) rekapitulácie;
+// posledná sadzba dostane zvyšok, aby súčet sedel na cent. Celá suma dokladu
+// vráti sadzby bez prepočtu.
+func splitByRates(s vat.Summary, amount money.Dec) []vat.RateSummary {
+	var rates []vat.RateSummary
+	for _, rs := range s.Rates {
+		if !rs.Total.IsZero() {
+			rates = append(rates, rs)
+		}
+	}
+	if amount.Equal(s.Total) {
+		return rates
+	}
+	out := make([]vat.RateSummary, len(rates))
+	rest := amount
+	for i, rs := range rates {
+		part := rest
+		if i < len(rates)-1 {
+			part = amount.MulRatio(rs.Total, s.Total).RoundCents()
+			rest = rest.Sub(part)
+		}
+		out[i] = vat.RateSummary{Rate: rs.Rate, Reverse: rs.Reverse, Total: part}
+	}
+	return out
+}
+
 // NewFinalInvoice pripraví koncept vyúčtovacej faktúry k uhradenej zálohe:
 // položky zálohy (dajú sa upraviť) a odpočet zálohy podľa dokladu k prijatej
 // platbe. receipt je nil pri neplatiteľovi DPH (odpočíta sa uhradená suma).
-func NewFinalInvoice(proforma Invoice, receipt *Invoice, issue Date, dueDays int) (Invoice, error) {
+func NewFinalInvoice(proforma Invoice, receipts []Invoice, issue Date, dueDays int) (Invoice, error) {
 	if proforma.Kind != KindProforma {
 		return Invoice{}, ErrNotAdvance
 	}
-	if proforma.Status != StatusPaid {
+	paid := proforma.Paid()
+	if (proforma.Status != StatusPaid && proforma.Status != StatusIssued) || paid.Sign() <= 0 {
 		return Invoice{}, ErrAdvanceNotPaid
 	}
 	if proforma.Advance != nil && proforma.Advance.FinalID != 0 {
@@ -118,13 +185,32 @@ func NewFinalInvoice(proforma Invoice, receipt *Invoice, issue Date, dueDays int
 	if proforma.AnyReverse() || party.Foreign(proforma.Customer.Country) || proforma.Foreign() {
 		return Invoice{}, ErrForeignAdvance
 	}
-	d := Deduction{Number: proforma.Number, Date: proforma.PaidDate}
+	var deductions []Deduction
 	switch {
-	case receipt != nil:
-		d.ReceiptID, d.Number, d.Date = receipt.ID, receipt.Number, receipt.DeliveryDate
-		d.Rates, d.Total = append([]vat.RateSummary(nil), receipt.Summary.Rates...), receipt.Summary.Total
+	case len(receipts) > 0:
+		var covered money.Dec
+		for _, r := range receipts {
+			deductions = append(deductions, Deduction{ReceiptID: r.ID, Number: r.Number, Date: r.DeliveryDate,
+				Rates: append([]vat.RateSummary(nil), r.Summary.Rates...), Total: r.Summary.Total})
+			covered = covered.Add(r.Summary.Total)
+		}
+		if !covered.Equal(paid) {
+			return Invoice{}, fmt.Errorf("k platbám zálohy (%s €) chýba daňový doklad k prijatej platbe — doklady pokrývajú %s €", paid.Display(), covered.Display())
+		}
 	case proforma.NonVATPayer:
-		d.Rates, d.Total = append([]vat.RateSummary(nil), proforma.Summary.Rates...), proforma.Summary.Total
+		// neplatiteľ: odpočíta sa uhradená suma (bez DPH)
+		date := proforma.PaidDate
+		if date.IsZero() && len(proforma.Payments) > 0 {
+			date = proforma.Payments[len(proforma.Payments)-1].Date
+		}
+		d := Deduction{Number: proforma.Number, Date: date, Total: paid}
+		for _, r := range splitByRates(proforma.Summary, paid) {
+			if r.Base.IsZero() && r.VAT.IsZero() {
+				r.Base = r.Total // pri čiastočnej úhrade: neplatiteľ nemá DPH
+			}
+			d.Rates = append(d.Rates, r)
+		}
+		deductions = []Deduction{d}
 	default:
 		return Invoice{}, errors.New("chýba daňový doklad k prijatej platbe")
 	}
@@ -137,7 +223,7 @@ func NewFinalInvoice(proforma Invoice, receipt *Invoice, issue Date, dueDays int
 		Subject: proforma.Subject, Intro: proforma.Intro,
 		Note:    "Vyúčtovanie zálohovej faktúry " + proforma.Number + ".",
 		Lines:   append([]Line(nil), proforma.Lines...),
-		Advance: &Advance{ProformaID: proforma.ID, ProformaNumber: proforma.Number, Deductions: []Deduction{d}},
+		Advance: &Advance{ProformaID: proforma.ID, ProformaNumber: proforma.Number, Deductions: deductions},
 	}
 	if err := inv.Recalculate(); err != nil {
 		return Invoice{}, err

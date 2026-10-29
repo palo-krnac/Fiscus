@@ -49,7 +49,8 @@ func (a *App) candidates(ctx context.Context, companyID int64) ([]bank.Candidate
 	}
 	var out []bank.Candidate
 	for _, inv := range invs {
-		if inv.Status != invoice.StatusIssued || (inv.Currency != "" && inv.Currency != "EUR") {
+		if inv.Status != invoice.StatusIssued || (inv.Currency != "" && inv.Currency != "EUR") ||
+			(inv.Kind == invoice.KindProforma && inv.Advance != nil && inv.Advance.FinalID != 0) { // vyúčtovaná záloha
 			continue
 		}
 		// suma kandidáta je zostatok na úhradu (po čiastočných platbách)
