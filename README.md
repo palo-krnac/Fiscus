@@ -98,7 +98,8 @@ Ikona z inštalátora spustí `fiskus -app` (rovnako sa správa `fiskus` bez `-d
 
 - dáta sú v priečinku používateľa — Windows `%APPDATA%\Fiskus`, macOS `~/Library/Application Support/Fiskus`, Linux `~/.local/share/fiskus` (databáza `fiskus.db`, zálohy v `zalohy`, denník `fiskus.log`);
 - program beží na `http://127.0.0.1:48080` a sám otvorí prehliadač; druhé spustenie iba otvorí okno bežiaceho programu;
-- otvorená stránka sa programu ozýva — po zatvorení posledného okna sa program asi o 1,5 minúty sám ukončí; v menu je aj tlačidlo **Ukončiť**.
+- vo Windows je vpravo dole na paneli úloh ikona Fiškusa s verziou: klik otvorí program, pravé tlačidlo ponúkne **Otvoriť** a **Ukončiť** — program beží, kým ho takto neukončíte;
+- na macOS a Linuxe (bez ikony) sa otvorená stránka programu ozýva a po zatvorení posledného okna sa program asi o 1,5 minúty sám ukončí; v menu je aj tlačidlo **Ukončiť**.
 
 ## Register firiem
 
