@@ -174,4 +174,99 @@ func Run(t *testing.T, newStore Factory) {
 			t.Fatalf("iný rad: %d", v)
 		}
 	})
+	t.Run("úprava firmy", func(t *testing.T) {
+		s := newStore(t)
+		c, _ := s.CreateCompany(ctx, store.Company{Name: "Alfa", DefaultDueDays: 14})
+		c.Name, c.IBAN, c.VATPayer, c.DefaultDueDays, c.Email = "Alfa s.r.o.", "SK31 1200", true, 30, "a@b.sk"
+		if err := s.UpdateCompany(ctx, c); err != nil {
+			t.Fatal(err)
+		}
+		got, _ := s.GetCompany(ctx, c.ID)
+		if got != c {
+			t.Fatalf("po úprave: %+v", got)
+		}
+		if err := s.UpdateCompany(ctx, store.Company{ID: 9999, Name: "x"}); !errors.Is(err, store.ErrNotFound) {
+			t.Fatalf("neexistujúca firma: %v", err)
+		}
+	})
+
+	t.Run("adresár", func(t *testing.T) {
+		s := newStore(t)
+		a, _ := s.CreateCompany(ctx, store.Company{Name: "Alfa"})
+		b, _ := s.CreateCompany(ctx, store.Company{Name: "Beta"})
+		for _, n := range []struct{ name, city, ico string }{
+			{"Žilinská strojáreň", "Žilina", "31322832"},
+			{"Agro Liptov", "Liptovský Mikuláš", ""},
+			{"Kováč Peter", "Banská Bystrica", ""},
+		} {
+			c := &store.Contact{Name: n.name, City: n.city, ICO: n.ico, Country: "SK", DueDays: 30}
+			if err := s.SaveContact(ctx, a.ID, c); err != nil || c.ID == 0 {
+				t.Fatalf("SaveContact: %v", err)
+			}
+		}
+		list, _ := s.ListContacts(ctx, a.ID, "")
+		if len(list) != 3 || list[0].Name != "Agro Liptov" || list[2].Name != "Žilinská strojáreň" {
+			t.Fatalf("zoradenie podľa názvu (Ž za K): %v", names(list))
+		}
+		for q, want := range map[string]int{"kovac": 1, "ZILINA": 1, "3132": 1, "bystrica": 1, "nič": 0} {
+			if got, _ := s.ListContacts(ctx, a.ID, q); len(got) != want {
+				t.Errorf("hľadanie %q: %d, chcem %d", q, len(got), want)
+			}
+		}
+
+		// úprava
+		c := list[1]
+		c.Email = "agro@liptov.sk"
+		if err := s.SaveContact(ctx, a.ID, &c); err != nil {
+			t.Fatal(err)
+		}
+		got, _ := s.GetContact(ctx, a.ID, c.ID)
+		if got.Email != "agro@liptov.sk" || got.DueDays != 30 || got.CompanyID != a.ID {
+			t.Fatalf("po úprave: %+v", got)
+		}
+
+		// oddelenie firiem
+		if list, _ := s.ListContacts(ctx, b.ID, ""); len(list) != 0 {
+			t.Fatal("firma B vidí adresár firmy A")
+		}
+		if _, err := s.GetContact(ctx, b.ID, c.ID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("firma B načítala kontakt firmy A")
+		}
+		stolen := c
+		if err := s.SaveContact(ctx, b.ID, &stolen); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("firma B prepísala kontakt firmy A")
+		}
+		if err := s.DeleteContact(ctx, b.ID, c.ID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("firma B zmazala kontakt firmy A")
+		}
+
+		// zmazanie
+		if err := s.DeleteContact(ctx, a.ID, c.ID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.GetContact(ctx, a.ID, c.ID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("kontakt nebol zmazaný")
+		}
+	})
+
+	t.Run("faktúra si pamätá kontakt a režim neplatiteľa", func(t *testing.T) {
+		s := newStore(t)
+		c, _ := s.CreateCompany(ctx, store.Company{Name: "Alfa"})
+		inv := draft("Odberateľ", "2026-10-01")
+		inv.ContactID = 42
+		inv.NonVATPayer = true
+		_ = s.SaveInvoice(ctx, c.ID, inv)
+		got, _ := s.GetInvoice(ctx, c.ID, inv.ID)
+		if got.ContactID != 42 || !got.NonVATPayer {
+			t.Fatalf("načítané: contact=%d nonVat=%v", got.ContactID, got.NonVATPayer)
+		}
+	})
+}
+
+func names(list []store.Contact) []string {
+	out := make([]string, len(list))
+	for i, c := range list {
+		out[i] = c.Name
+	}
+	return out
 }

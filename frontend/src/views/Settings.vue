@@ -1,0 +1,164 @@
+<script setup>
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useToast } from 'primevue/usetoast'
+import Button from 'primevue/button'
+import InputText from 'primevue/inputtext'
+import InputNumber from 'primevue/inputnumber'
+import ToggleSwitch from 'primevue/toggleswitch'
+import FormField from '../components/FormField.vue'
+import { api, ApiError } from '../lib/api.js'
+import { session, replaceCompany } from '../lib/session.js'
+
+const toast = useToast()
+const form = ref({ ...session.company })
+const errors = ref({})
+const busy = ref(false)
+const dirty = computed(() => JSON.stringify(form.value) !== JSON.stringify(session.company))
+
+const companyFields = [
+  { key: 'name', label: 'Obchodné meno', span: 2, autocomplete: 'organization' },
+  { key: 'street', label: 'Ulica a číslo', span: 2, autocomplete: 'street-address' },
+  { key: 'zip', label: 'PSČ', autocomplete: 'postal-code' },
+  { key: 'city', label: 'Obec', autocomplete: 'address-level2' },
+  { key: 'ico', label: 'IČO', inputmode: 'numeric' },
+  { key: 'dic', label: 'DIČ', inputmode: 'numeric' },
+  { key: 'email', label: 'E-mail', span: 2, autocomplete: 'email' },
+  { key: 'phone', label: 'Telefón', span: 2, autocomplete: 'tel' },
+]
+
+async function save() {
+  busy.value = true
+  try {
+    const saved = await api.updateCompany(form.value)
+    replaceCompany(saved)
+    form.value = { ...saved }
+    errors.value = {}
+    toast.add({ severity: 'success', summary: 'Nastavenia uložené', life: 2500 })
+  } catch (e) {
+    if (e instanceof ApiError && e.fields.length) {
+      errors.value = e.fieldMap()
+      toast.add({ severity: 'error', summary: 'Skontrolujte vyznačené polia', life: 4000 })
+    } else {
+      toast.add({ severity: 'error', summary: 'Uloženie zlyhalo', detail: e.message, life: 6000 })
+    }
+  } finally {
+    busy.value = false
+  }
+}
+
+function onKey(e) {
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    e.preventDefault()
+    if (!busy.value) save()
+  }
+}
+onMounted(() => window.addEventListener('keydown', onKey))
+onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
+</script>
+
+<template>
+  <div class="settings">
+    <header class="bar">
+      <h1>Nastavenia firmy</h1>
+      <span v-if="dirty" class="unsaved">neuložené zmeny</span>
+      <div class="spacer" />
+      <Button label="Uložiť" icon="pi pi-check" size="small" :loading="busy" :disabled="!dirty" @click="save" v-tooltip.bottom="'Ctrl+S'" />
+    </header>
+
+    <div class="body">
+      <fieldset class="form-section">
+        <legend>Údaje na faktúre</legend>
+        <div class="form-grid">
+          <FormField v-for="f in companyFields" :key="f.key" :label="f.label" :span="f.span" :error="errors[f.key]">
+            <InputText v-model="form[f.key]" size="small" :invalid="!!errors[f.key]" :inputmode="f.inputmode" :autocomplete="f.autocomplete" />
+          </FormField>
+        </div>
+      </fieldset>
+
+      <fieldset class="form-section">
+        <legend>DPH</legend>
+        <label class="switch">
+          <ToggleSwitch v-model="form.vatPayer" input-id="vat-payer" />
+          <span>
+            <strong>Som platiteľ DPH</strong>
+            <small>Ak nie ste platiteľ, faktúry sa vystavujú bez DPH a s poznámkou „Nie som platiteľ DPH“.</small>
+          </span>
+        </label>
+        <div v-if="form.vatPayer" class="form-grid vat-grid">
+          <FormField label="IČ DPH" :error="errors.icdph" hint="SK a 10 číslic">
+            <InputText v-model="form.icdph" size="small" :invalid="!!errors.icdph" placeholder="SK…" />
+          </FormField>
+        </div>
+      </fieldset>
+
+      <fieldset class="form-section">
+        <legend>Platby</legend>
+        <div class="form-grid">
+          <FormField label="IBAN" :span="2" :error="errors.iban" hint="Zobrazí sa na faktúre a v QR kóde">
+            <InputText v-model="form.iban" size="small" :invalid="!!errors.iban" autocomplete="off" />
+          </FormField>
+          <FormField label="Predvolená splatnosť" :error="errors.defaultDueDays" hint="Dá sa zmeniť pri každom odberateľovi">
+            <InputNumber v-model="form.defaultDueDays" :min="0" :max="365" suffix=" dní" size="small" :invalid="!!errors.defaultDueDays" />
+          </FormField>
+        </div>
+      </fieldset>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.bar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--rule);
+}
+.bar h1 {
+  font-size: var(--fs-xl);
+}
+.unsaved {
+  font-size: var(--fs-sm);
+  color: var(--tone-draft);
+}
+.spacer {
+  flex: 1;
+}
+.body {
+  max-width: 880px;
+  padding: 14px 16px 32px;
+}
+.switch {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  cursor: pointer;
+}
+.switch span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.switch small {
+  color: var(--ink-soft);
+  font-size: var(--fs-sm);
+}
+.vat-grid {
+  margin-top: 12px;
+}
+@media (max-width: 760px) {
+  .bar {
+    padding: 8px 10px;
+  }
+  .bar h1 {
+    font-size: var(--fs-lg);
+  }
+  .body {
+    padding: 10px 10px 24px;
+  }
+}
+</style>

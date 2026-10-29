@@ -12,8 +12,10 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] CI (testy) a release (binárky pre Win/macOS/Linux)
 
 ## Etapa 1 — fakturácia a DPH pre živnostníka
-- [ ] Nastavenia firmy (údaje, logo, IBAN, číselné rady, platiteľ DPH áno/nie)
-- [ ] Adresár odberateľov a dodávateľov, vyhľadanie firmy v RPO / ORSR
+- [x] Nastavenia firmy (údaje, IBAN, platiteľ DPH áno/nie, predvolená splatnosť)
+- [ ] Logo a vlastné číselné rady
+- [x] Adresár odberateľov a dodávateľov, výber odberateľa vo faktúre, vlastná splatnosť
+- [ ] Vyhľadanie firmy v RPO / ORSR podľa IČO
 - [ ] PDF faktúry + QR kód **PAY by square**, odoslanie e-mailom
 - [ ] Dobropis, zálohová faktúra, cenová ponuka, pravidelná fakturácia
 - [ ] Prijaté faktúry (vrátane AI vyťaženia z PDF: AI iba navrhuje, účtuje pevne naprogramovaný automat)

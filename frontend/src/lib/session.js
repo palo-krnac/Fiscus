@@ -44,3 +44,9 @@ export function selectCompany(id) {
     /* ignorovať */
   }
 }
+
+/** Po uložení nastavení nahradí firmu v zozname. */
+export function replaceCompany(c) {
+  const i = session.companies.findIndex((x) => x.id === c.id)
+  if (i >= 0) session.companies.splice(i, 1, c)
+}

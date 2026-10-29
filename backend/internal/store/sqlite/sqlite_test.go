@@ -4,6 +4,7 @@ package sqlite
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"testing"
 	"time"
@@ -76,5 +77,47 @@ func TestBackupRestoreRealDatabase(t *testing.T) {
 	list, _ := s.ListCompanies(ctx)
 	if len(list) != 1 || list[0].Name != "Pred zálohou" {
 		t.Fatalf("po obnove: %+v", list)
+	}
+}
+
+// Databáza vytvorená staršou verziou programu sa pri otvorení zmigruje
+// a dáta zostanú zachované.
+func TestUpgradeFromV1(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "stara.db")
+	db, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{
+		schemaV1,
+		"PRAGMA user_version = 1",
+		"INSERT INTO companies (name, vat_payer) VALUES ('Stará firma', 1)",
+		`INSERT INTO invoices (company_id, kind, status, number, customer_name, issue_date)
+		 VALUES (1, 'invoice', 'issued', 'FA20250001', 'Odberateľ', '2025-12-01')`,
+	} {
+		if _, err := db.ExecContext(ctx, q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	db.Close()
+
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	c, err := s.GetCompany(ctx, 1)
+	if err != nil || c.Name != "Stará firma" || c.DefaultDueDays != 14 {
+		t.Fatalf("firma po migrácii: %+v %v", c, err)
+	}
+	list, err := s.ListInvoices(ctx, 1, store.InvoiceFilter{})
+	if err != nil || len(list) != 1 || list[0].Number != "FA20250001" || list[0].NonVATPayer {
+		t.Fatalf("faktúry po migrácii: %+v %v", list, err)
+	}
+	var v int
+	_ = s.db.QueryRow("PRAGMA user_version").Scan(&v)
+	if v != len(migrations) {
+		t.Fatalf("verzia schémy %d", v)
 	}
 }

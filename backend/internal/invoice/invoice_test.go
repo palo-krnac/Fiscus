@@ -131,3 +131,19 @@ func TestFormatNumber(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestNonVATPayerHasNoVAT(t *testing.T) {
+	inv := sample()
+	inv.NonVATPayer = true
+	if err := inv.Recalculate(); err != nil {
+		t.Fatal(err)
+	}
+	if !inv.Summary.VAT.IsZero() || inv.Summary.Total.String() != "364.98" || len(inv.Summary.Rates) != 1 || inv.Summary.Rates[0].Rate != vat.Rate0 {
+		t.Fatalf("neplatiteľ DPH: %+v", inv.Summary)
+	}
+	// neplatiteľ nepotrebuje IČ DPH odberateľa (to platí iba pri prenesení)
+	inv.Customer.ICDPH = ""
+	if err := inv.Validate(); err != nil {
+		t.Fatal(err)
+	}
+}

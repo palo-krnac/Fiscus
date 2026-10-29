@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"strings"
 	"sync"
 
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
@@ -24,13 +23,14 @@ type Store struct {
 	mu        sync.Mutex
 	companies []store.Company
 	invoices  map[int64]invoice.Invoice
+	contacts  map[int64]store.Contact
 	seq       map[seqKey]int
 	nextID    int64
 }
 
 // New vytvorí prázdne úložisko.
 func New() *Store {
-	return &Store{invoices: map[int64]invoice.Invoice{}, seq: map[seqKey]int{}}
+	return &Store{invoices: map[int64]invoice.Invoice{}, contacts: map[int64]store.Contact{}, seq: map[seqKey]int{}}
 }
 
 func (s *Store) id() int64 { s.nextID++; return s.nextID }
@@ -75,6 +75,71 @@ func (s *Store) GetCompany(_ context.Context, id int64) (store.Company, error) {
 	return store.Company{}, store.ErrNotFound
 }
 
+func (s *Store) UpdateCompany(_ context.Context, c store.Company) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.companies {
+		if s.companies[i].ID == c.ID {
+			s.companies[i] = c
+			return nil
+		}
+	}
+	return store.ErrNotFound
+}
+
+func (s *Store) ListContacts(_ context.Context, companyID int64, search string) ([]store.Contact, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := []store.Contact{}
+	for _, c := range s.contacts {
+		if c.CompanyID == companyID && store.Matches(search, c.Name, c.ICO, c.City) {
+			out = append(out, c)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		a, b := store.SearchKey(out[i].Name), store.SearchKey(out[j].Name)
+		if a != b {
+			return a < b
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out, nil
+}
+
+func (s *Store) GetContact(_ context.Context, companyID, id int64) (store.Contact, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c, ok := s.contacts[id]
+	if !ok || c.CompanyID != companyID {
+		return store.Contact{}, store.ErrNotFound
+	}
+	return c, nil
+}
+
+func (s *Store) SaveContact(_ context.Context, companyID int64, c *store.Contact) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if c.ID == 0 {
+		c.ID = s.id()
+	} else if old, ok := s.contacts[c.ID]; !ok || old.CompanyID != companyID {
+		return store.ErrNotFound
+	}
+	c.CompanyID = companyID
+	s.contacts[c.ID] = *c
+	return nil
+}
+
+func (s *Store) DeleteContact(_ context.Context, companyID, id int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c, ok := s.contacts[id]
+	if !ok || c.CompanyID != companyID {
+		return store.ErrNotFound
+	}
+	delete(s.contacts, id)
+	return nil
+}
+
 func matches(inv invoice.Invoice, f store.InvoiceFilter) bool {
 	if f.Year != 0 && inv.IssueDate.Year() != f.Year {
 		return false
@@ -82,13 +147,7 @@ func matches(inv invoice.Invoice, f store.InvoiceFilter) bool {
 	if f.Status != "" && inv.Status != f.Status {
 		return false
 	}
-	if q := strings.ToLower(strings.TrimSpace(f.Search)); q != "" {
-		hay := strings.ToLower(inv.Number + " " + inv.Customer.Name + " " + inv.Customer.ICO)
-		if !strings.Contains(hay, q) {
-			return false
-		}
-	}
-	return true
+	return store.Matches(f.Search, inv.Number, inv.Customer.Name, inv.Customer.ICO)
 }
 
 func (s *Store) ListInvoices(_ context.Context, companyID int64, f store.InvoiceFilter) ([]invoice.Invoice, error) {

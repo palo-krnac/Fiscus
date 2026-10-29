@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
 import { AgGridVue } from 'ag-grid-vue3'
@@ -10,6 +10,7 @@ import Textarea from 'primevue/textarea'
 import DatePicker from 'primevue/datepicker'
 import SelectButton from 'primevue/selectbutton'
 import Checkbox from 'primevue/checkbox'
+import AutoComplete from 'primevue/autocomplete'
 import { api, ApiError } from '../lib/api.js'
 import { session } from '../lib/session.js'
 import {
@@ -17,9 +18,11 @@ import {
   fromISODate, parseNumber, statusOf, toISODate,
 } from '../lib/format.js'
 import { fiskusGridTheme, skGridLocale } from '../lib/grid.js'
+import { contactFromCustomer, customerFromContact, dueDaysFor, filterContacts } from '../lib/contacts.js'
 
 const props = defineProps({ id: String })
 const router = useRouter()
+const route = useRoute()
 const toast = useToast()
 const confirm = useConfirm()
 
@@ -37,6 +40,8 @@ const errors = ref({}) // pole → správa
 const previewErrors = ref({})
 
 const editable = computed(() => !inv.value?.status || inv.value.status === 'draft')
+// neplatiteľ DPH: faktúra bez DPH (o režime rozhoduje backend podľa nastavení firmy)
+const nonVat = computed(() => !!inv.value?.nonVatPayer)
 const status = computed(() => (inv.value ? statusOf(inv.value) : null))
 const title = computed(() => {
   if (!inv.value) return ''
@@ -53,7 +58,7 @@ async function load() {
     } else {
       const today = toISODate(new Date())
       const due = new Date()
-      due.setDate(due.getDate() + 14)
+      due.setDate(due.getDate() + dueDaysFor(null, session.company))
       inv.value = {
         kind: 'invoice',
         status: 'draft',
@@ -63,10 +68,16 @@ async function load() {
         dueDate: toISODate(due),
         priceMode: 'net',
         reverseCharge: false,
+        nonVatPayer: !session.company?.vatPayer,
+        contactId: 0,
         note: '',
         summary: { rates: [], base: '0', vat: '0', total: '0' },
       }
       lines.value = [blankLine()]
+      if (route.query.kontakt) {
+        const ct = await api.contact(session.companyId, route.query.kontakt).catch(() => null)
+        if (ct) applyContact(ct)
+      }
     }
   } catch (e) {
     loadError.value = e.message
@@ -90,9 +101,10 @@ function changed() {
 async function recalc() {
   const mine = ++seq
   try {
-    const out = await api.preview(payload())
+    const out = await api.preview(session.companyId, payload())
     if (mine !== seq) return // medzitým prišla novšia zmena
     inv.value.summary = out.summary
+    inv.value.nonVatPayer = out.nonVatPayer
     out.lines.forEach((l, i) => {
       if (lines.value[i]) lines.value[i].amount = l.amount
     })
@@ -151,7 +163,7 @@ const lineCols = computed(() => [
     valueFormatter: (p) => formatAmount(p.value), valueParser: numParser,
   },
   {
-    field: 'vatRate', headerName: 'DPH', width: 74, type: 'rightAligned',
+    field: 'vatRate', headerName: 'DPH', width: 74, type: 'rightAligned', hide: nonVat.value,
     cellEditor: 'agSelectCellEditor', cellEditorParams: { values: [23, 19, 5, 0] },
     valueFormatter: (p) => `${p.value} %`,
     valueParser: (p) => Number(p.newValue),
@@ -289,6 +301,47 @@ const upd = (obj, key) => (v) => {
   obj[key] = v
   changed()
 }
+// ---- adresár ----
+const contacts = shallowRef([])
+const suggestions = ref([])
+onMounted(async () => {
+  contacts.value = await api.contacts(session.companyId).catch(() => [])
+})
+function searchContacts(e) {
+  suggestions.value = filterContacts(contacts.value, e.query).slice(0, 12)
+}
+
+function applyContact(ct) {
+  inv.value.customer = customerFromContact(ct)
+  inv.value.contactId = ct.id
+  const d = fromISODate(inv.value.issueDate)
+  d.setDate(d.getDate() + dueDaysFor(ct, session.company))
+  inv.value.dueDate = toISODate(d)
+  changed()
+}
+
+function onCustomerName(v) {
+  if (v && typeof v === 'object') applyContact(v)
+  else upd(inv.value.customer, 'name')(v ?? '')
+}
+
+const savingContact = ref(false)
+async function saveToContacts() {
+  savingContact.value = true
+  try {
+    const ct = await api.saveContact(session.companyId, contactFromCustomer(inv.value.customer))
+    contacts.value = [...contacts.value, ct]
+    inv.value.contactId = ct.id
+    changed()
+    toast.add({ severity: 'success', summary: `${ct.name} pridaný do adresára`, life: 2500 })
+  } catch (e) {
+    const detail = e instanceof ApiError && e.fields.length ? e.fields[0].message : e.message
+    toast.add({ severity: 'error', summary: 'Do adresára sa nepridal', detail, life: 5000 })
+  } finally {
+    savingContact.value = false
+  }
+}
+
 const customerFields = reactive([
   { key: 'name', label: 'Názov / meno', wide: true, autocomplete: 'organization' },
   { key: 'street', label: 'Ulica a číslo', wide: true, autocomplete: 'street-address' },
@@ -327,11 +380,45 @@ const customerFields = reactive([
     <div class="body">
       <div class="form">
         <fieldset class="block">
-          <legend>Odberateľ</legend>
+          <legend>
+            Odberateľ
+            <span v-if="inv.contactId" class="from-book"><i class="pi pi-address-book" /> z adresára</span>
+            <button
+              v-else-if="editable && c.name"
+              type="button"
+              class="to-book"
+              :disabled="savingContact"
+              @click="saveToContacts"
+            >
+              <i class="pi pi-plus" /> Uložiť do adresára
+            </button>
+          </legend>
           <div class="fields customer">
             <label v-for="f in customerFields.filter((f) => editable || c[f.key])" :key="f.key" :class="{ wide: f.wide }">
               <span>{{ f.label }}</span>
+              <AutoComplete
+                v-if="f.key === 'name' && editable"
+                :model-value="c.name"
+                :suggestions="suggestions"
+                option-label="name"
+                :delay="80"
+                :show-empty-message="false"
+                :invalid="!!fieldError('customer.name')"
+                placeholder="Začnite písať názov alebo IČO z adresára"
+                size="small"
+                fluid
+                @complete="searchContacts"
+                @update:model-value="onCustomerName"
+              >
+                <template #option="{ option }">
+                  <div class="sugg">
+                    <strong>{{ option.name }}</strong>
+                    <span>{{ [option.ico && `IČO ${option.ico}`, option.city].filter(Boolean).join(', ') }}</span>
+                  </div>
+                </template>
+              </AutoComplete>
               <InputText
+                v-else
                 :model-value="c[f.key]"
                 :disabled="!editable"
                 :invalid="!!fieldError(`customer.${f.key}`)"
@@ -366,7 +453,7 @@ const customerFields = reactive([
               <button v-for="n in [7, 14, 30]" :key="n" type="button" :class="{ on: dueDays === n }" @click="setDueDays(n)">{{ n }} dní</button>
             </div>
           </div>
-          <div class="fields vat-opts">
+          <div v-if="!nonVat" class="fields vat-opts">
             <SelectButton
               :model-value="inv.priceMode"
               :options="priceModes"
@@ -415,8 +502,8 @@ const customerFields = reactive([
       </div>
 
       <aside class="recap" aria-label="Rekapitulácia DPH">
-        <h2>Rekapitulácia DPH</h2>
-        <table>
+        <h2>{{ nonVat ? 'Súhrn' : 'Rekapitulácia DPH' }}</h2>
+        <table v-if="!nonVat">
           <thead>
             <tr>
               <th>Sadzba</th>
@@ -446,7 +533,8 @@ const customerFields = reactive([
           <span>K úhrade</span>
           <strong class="num">{{ formatMoney(inv.summary.total, inv.currency) }}</strong>
         </div>
-        <p v-if="inv.reverseCharge" class="note-rc">Prenesenie daňovej povinnosti — DPH odvedie odberateľ.</p>
+        <p v-if="nonVat" class="note-rc">Nie som platiteľ DPH. Faktúra je bez DPH.</p>
+        <p v-if="inv.reverseCharge && !nonVat" class="note-rc">Prenesenie daňovej povinnosti — DPH odvedie odberateľ.</p>
         <dl v-if="inv.number" class="pay-info">
           <dt>Variabilný symbol</dt>
           <dd>{{ inv.variableSymbol }}</dd>
@@ -525,6 +613,9 @@ const customerFields = reactive([
   min-width: 0;
 }
 legend {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
   padding: 0 0 6px;
   font-size: var(--fs-md);
   font-weight: 600;
@@ -534,6 +625,33 @@ legend {
   margin-bottom: 8px;
 }
 
+.from-book {
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--tone-paid);
+}
+.to-book {
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--blue);
+  cursor: pointer;
+}
+.to-book:hover {
+  text-decoration: underline;
+}
+.sugg {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+.sugg span {
+  font-size: var(--fs-sm);
+  color: var(--ink-soft);
+}
 .fields {
   display: grid;
   gap: 8px 12px;

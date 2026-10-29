@@ -27,7 +27,31 @@ type Company struct {
 	DIC      string `json:"dic"`
 	ICDPH    string `json:"icdph"`
 	IBAN     string `json:"iban"`
+	Email    string `json:"email"`
+	Phone    string `json:"phone"`
 	VATPayer bool   `json:"vatPayer"`
+	// DefaultDueDays je predvolená splatnosť nových faktúr v dňoch.
+	DefaultDueDays int `json:"defaultDueDays"`
+}
+
+// Contact je záznam v adresári (odberateľ alebo dodávateľ).
+type Contact struct {
+	ID        int64  `json:"id"`
+	CompanyID int64  `json:"companyId"`
+	Name      string `json:"name"`
+	Street    string `json:"street"`
+	City      string `json:"city"`
+	Zip       string `json:"zip"`
+	Country   string `json:"country"`
+	ICO       string `json:"ico"`
+	DIC       string `json:"dic"`
+	ICDPH     string `json:"icdph"`
+	Email     string `json:"email"`
+	Phone     string `json:"phone"`
+	IBAN      string `json:"iban"`
+	// DueDays prepíše predvolenú splatnosť firmy pre tohto odberateľa (0 = nie).
+	DueDays int    `json:"dueDays"`
+	Note    string `json:"note"`
 }
 
 // InvoiceFilter obmedzuje zoznam faktúr.
@@ -43,6 +67,15 @@ type Store interface {
 	CountCompanies(ctx context.Context) (int, error)
 	CreateCompany(ctx context.Context, c Company) (Company, error)
 	GetCompany(ctx context.Context, id int64) (Company, error)
+	UpdateCompany(ctx context.Context, c Company) error
+
+	// ListContacts vráti adresár firmy zoradený podľa názvu; search filtruje
+	// názov, IČO a obec (bez ohľadu na veľkosť písmen a diakritiku).
+	ListContacts(ctx context.Context, companyID int64, search string) ([]Contact, error)
+	GetContact(ctx context.Context, companyID, id int64) (Contact, error)
+	// SaveContact vloží (ID == 0) alebo prepíše kontakt. Nastaví ID.
+	SaveContact(ctx context.Context, companyID int64, c *Contact) error
+	DeleteContact(ctx context.Context, companyID, id int64) error
 
 	ListInvoices(ctx context.Context, companyID int64, f InvoiceFilter) ([]invoice.Invoice, error)
 	GetInvoice(ctx context.Context, companyID, id int64) (invoice.Invoice, error)

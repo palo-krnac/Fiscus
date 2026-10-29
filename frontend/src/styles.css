@@ -140,3 +140,29 @@ kbd {
     animation: none !important;
   }
 }
+
+/* formuláre: mriežka polí, na mobile dva stĺpce */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px 12px;
+}
+.form-section {
+  margin: 0 0 18px;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.form-section > legend {
+  width: 100%;
+  padding: 0 0 6px;
+  margin-bottom: 8px;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  border-bottom: 1px solid var(--rule);
+}
+@media (max-width: 760px) {
+  .form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

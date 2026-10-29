@@ -28,7 +28,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/capabilities", s.capabilities)
 	mux.HandleFunc("GET /api/companies", s.listCompanies)
 	mux.HandleFunc("POST /api/companies", s.createCompany)
-	mux.HandleFunc("POST /api/invoices/preview", s.preview)
+	mux.HandleFunc("PUT /api/companies/{cid}", s.updateCompany)
+	mux.HandleFunc("POST /api/companies/{cid}/invoices/preview", s.preview)
+	mux.HandleFunc("GET /api/companies/{cid}/contacts", s.listContacts)
+	mux.HandleFunc("POST /api/companies/{cid}/contacts", s.saveContact)
+	mux.HandleFunc("GET /api/companies/{cid}/contacts/{id}", s.getContact)
+	mux.HandleFunc("PUT /api/companies/{cid}/contacts/{id}", s.saveContact)
+	mux.HandleFunc("DELETE /api/companies/{cid}/contacts/{id}", s.deleteContact)
 	mux.HandleFunc("GET /api/companies/{cid}/invoices", s.listInvoices)
 	mux.HandleFunc("POST /api/companies/{cid}/invoices", s.saveInvoice)
 	mux.HandleFunc("GET /api/companies/{cid}/invoices/{id}", s.getInvoice)
@@ -237,11 +243,15 @@ func decodeInvoice(w http.ResponseWriter, r *http.Request, inv *invoice.Invoice)
 }
 
 func (s *Server) preview(w http.ResponseWriter, r *http.Request) {
+	cid, ok := s.company(w, r)
+	if !ok {
+		return
+	}
 	var inv invoice.Invoice
 	if !decodeInvoice(w, r, &inv) {
 		return
 	}
-	out, err := s.App.Preview(inv)
+	out, err := s.App.Preview(r.Context(), cid, inv)
 	if err != nil {
 		writeErr(w, http.StatusUnprocessableEntity, err.Error(), nil)
 		return
