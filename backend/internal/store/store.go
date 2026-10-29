@@ -13,6 +13,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/cash"
 	"github.com/palo-krnac/fiscus/backend/internal/catalog"
 	"github.com/palo-krnac/fiscus/backend/internal/fx"
+	"github.com/palo-krnac/fiscus/backend/internal/journal"
 	"time"
 
 	"github.com/palo-krnac/fiscus/backend/internal/audit"
@@ -97,6 +98,13 @@ type InvoiceFilter struct {
 type PurchaseFilter struct {
 	Year   int    // podľa dátumu doručenia; 0 = všetky
 	Search string // interné číslo, číslo dodávateľa, dodávateľ, IČO
+}
+
+// JournalOverride je ručný rozpis pohybu v peňažnom denníku.
+type JournalOverride struct {
+	Key   string         `json:"key"`
+	Lines []journal.Line `json:"lines"`
+	Note  string         `json:"note"`
 }
 
 // BankFilter obmedzuje zoznam bankových pohybov.
@@ -259,6 +267,11 @@ type Store interface {
 	// Nastavenia programu spoločné pre všetky firmy (napr. legislatíva), hodnota
 	// je JSON. GetSetting vráti ErrNotFound, ak kľúč ešte nie je uložený.
 	GetSetting(ctx context.Context, key string) (string, error)
+
+	// Peňažný denník: ručné rozpisy pohybov (bez rozpisu navrhne Fiškus).
+	ListJournalOverrides(ctx context.Context, companyID int64) (map[string]JournalOverride, error)
+	SaveJournalOverride(ctx context.Context, companyID int64, o JournalOverride) error
+	DeleteJournalOverride(ctx context.Context, companyID int64, key string) error // ErrNotFound, ak nie je
 	SetSetting(ctx context.Context, key, value string) error
 
 	// ---- používatelia a prístupy ----

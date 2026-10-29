@@ -74,7 +74,8 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] MCP: OAuth 2.1 pre vzdialených klientov (Claude na webe a v mobile): metadáta RFC 9728/8414, registrácia RFC 7591 bez stavu, PKCE, súhlas v rozhraní, obnovovacie tokeny s výmenou a odhalením opakovaného použitia
 
 ## Etapa 2 — účtovníctvo
-- [ ] Jednoduché účtovníctvo (peňažný denník)
+- [x] Peňažný denník (opatrenie MF SR č. MF/27076/2007-74, § 4): pohyby z bankových výpisov a pokladne, stĺpce c, d1–d3, e1–e6, f, g; úhrady spárovaných faktúr rozpíše Fiškus (základ podľa druhu plnenia / druhu výdavku, DPH zvlášť, pomerne pri čiastočnej úhrade), ostatné pohyby ručne s rýchlymi voľbami; súčty stĺpcov a rozdiel príjmov a výdavkov; export; MCP `money_journal`
+- [ ] Jednoduché účtovníctvo ďalej: počiatočné stavy pokladnice a účtov, kniha pohľadávok a záväzkov, uzávierkové operácie, Výkaz o príjmoch a výdavkoch a Výkaz o majetku a záväzkoch, podklady pre daňové priznanie typu B
 - [ ] Číselníky účtovníctva: rámcová účtová osnova, účtový rozvrh firmy, predkontácie, strediská, zákazky
 - [ ] Podvojné účtovníctvo: denník, hlavná kniha, automatické účtovanie podľa predkontácií
 - [ ] Účtovné obdobia, uzávierky, výkazy, uloženie závierky do RÚZ

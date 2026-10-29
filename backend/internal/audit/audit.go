@@ -32,6 +32,7 @@ const (
 	CatTaxes     Category = "taxes"     // priznanie k DPH, kontrolný výkaz
 	CatBank      Category = "bank"      // import výpisov a párovanie úhrad
 	CatCash      Category = "cash"      // pokladňa
+	CatLedger    Category = "ledger"    // účtovníctvo: peňažný denník
 	CatAI        Category = "ai"        // volania AI asistentov cez MCP a API kľúče
 )
 
@@ -50,6 +51,7 @@ var Categories = []struct {
 	{CatAuth, "Prihlásenia"},
 	{CatBank, "Banka"},
 	{CatCash, "Pokladňa"},
+	{CatLedger, "Účtovníctvo"},
 	{CatAI, "AI asistent (MCP)"},
 	{CatTaxes, "Dane"},
 	{CatBackups, "Zálohy"},

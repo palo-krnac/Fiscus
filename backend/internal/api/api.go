@@ -209,6 +209,9 @@ func (s *Server) Handler() http.Handler {
 	need("PUT /api/companies/{cid}/contacts/{id}", auth.PermContactsWrite, s.saveContact)
 	need("DELETE /api/companies/{cid}/contacts/{id}", auth.PermContactsWrite, s.deleteContact)
 
+	need("GET /api/companies/{cid}/journal", auth.PermLedgerRead, s.getJournal)
+	need("PUT /api/companies/{cid}/journal/{key}", auth.PermLedgerWrite, s.classifyJournal)
+	need("DELETE /api/companies/{cid}/journal/{key}", auth.PermLedgerWrite, s.resetJournal)
 	need("GET /api/companies/{cid}/users", auth.PermUsersManage, s.listMembers)
 	need("POST /api/companies/{cid}/users", auth.PermUsersManage, s.addMember)
 	need("PUT /api/companies/{cid}/users/{uid}", auth.PermUsersManage, s.setRole)

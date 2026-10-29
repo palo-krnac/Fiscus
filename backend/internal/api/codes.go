@@ -2,6 +2,8 @@ package api
 
 import (
 	"github.com/palo-krnac/fiscus/backend/internal/fx"
+	"github.com/palo-krnac/fiscus/backend/internal/journal"
+	"github.com/palo-krnac/fiscus/backend/internal/purchase"
 	"net/http"
 
 	"github.com/palo-krnac/fiscus/backend/internal/app"
@@ -25,6 +27,8 @@ func (s *Server) codes(w http.ResponseWriter, _ *http.Request) {
 		"vatRows":         vatreturn.Rows,
 		"currencies":      fx.Currencies,
 		"domesticRCs":     invoice.DomesticRCs,
+		"expenseKinds":    purchase.ExpenseKinds,
+		"journalColumns":  journal.Columns,
 	})
 }
 

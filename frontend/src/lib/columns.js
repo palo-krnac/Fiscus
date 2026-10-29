@@ -67,6 +67,7 @@ export const purchaseColumns = [
   t('Prenesenie DPH', (r) => yes(r.reverseCharge), 8),
   t('Bez odpočtu', (r) => yes(r.noDeduction), 8),
   t('Stav', (r) => purchaseStatusOf(r).label, 18),
+  t('Druh výdavku', (r) => codes.expenseKinds?.find((k) => k.code === (r.expense || 'services'))?.label ?? '', 18),
 ]
 
 export const contactColumns = [
@@ -203,6 +204,23 @@ export const cashColumns = [
   t('Stav', (r) => (r.cancelled ? 'stornovaný' : ''), 10),
   t('Poznámka', (r) => r.note, 24),
 ]
+
+/** Peňažný denník: pohyb, platidlo a suma v každom stĺpci (§ 4 ods. 6). */
+export function journalExportColumns(cols = codes.journalColumns ?? []) {
+  const amountIn = (r, code) => r.lines?.find((l) => l.column === code)?.amount ?? ''
+  return [
+    date('Dátum', (r) => r.date),
+    t('Doklad', (r) => r.number, 16),
+    t('Uhrádza', (r) => r.doc?.number ?? '', 14),
+    t('Platidlo', (r) => (r.means === 'cash' ? 'pokladnica' : 'banka'), 10),
+    t('Partner', (r) => r.partner, 24),
+    t('Text', (r) => r.text, 30),
+    money('Suma', (r) => r.amount),
+    ...cols.map((c) => money(c.label, (r) => amountIn(r, c.code))),
+    t('Rozpis', (r) => (!r.lines?.length ? 'nerozpísaný' : r.auto ? 'návrh' : 'ručne'), 11),
+    t('Poznámka', (r) => r.note, 24),
+  ]
+}
 
 export const backupColumns = [
   t('Záloha', (r) => r.name, 32),

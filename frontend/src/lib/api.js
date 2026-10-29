@@ -128,6 +128,9 @@ export const api = {
   audit: (cid, filter) => request('GET', (cid ? `/api/companies/${cid}/audit` : '/api/audit') + query(filter)),
   verifyAudit: () => request('GET', '/api/audit/verify'),
 
+  journal: (cid, year) => request('GET', `/api/companies/${cid}/journal` + query({ year })),
+  classifyJournal: (cid, key, lines, note) => request('PUT', `/api/companies/${cid}/journal/${encodeURIComponent(key)}`, { lines, note }),
+  resetJournal: (cid, key) => request('DELETE', `/api/companies/${cid}/journal/${encodeURIComponent(key)}`),
   cashBook: (cid, year) => request('GET', `/api/companies/${cid}/cash` + query({ year })),
   cash: (cid, id) => request('GET', `/api/companies/${cid}/cash/${id}`),
   cashCandidates: (cid, kind) => request('GET', `/api/companies/${cid}/cash/candidates` + query({ kind })),

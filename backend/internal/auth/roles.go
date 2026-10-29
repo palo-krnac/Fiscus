@@ -58,17 +58,20 @@ const (
 	PermBankRead       Perm = "bank.read"
 	PermBankWrite      Perm = "bank.write" // import výpisov a párovanie úhrad
 	PermCashRead       Perm = "cash.read"
-	PermCashWrite      Perm = "cash.write" // pokladničné doklady
+	PermCashWrite      Perm = "cash.write"   // pokladničné doklady
+	PermLedgerRead     Perm = "ledger.read"  // účtovníctvo: peňažný denník, knihy
+	PermLedgerWrite    Perm = "ledger.write" // rozpis pohybov, uzávierka
 )
 
 var rolePerms = map[Role][]Perm{
 	RoleAdmin: {PermInvoicesRead, PermInvoicesWrite, PermPurchasesRead, PermPurchasesWrite,
-		PermContactsRead, PermContactsWrite, PermSettingsWrite, PermUsersManage, PermAuditRead, PermVATRead, PermBankRead, PermBankWrite, PermCashRead, PermCashWrite},
+		PermContactsRead, PermContactsWrite, PermSettingsWrite, PermUsersManage, PermAuditRead, PermVATRead, PermBankRead, PermBankWrite, PermCashRead, PermCashWrite, PermLedgerRead, PermLedgerWrite},
 	RoleAccountant: {PermInvoicesRead, PermInvoicesWrite, PermPurchasesRead, PermPurchasesWrite,
-		PermContactsRead, PermContactsWrite, PermAuditRead, PermVATRead, PermBankRead, PermBankWrite, PermCashRead, PermCashWrite},
+		PermContactsRead, PermContactsWrite, PermAuditRead, PermVATRead, PermBankRead, PermBankWrite, PermCashRead, PermCashWrite,
+		PermLedgerRead, PermLedgerWrite},
 	RoleInvoicer: {PermInvoicesRead, PermInvoicesWrite, PermContactsRead, PermContactsWrite, PermCashRead, PermCashWrite},
-	RoleClient:   {PermInvoicesRead, PermPurchasesRead, PermContactsRead, PermVATRead, PermBankRead, PermCashRead},
-	RoleViewer:   {PermInvoicesRead, PermPurchasesRead, PermContactsRead, PermVATRead, PermBankRead, PermCashRead},
+	RoleClient:   {PermInvoicesRead, PermPurchasesRead, PermContactsRead, PermVATRead, PermBankRead, PermCashRead, PermLedgerRead},
+	RoleViewer:   {PermInvoicesRead, PermPurchasesRead, PermContactsRead, PermVATRead, PermBankRead, PermCashRead, PermLedgerRead},
 }
 
 // Can vráti true, ak rola má oprávnenie.

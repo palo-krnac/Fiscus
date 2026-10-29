@@ -288,6 +288,42 @@ func (s *Server) moreTools() []Tool {
 			},
 		},
 		{
+			Name: "money_journal", Title: "Peňažný denník",
+			Description: "Peňažný denník jednoduchého účtovníctva za rok: pohyby v pokladnici a na účtoch rozpísané do stĺpcov " +
+				"(d – príjmy a e – výdavky do základu dane, f/g mimo základu dane, c – priebežné položky), súčty a rozdiel príjmov a výdavkov. " +
+				"Nerozpísané pohyby (unclassified_only) treba rozpísať v programe.",
+			Props: map[string]any{"company_id": pCompany, "year": pYear,
+				"unclassified_only": map[string]any{"type": "boolean", "description": "Iba pohyby bez rozpisu"}},
+			Run: func(c *callCtx, args json.RawMessage) (any, error) {
+				var p struct {
+					CompanyID        int64 `json:"company_id"`
+					Year             int   `json:"year"`
+					UnclassifiedOnly bool  `json:"unclassified_only"`
+				}
+				if err := parse(args, &p); err != nil {
+					return nil, err
+				}
+				cid, err := c.company(p.CompanyID, auth.PermLedgerRead)
+				if err != nil {
+					return nil, err
+				}
+				book, err := a.Journal(c.ctx, cid, p.Year)
+				if err != nil {
+					return nil, err
+				}
+				if p.UnclassifiedOnly {
+					open := book.Entries[:0:0]
+					for _, e := range book.Entries {
+						if !e.Classified() {
+							open = append(open, e)
+						}
+					}
+					book.Entries = open
+				}
+				return map[string]any{"year": book.Year, "totals": book.Totals, "columns": book.Columns, "entries": book.Entries}, nil
+			},
+		},
+		{
 			Name: "list_overdue", Title: "Faktúry po splatnosti",
 			Description: "Neuhradené faktúry po splatnosti podľa odberateľov: dni omeškania, doterajšie upomienky a stupeň ďalšej upomienky.",
 			Props:       map[string]any{"company_id": pCompany},

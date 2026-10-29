@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"github.com/palo-krnac/fiscus/backend/internal/catalog"
+	"github.com/palo-krnac/fiscus/backend/internal/journal"
 	"reflect"
 	"sync"
 	"testing"
@@ -838,6 +839,37 @@ func Run(t *testing.T, newStore Factory) {
 		}
 	})
 
+	t.Run("peňažný denník – ručné rozpisy", func(t *testing.T) {
+		s := newStore(t)
+		a, _ := s.CreateCompany(ctx, store.Company{Name: "Alfa"})
+		b, _ := s.CreateCompany(ctx, store.Company{Name: "Beta"})
+		o := store.JournalOverride{Key: "bank:7", Note: "poistné", Lines: []journal.Line{{Column: journal.ExpInsur, Amount: m.MustParse("216.12")}}}
+		if err := s.SaveJournalOverride(ctx, a.ID, o); err != nil {
+			t.Fatal(err)
+		}
+		o.Lines = append(o.Lines, journal.Line{Column: journal.ExpOther, Amount: m.MustParse("1")})
+		o.Note = "zmena"
+		_ = s.SaveJournalOverride(ctx, a.ID, o) // prepíše
+		_ = s.SaveJournalOverride(ctx, a.ID, store.JournalOverride{Key: "cash:3", Lines: []journal.Line{}})
+		got, err := s.ListJournalOverrides(ctx, a.ID)
+		if err != nil || len(got) != 2 || got["bank:7"].Note != "zmena" || len(got["bank:7"].Lines) != 2 ||
+			got["bank:7"].Lines[0].Column != journal.ExpInsur || !got["bank:7"].Lines[0].Amount.Equal(m.MustParse("216.12")) {
+			t.Fatalf("%+v %v", got, err)
+		}
+		if other, _ := s.ListJournalOverrides(ctx, b.ID); len(other) != 0 {
+			t.Fatal("iná firma")
+		}
+		if err := s.DeleteJournalOverride(ctx, b.ID, "bank:7"); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("zmazanie v inej firme")
+		}
+		if err := s.DeleteJournalOverride(ctx, a.ID, "bank:7"); err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := s.ListJournalOverrides(ctx, a.ID); len(got) != 1 {
+			t.Fatal("po zmazaní")
+		}
+	})
+
 	t.Run("API kľúče", func(t *testing.T) {
 		s := newStore(t)
 		k1 := auth.APIKey{UserID: 7, Name: "Claude", Prefix: "fk_ab12", Hash: "h1", ReadOnly: true, CreatedAt: 1000}
@@ -964,7 +996,7 @@ func Run(t *testing.T, newStore Factory) {
 				Number: num, SupplierNumber: "D-" + num, Supplier: invoice.Party{Name: supplier, ICO: "31322832", ICDPH: "SK2020372640"},
 				IssueDate: invoice.MustDate(received), ReceivedDate: invoice.MustDate(received), DueDate: invoice.MustDate(received).AddDays(14),
 				SupplierIBAN: "SK31 1200 0000 1987 4263 7541", ContactID: 3, NoDeduction: true, ReverseCharge: true, SupplyKind: invoice.SupplyGoods,
-				Description: "Pohonné hmoty", Rates: []purchase.RateRow{{Rate: vat.Rate23, Base: m.MustParse("100")}, {Rate: vat.Rate5, Base: m.MustParse("10"), VAT: m.MustParse("0.50")}},
+				Description: "Pohonné hmoty", Expense: purchase.ExpenseStock, Rates: []purchase.RateRow{{Rate: vat.Rate23, Base: m.MustParse("100")}, {Rate: vat.Rate5, Base: m.MustParse("10"), VAT: m.MustParse("0.50")}},
 			}
 			p.Normalize()
 			return p
