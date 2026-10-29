@@ -19,6 +19,7 @@ import SelectButton from 'primevue/selectbutton'
 import { filterContacts, customerFromContact } from '../lib/contacts.js'
 import { fillFromRegistry } from '../lib/registry.js'
 import { formatAmount, formatDate, formatMoney, fromISODate, parseNumber, purchaseStatusOf, toISODate } from '../lib/format.js'
+import { takePurchaseDraft } from '../lib/drafts.js'
 
 const props = defineProps({ id: String })
 const router = useRouter()
@@ -35,6 +36,7 @@ const warnings = ref([])
 const showErrors = ref(false)
 const summary = ref({ base: '0', vat: '0', total: '0' })
 const computedVat = ref([]) // DPH z náhľadu pre riadky bez vyplnenej DPH
+const aiNotes = ref(null) // upozornenia, ak údaje prečítala AI
 
 const canWrite = computed(() => can('purchases.write'))
 const locked = computed(() => p.value?.status === 'paid' || !canWrite.value)
@@ -52,6 +54,14 @@ async function load() {
       data.rates = data.rates.map((r) => ({ vatRate: r.vatRate, base: formatAmount(r.base), vat: formatAmount(r.vat) }))
       p.value = data
       summary.value = data.summary
+    } else if ((aiNotes.value = takePurchaseDraft())) {
+      // koncept prečítaný z dokladu — sumy na úpravu s čiarkou
+      const d = aiNotes.value.purchase
+      d.rates = (d.rates?.length ? d.rates : [{ vatRate: 23, base: '0', vat: '0' }]).map((r) => ({ vatRate: r.vatRate, base: formatAmount(r.base), vat: formatAmount(r.vat) }))
+      d.supplier = { street: '', city: '', zip: '', country: 'SK', ico: '', dic: '', icdph: '', email: '', ...d.supplier }
+      p.value = { description: '', note: '', supplyKind: '', noDeduction: false, reverseCharge: false, ...d, id: undefined, number: '' }
+      dirty.value = true
+      return
     } else {
       const today = toISODate(new Date())
       p.value = {
@@ -269,6 +279,15 @@ const set = (obj, key) => (v) => {
 
     <div class="body">
       <div class="form">
+        <div v-if="aiNotes" class="ai-note">
+          <i class="pi pi-sparkles" />
+          <div>
+            <strong>Údaje prečítala AI z dokladu — pred zaevidovaním ich skontrolujte.</strong>
+            <ul v-if="aiNotes.warnings?.length">
+              <li v-for="w in aiNotes.warnings" :key="w">{{ w }}</li>
+            </ul>
+          </div>
+        </div>
         <fieldset class="form-section">
           <legend>Dodávateľ</legend>
           <div class="form-grid">
@@ -431,6 +450,24 @@ const set = (obj, key) => (v) => {
 </template>
 
 <style scoped>
+.ai-note {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: var(--blue-wash);
+  border-left: 3px solid var(--blue);
+  font-size: var(--fs-sm);
+}
+.ai-note .pi {
+  color: var(--blue);
+  margin-top: 2px;
+}
+.ai-note ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  color: var(--tone-overdue);
+}
 .state {
   padding: 48px 16px;
   text-align: center;

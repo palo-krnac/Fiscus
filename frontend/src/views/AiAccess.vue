@@ -10,7 +10,8 @@ import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
 import { api } from '../lib/api.js'
 import { formatDate } from '../lib/format.js'
-import { can } from '../lib/session.js'
+import { can, isSuperAdmin } from '../lib/session.js'
+import Password from 'primevue/password'
 import { matches, searchTerms } from '../lib/search.js'
 import { apiKeyColumns } from '../lib/columns.js'
 import { claudeCodeCommand, mcpURL, stdioConfig } from '../lib/mcp.js'
@@ -40,6 +41,30 @@ async function load() {
   }
 }
 onMounted(load)
+
+// ---- čítanie dokladov cez Claude API (správca programu) ----
+const ai = ref(null)
+const aiKey = ref('')
+const aiBusy = ref(false)
+onMounted(async () => {
+  try {
+    ai.value = await api.aiSettings()
+  } catch {
+    ai.value = null
+  }
+})
+async function saveAI(clearKey = false) {
+  aiBusy.value = true
+  try {
+    ai.value = await api.saveAISettings({ apiKey: aiKey.value, model: ai.value.model, clearKey })
+    aiKey.value = ''
+    toast.add({ severity: 'success', summary: clearKey ? 'Kľúč zmazaný' : 'Nastavenie uložené', life: 2500 })
+  } catch (e) {
+    toast.add({ severity: 'error', summary: 'Nastavenie sa neuložilo', detail: e.message, life: 6000 })
+  } finally {
+    aiBusy.value = false
+  }
+}
 
 const visible = computed(() => {
   const terms = searchTerms(search.value)
@@ -176,6 +201,25 @@ function revoke(k) {
           </tr>
         </tbody>
       </table>
+    </section>
+
+    <section v-if="isSuperAdmin() && ai" class="card">
+      <h2>Čítanie prijatých faktúr z PDF (Claude API)</h2>
+      <p class="intro">
+        S kľúčom Claude API (console.anthropic.com) Fiškus prečíta PDF alebo fotku prijatej faktúry a predvyplní dodávateľa,
+        čísla, dátumy a rekapituláciu DPH. Doklad sa na spracovanie pošle do Claude API (Anthropic); údaje vždy skontrolujete pred uložením.
+        Kľúč platí pre celý program a nikde sa nezobrazuje.
+      </p>
+      <form class="new" @submit.prevent="saveAI()">
+        <FormField label="Kľúč Claude API" :hint="ai.keySet ? 'Kľúč je uložený — vyplňte iba pri zmene' : 'Začína sk-ant-…'">
+          <Password v-model="aiKey" :feedback="false" toggle-mask size="small" autocomplete="off" :placeholder="ai.keySet ? '••••••••' : ''" />
+        </FormField>
+        <FormField label="Model">
+          <InputText v-model="ai.model" size="small" spellcheck="false" />
+        </FormField>
+        <Button type="submit" label="Uložiť" size="small" :loading="aiBusy" />
+        <Button v-if="ai.keySet" label="Zmazať kľúč" severity="danger" text size="small" :disabled="aiBusy" @click="saveAI(true)" />
+      </form>
     </section>
   </div>
 </template>

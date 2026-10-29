@@ -49,6 +49,7 @@ func main() {
 	demoData := flag.Bool("demo", false, "spustiť s ukážkovými dátami v pamäti")
 	rpoURL := flag.String("rpo-url", registry.DefaultBaseURL, "adresa API Registra právnických osôb; prázdne = vypnuté")
 	ecbURL := flag.String("ecb-url", fx.ECB90, "adresa kurzov ECB (posledných 90 dní); prázdne = vypnuté, kurzy sa zadávajú ručne")
+	claudeURL := flag.String("claude-url", "", "adresa Claude API na čítanie dokladov (prázdne = api.anthropic.com)")
 	restoreFile := flag.String("restore", "", "pred spustením obnoviť databázu zo zálohy (.fbk); pôvodná sa premenuje na .pred-obnovou")
 	licensePath := flag.String("license", "", "súbor s licenčným kľúčom (server, viac firiem); predvolene fiskus.license vedľa databázy")
 	adminEmail := flag.String("admin-email", "", "e-mail prvého správcu (server); heslo v FISKUS_ADMIN_PASSWORD")
@@ -82,6 +83,7 @@ func main() {
 
 	a := app.New(st, caps)
 	a.ECBURL = *ecbURL
+	a.AIBaseURL = *claudeURL
 	a.Backups, a.BackupsOff = backups, backupsOff
 	if err := a.LoadLegal(context.Background()); err != nil {
 		log.Fatalf("legislatíva: %v", err)
