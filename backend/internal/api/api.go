@@ -27,6 +27,8 @@ type Server struct {
 	Web fs.FS // zostavený frontend (index.html, assets/...); môže byť nil
 	// Registry je vyhľadávanie firiem podľa IČO (RPO); nil = vypnuté.
 	Registry registry.Lookup
+	// VAT overuje IČ DPH vo VIES; nil = vypnuté.
+	VAT registry.VATChecker
 
 	// MCP je server pre AI asistentov (POST /mcp); nil = vypnuté.
 	MCP *mcp.Server
@@ -92,6 +94,7 @@ func (s *Server) Handler() http.Handler {
 	open("GET /api/license", s.getLicense)
 	open("POST /api/license", s.setLicense)
 	open("GET /api/registry/{ico}", s.lookupICO)
+	open("GET /api/vies/{vatid}", s.checkVAT)
 	open("GET /api/legal", s.getLegal)
 	open("PUT /api/legal", s.setLegal)
 	open("POST /api/legal/reset", s.resetLegal)

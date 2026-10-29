@@ -269,9 +269,111 @@ func TestChain(t *testing.T) {
 		{"neplatné IČO sa nehľadá ďalej", fixed{err: ErrInvalidICO}, fixed{c: ruz}, "", "", ErrInvalidICO},
 	}
 	for _, tt := range tests {
-		c, err := Chain{tt.primary, tt.second}.ByICO(context.Background(), "31322832")
+		c, err := Chain{Primary: tt.primary, Fallback: tt.second}.ByICO(context.Background(), "31322832")
 		if !errors.Is(err, tt.wantErr) || c.Name != tt.wantName || c.DIC != tt.dic {
 			t.Errorf("%s: %+v %v", tt.name, c, err)
+		}
+	}
+}
+
+type fakeVAT struct{ valid map[string]bool }
+
+func (f fakeVAT) Check(_ context.Context, id string) (VATCheck, error) {
+	return VATCheck{VATID: id, Valid: f.valid[id]}, nil
+}
+
+type slow struct {
+	fixed
+	d time.Duration
+}
+
+func (s slow) ByICO(ctx context.Context, ico string) (Company, error) {
+	select {
+	case <-time.After(s.d):
+	case <-ctx.Done():
+		return Company{}, ctx.Err()
+	}
+	return s.fixed.ByICO(ctx, ico)
+}
+
+func TestChainVATAndSpeed(t *testing.T) {
+	rpo := Company{ICO: "31322832", Name: "Z RPO"}
+	ruz := Company{ICO: "31322832", Name: "Z RÚZ", DIC: "2020372640"}
+	vat := fakeVAT{valid: map[string]bool{"SK2020372640": true}}
+	c, err := Chain{Primary: fixed{c: rpo}, Fallback: fixed{c: ruz}, VAT: vat}.ByICO(context.Background(), "31322832")
+	if err != nil || c.DIC != "2020372640" || c.ICDPH != "SK2020372640" || c.Name != "Z RPO" {
+		t.Fatalf("IČ DPH z VIES: %+v %v", c, err)
+	}
+	// neplatiteľ: VIES neplatné → bez IČ DPH
+	c, _ = Chain{Primary: fixed{c: rpo}, Fallback: fixed{c: ruz}, VAT: fakeVAT{}}.ByICO(context.Background(), "31322832")
+	if c.ICDPH != "" || c.DIC != "2020372640" {
+		t.Fatalf("neplatiteľ: %+v", c)
+	}
+	// pomalý RÚZ nesmie zdržať výsledok z RPO dlhšie ako EnrichWait
+	start := time.Now()
+	c, err = Chain{Primary: fixed{c: rpo}, Fallback: slow{fixed{c: ruz}, time.Second}, EnrichWait: 50 * time.Millisecond}.ByICO(context.Background(), "31322832")
+	if err != nil || c.Name != "Z RPO" || c.DIC != "" || time.Since(start) > 500*time.Millisecond {
+		t.Fatalf("čakanie: %+v %v %s", c, err, time.Since(start))
+	}
+	// RPO a RÚZ bežia súčasne: celkový čas ≈ dlhší z nich, nie súčet
+	start = time.Now()
+	_, _ = Chain{Primary: slow{fixed{c: rpo}, 200 * time.Millisecond}, Fallback: slow{fixed{c: ruz}, 200 * time.Millisecond}}.ByICO(context.Background(), "31322832")
+	if d := time.Since(start); d > 350*time.Millisecond {
+		t.Fatalf("hľadanie nie je súbežné: %s", d)
+	}
+}
+
+func TestVIES(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/rest-api/ms/CZ/vat/27654321":
+			w.Write([]byte(`{"isValid":true,"requestDate":"2026-10-29T18:00:00.000Z","userError":"VALID","name":"BOHEMIA  CONTROL s.r.o.","address":"Purkyňova 99\n61200 Brno"}`))
+		case "/rest-api/ms/SK/vat/2020372640":
+			w.Write([]byte(`{"isValid":false,"userError":"INVALID","name":"---","address":"---"}`))
+		case "/rest-api/ms/DE/vat/123456789":
+			w.Write([]byte(`{"isValid":false,"userError":"MS_UNAVAILABLE"}`))
+		case "/rest-api/ms/EL/vat/094014201":
+			w.Write([]byte(`{"isValid":true,"userError":"VALID","name":"ΕΤΑΙΡΕΙΑ","address":"ΟΔΟΣ 1 10431 ΑΘΗΝΑ"}`))
+		default:
+			w.WriteHeader(500)
+		}
+	}))
+	defer srv.Close()
+	v := NewVIES(srv.URL + "/rest-api/")
+	ctx := context.Background()
+	c, err := v.Check(ctx, "cz 2765 4321")
+	want := VATCheck{VATID: "CZ27654321", Country: "CZ", Valid: true, Name: "BOHEMIA CONTROL s.r.o.", Street: "Purkyňova 99", Zip: "612 00", City: "Brno",
+		Address: "Purkyňova 99\n61200 Brno", Checked: "2026-10-29"}
+	if err != nil || c.Valid != want.Valid || c.Name != want.Name || c.Street != want.Street || c.Zip != want.Zip || c.City != want.City || c.Checked != want.Checked {
+		t.Fatalf("%+v %v", c, err)
+	}
+	if c, err := v.Check(ctx, "SK2020372640"); err != nil || c.Valid || c.Name != "" {
+		t.Fatalf("neplatné: %+v %v", c, err)
+	}
+	if _, err := v.Check(ctx, "DE123456789"); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("štát nedostupný: %v", err)
+	}
+	if c, err := v.Check(ctx, "GR094014201"); err != nil || c.VATID != "GR094014201" || !c.Valid {
+		t.Fatalf("Grécko (EL vo VIES): %+v %v", c, err)
+	}
+	if _, err := v.Check(ctx, "123"); !errors.Is(err, ErrBadVATID) {
+		t.Fatal(err)
+	}
+}
+
+func TestSplitAddress(t *testing.T) {
+	tests := []struct{ in, street, zip, city string }{
+		{"Purkyňova 99\n61200 Brno", "Purkyňova 99", "61200", "Brno"},
+		{"Hauptstr. 5, 10115 Berlin", "Hauptstr. 5", "10115", "Berlin"},
+		{"Ul. Długa 1\n00-950 Warszawa", "Ul. Długa 1", "00-950", "Warszawa"},
+		{"Vlčie hrdlo 1\nRužinov\n821 07 Bratislava", "Vlčie hrdlo 1, Ružinov", "821 07", "Bratislava"},
+		{"len jeden riadok bez PSČ", "len jeden riadok bez PSČ", "", ""},
+		{"---", "", "", ""},
+	}
+	for _, tt := range tests {
+		s, z, c := SplitAddress(tt.in)
+		if s != tt.street || z != tt.zip || c != tt.city {
+			t.Errorf("%q → %q | %q | %q", tt.in, s, z, c)
 		}
 	}
 }

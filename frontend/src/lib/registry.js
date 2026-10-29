@@ -18,7 +18,8 @@ export function validICO(s) {
 /**
  * Doplní údaje z registra do formulára (kontakt, odberateľ, firma).
  * Prepíše názov a adresu; DIČ doplní, ak ho register pozná (Register
- * účtovných závierok). IČ DPH, e-mail a ďalšie polia nechá tak.
+ * účtovných závierok), IČ DPH, ak VIES potvrdí platiteľa DPH. E-mail
+ * a ďalšie polia nechá tak.
  */
 export function fillFromRegistry(target, company) {
   return {
@@ -29,6 +30,29 @@ export function fillFromRegistry(target, company) {
     zip: company.zip,
     city: company.city,
     ...('dic' in target || company.dic ? { dic: company.dic || target.dic || '' } : {}),
+    ...('icdph' in target || company.icdph ? { icdph: company.icdph || target.icdph || '' } : {}),
     ...('country' in target || company.country !== 'SK' ? { country: company.country || 'SK' } : {}),
   }
+}
+
+/**
+ * Doplní údaje z VIES k zadanému IČ DPH. Pri zahraničnom partnerovi prepíše
+ * názov, adresu a krajinu; pri slovenskom iba doplní chýbajúci názov
+ * (adresa je presnejšia z RPO).
+ */
+export function fillFromVIES(target, check) {
+  if (!check?.valid) return target
+  const out = { ...target, icdph: check.vatId }
+  if (check.country !== 'SK') {
+    Object.assign(out, {
+      name: check.name || target.name,
+      street: check.street || target.street,
+      zip: check.zip || target.zip,
+      city: check.city || target.city,
+    })
+    if ('country' in target) out.country = check.country
+  } else if (!target.name && check.name) {
+    out.name = check.name
+  }
+  return out
 }

@@ -13,12 +13,13 @@ import InputNumber from 'primevue/inputnumber'
 import AutoComplete from 'primevue/autocomplete'
 import FormField from '../components/FormField.vue'
 import IcoInput from '../components/IcoInput.vue'
+import VatIdInput from '../components/VatIdInput.vue'
 import { api, ApiError } from '../lib/api.js'
 import { session, can } from '../lib/session.js'
 import { codes, ratesOn, supplyKinds, isForeign, supplyHint } from '../lib/codes.js'
 import SelectButton from 'primevue/selectbutton'
 import { filterContacts, customerFromContact } from '../lib/contacts.js'
-import { fillFromRegistry } from '../lib/registry.js'
+import { fillFromRegistry, fillFromVIES } from '../lib/registry.js'
 import { formatAmount, formatDate, formatMoney, fromISODate, parseNumber, purchaseStatusOf, toISODate } from '../lib/format.js'
 import { takePurchaseDraft } from '../lib/drafts.js'
 import { currencyOptions, isForeignCurrency, rateHint, rateText } from '../lib/fx.js'
@@ -342,7 +343,9 @@ const set = (obj, key) => (v) => {
               <InputText v-else :model-value="p.supplier.ico" disabled size="small" />
             </FormField>
             <FormField v-for="f in supplierFields" :key="f.key" :label="f.label" :span="f.span" :error="fieldError(`supplier.${f.key}`)">
-              <InputText :model-value="p.supplier[f.key]" :disabled="locked" :invalid="!!fieldError(`supplier.${f.key}`)" size="small" @update:model-value="set(p.supplier, f.key)($event)" />
+              <VatIdInput v-if="f.key === 'icdph' && !locked" :model-value="p.supplier.icdph" :invalid="!!fieldError('supplier.icdph')"
+                @update:model-value="set(p.supplier, 'icdph')($event)" @found="(r) => { p.supplier = fillFromVIES(p.supplier, r); changed() }" />
+              <InputText v-else :model-value="p.supplier[f.key]" :disabled="locked" :invalid="!!fieldError(`supplier.${f.key}`)" size="small" @update:model-value="set(p.supplier, f.key)($event)" />
             </FormField>
           </div>
         </fieldset>

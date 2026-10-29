@@ -118,37 +118,96 @@ func (r *RUZ) get(ctx context.Context, path string, out any) error {
 	return nil
 }
 
-// Chain hľadá najprv v RPO, potom v RÚZ. Ak RPO firmu nájde, z RÚZ doplní
-// DIČ (bez čakania na výsledok dlhšie ako pár sekúnd).
+// VATChecker overí IČ DPH (VIES).
+type VATChecker interface {
+	Check(ctx context.Context, vatID string) (VATCheck, error)
+}
+
+// Chain hľadá v RPO a súčasne v RÚZ (záloha a DIČ); z DIČ overí vo VIES,
+// či je firma platiteľ DPH, a doplní IČ DPH. Doplnky čakajú najviac
+// EnrichWait po odpovedi RPO, aby hľadanie nebolo pomalé.
 type Chain struct {
 	Primary, Fallback Lookup
+	VAT               VATChecker
+	EnrichWait        time.Duration // predvolene 2 s
+}
+
+type lookupResult struct {
+	c   Company
+	err error
 }
 
 func (c Chain) ByICO(ctx context.Context, ico string) (Company, error) {
+	if c.Fallback == nil {
+		co, err := c.Primary.ByICO(ctx, ico)
+		if err == nil {
+			co = c.withVAT(ctx, co)
+		}
+		return co, err
+	}
+	sub, cancel := context.WithCancel(ctx)
+	defer cancel()
+	second := make(chan lookupResult, 1)
+	go func() {
+		f, err := c.Fallback.ByICO(sub, ico)
+		if err == nil {
+			f = c.withVAT(sub, f)
+		}
+		second <- lookupResult{f, err}
+	}()
+
 	co, err := c.Primary.ByICO(ctx, ico)
-	if c.Fallback == nil || errors.Is(err, ErrInvalidICO) {
+	if errors.Is(err, ErrInvalidICO) {
 		return co, err
 	}
 	if err == nil {
-		if co.DIC == "" {
-			sub, cancel := context.WithTimeout(ctx, 5*time.Second)
-			defer cancel()
-			if f, ferr := c.Fallback.ByICO(sub, ico); ferr == nil && f.DIC != "" {
-				co.DIC = f.DIC
+		wait := c.EnrichWait
+		if wait <= 0 {
+			wait = 2 * time.Second
+		}
+		select {
+		case f := <-second:
+			if f.err == nil {
+				co.DIC, co.ICDPH = firstNonEmpty(co.DIC, f.c.DIC), firstNonEmpty(co.ICDPH, f.c.ICDPH)
 			}
+		case <-time.After(wait):
+		case <-ctx.Done():
 		}
 		return co, nil
 	}
-	f, ferr := c.Fallback.ByICO(ctx, ico)
+	var f lookupResult
+	select {
+	case f = <-second:
+	case <-ctx.Done():
+		return Company{}, ctx.Err()
+	}
 	switch {
-	case ferr == nil:
-		return f, nil
-	case errors.Is(err, ErrUnavailable) || errors.Is(ferr, ErrUnavailable):
-		// jeden zdroj mlčí — „nenašla sa“ by mohlo byť nepravdivé
-		if errors.Is(err, ErrUnavailable) {
-			return Company{}, err
-		}
-		return Company{}, ferr
+	case f.err == nil:
+		return f.c, nil
+	case errors.Is(err, ErrUnavailable):
+		return Company{}, err // jeden zdroj mlčí — „nenašla sa“ by mohlo byť nepravdivé
+	case errors.Is(f.err, ErrUnavailable):
+		return Company{}, f.err
 	}
 	return Company{}, ErrNotFound
+}
+
+// withVAT doplní IČ DPH, ak VIES potvrdí, že SK+DIČ je platné.
+func (c Chain) withVAT(ctx context.Context, co Company) Company {
+	if c.VAT == nil || co.DIC == "" || co.ICDPH != "" {
+		return co
+	}
+	sub, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	if r, err := c.VAT.Check(sub, "SK"+co.DIC); err == nil && r.Valid {
+		co.ICDPH = "SK" + co.DIC
+	}
+	return co
+}
+
+func firstNonEmpty(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
 }

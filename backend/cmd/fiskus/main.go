@@ -56,6 +56,7 @@ func main() {
 	backupDir := flag.String("backup-dir", "", "priečinok na automatické zálohy (heslo v FISKUS_BACKUP_PASSWORD)")
 	demoData := flag.Bool("demo", false, "spustiť s ukážkovými dátami v pamäti")
 	rpoURL := flag.String("rpo-url", registry.DefaultBaseURL, "adresa API Registra právnických osôb; prázdne = vypnuté")
+	viesURL := flag.String("vies-url", registry.VIESBaseURL, "adresa VIES na overenie IČ DPH; prázdne = vypnuté")
 	ruzURL := flag.String("ruz-url", registry.RUZBaseURL, "adresa API Registra účtovných závierok (záloha RPO, DIČ); prázdne = vypnuté")
 	ecbURL := flag.String("ecb-url", fx.ECB90, "adresa kurzov ECB (posledných 90 dní); prázdne = vypnuté, kurzy sa zadávajú ručne")
 	claudeURL := flag.String("claude-url", "", "adresa Claude API na čítanie dokladov (prázdne = api.anthropic.com)")
@@ -167,11 +168,15 @@ func main() {
 		}
 	}
 
+	var vies registry.VATChecker
+	if *viesURL != "" {
+		vies = registry.NewVIES(*viesURL)
+	}
 	var lookup registry.Lookup
 	if *rpoURL != "" {
 		lookup = registry.NewRPO(*rpoURL)
 		if *ruzURL != "" {
-			lookup = registry.Chain{Primary: lookup, Fallback: registry.NewRUZ(*ruzURL)}
+			lookup = registry.Chain{Primary: lookup, Fallback: registry.NewRUZ(*ruzURL), VAT: vies}
 		}
 	}
 
@@ -179,7 +184,7 @@ func main() {
 	if webFS == nil {
 		log.Print("upozornenie: frontend nie je zostavený, beží iba API")
 	}
-	apiSrv := &api.Server{App: a, Web: webFS, Registry: lookup, MCP: mcp.New(a, version), Version: version}
+	apiSrv := &api.Server{App: a, Web: webFS, Registry: lookup, VAT: vies, MCP: mcp.New(a, version), Version: version}
 	var watchdog *desktop.Watchdog
 	if *appMode {
 		watchdog = desktop.NewWatchdog()

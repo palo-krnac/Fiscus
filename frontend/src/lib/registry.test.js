@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fillFromRegistry, normalizeICO, validICO } from './registry.js'
+import { fillFromRegistry, fillFromVIES, normalizeICO, validICO } from './registry.js'
 
 describe('validICO (rovnaký algoritmus ako backend)', () => {
   it.each([
@@ -32,5 +32,26 @@ describe('fillFromRegistry', () => {
 
   it('formulár firmy bez krajiny nedostane pole country', () => {
     expect('country' in fillFromRegistry({ name: '' }, reg)).toBe(false)
+  })
+})
+
+describe('fillFromVIES', () => {
+  const cz = { vatId: 'CZ27654321', country: 'CZ', valid: true, name: 'Bohemia Control s.r.o.', street: 'Purkyňova 99', zip: '61200', city: 'Brno' }
+  it('zahraničný partner: názov, adresa, krajina', () => {
+    expect(fillFromVIES({ name: '', street: '', zip: '', city: '', country: 'SK', icdph: 'cz27654321', email: 'a@b.cz' }, cz)).toEqual({
+      name: 'Bohemia Control s.r.o.', street: 'Purkyňova 99', zip: '61200', city: 'Brno', country: 'CZ', icdph: 'CZ27654321', email: 'a@b.cz',
+    })
+  })
+  it('slovenský: adresu nemení, doplní iba chýbajúci názov', () => {
+    const sk = { vatId: 'SK2020372640', country: 'SK', valid: true, name: 'SLOVNAFT, a.s.', street: 'X', city: 'Y' }
+    expect(fillFromVIES({ name: 'Slovnaft', street: 'Vlčie hrdlo 1', icdph: 'sk 2020372640' }, sk)).toEqual({ name: 'Slovnaft', street: 'Vlčie hrdlo 1', icdph: 'SK2020372640' })
+    expect(fillFromVIES({ name: '' }, sk).name).toBe('SLOVNAFT, a.s.')
+  })
+  it('neplatné IČ DPH nič nemení', () => {
+    const t = { name: 'A' }
+    expect(fillFromVIES(t, { valid: false })).toBe(t)
+  })
+  it('IČ DPH z registra (VIES potvrdil platiteľa)', () => {
+    expect(fillFromRegistry({ name: '', icdph: '' }, { ico: '1', name: 'A', street: '', zip: '', city: '', icdph: 'SK2020372640' }).icdph).toBe('SK2020372640')
   })
 })

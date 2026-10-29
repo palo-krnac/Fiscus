@@ -12,9 +12,10 @@ import IconField from 'primevue/iconfield'
 import InputIcon from 'primevue/inputicon'
 import FormField from '../components/FormField.vue'
 import IcoInput from '../components/IcoInput.vue'
+import VatIdInput from '../components/VatIdInput.vue'
 import Select from 'primevue/select'
 import { countries } from '../lib/codes.js'
-import { fillFromRegistry } from '../lib/registry.js'
+import { fillFromRegistry, fillFromVIES } from '../lib/registry.js'
 import { api, ApiError } from '../lib/api.js'
 import { session, can } from '../lib/session.js'
 import { fiskusGridTheme, skGridLocale, gridRows } from '../lib/grid.js'
@@ -228,6 +229,7 @@ onBeforeUnmount(() => {
               size="small"
               :invalid="!!errors.country"
             />
+            <VatIdInput v-else-if="f.key === 'icdph'" v-model="form.icdph" :invalid="!!errors.icdph" @found="(c) => (form = fillFromVIES(form, c))" />
             <InputText v-else v-model="form[f.key]" size="small" :invalid="!!errors[f.key]" :inputmode="f.inputmode" :autocomplete="f.autocomplete" />
           </FormField>
           <FormField label="Vlastná splatnosť" :span="2" :error="errors.dueDays" :hint="`Prázdne = predvolená (${session.company?.defaultDueDays || 14} dní)`">
