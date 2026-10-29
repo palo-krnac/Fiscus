@@ -28,6 +28,21 @@ jobs:
       - name: Testy so skutočnou SQLite
         run: go test -race -tags sqlite ./...
 
+  windows:
+    name: Go – Windows (ikona, aplikácia)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+      - run: go vet ./internal/tray/ ./internal/desktop/ ./cmd/fiskus-mcp/
+      # veľkosti štruktúr Win32 a spúšťač aplikácie na skutočnom Windows
+      - run: go test ./internal/tray/ ./internal/desktop/ ./cmd/fiskus-mcp/
+
   frontend:
     name: Frontend – testy a build
     runs-on: ubuntu-latest

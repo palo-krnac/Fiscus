@@ -94,6 +94,9 @@ type Watchdog struct {
 	Idle  time.Duration
 	Start time.Duration
 	Now   func() time.Time
+	// Resident: program má ikonu v oblasti oznámení — po zatvorení okna
+	// beží ďalej a ukončí sa iba cez Ukončiť (ikona alebo menu).
+	Resident bool
 
 	mu     sync.Mutex
 	last   time.Time
@@ -138,6 +141,9 @@ func (w *Watchdog) Quit() {
 // Expired vráti true, ak sa okno dlho neozvalo.
 func (w *Watchdog) Expired() bool {
 	w.init()
+	if w.Resident {
+		return false
+	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	limit := w.Idle

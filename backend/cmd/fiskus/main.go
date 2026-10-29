@@ -22,6 +22,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -36,6 +37,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/registry"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 	"github.com/palo-krnac/fiscus/backend/internal/store/memstore"
+	"github.com/palo-krnac/fiscus/backend/internal/tray"
 	"github.com/palo-krnac/fiscus/backend/internal/web"
 )
 
@@ -201,6 +203,18 @@ func main() {
 			log.Fatal(err)
 		}
 	}()
+	if *appMode && tray.Supported() {
+		// ikona vpravo dole: program beží, verzia, otvoriť a ukončiť
+		name := "Fiškus " + strings.TrimPrefix(version, "v")
+		stopTray, err := tray.Run(tray.Menu{Title: name, Tooltip: name + " – beží",
+			Open: func() { _ = desktop.Open("http://" + *addr) }, Quit: watchdog.Quit})
+		if err != nil {
+			log.Printf("ikona v oblasti oznámení: %v", err)
+		} else {
+			watchdog.Resident = true
+			defer stopTray()
+		}
+	}
 	if *appMode && *openBrowser {
 		if err := desktop.Open("http://" + *addr); err != nil {
 			log.Printf("prehliadač sa neotvoril (%v) — otvorte http://%s", err, *addr)

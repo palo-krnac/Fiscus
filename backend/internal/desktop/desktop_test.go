@@ -93,6 +93,13 @@ func TestWatchdog(t *testing.T) {
 	if !w2.Expired() {
 		t.Fatal("bez okna po štarte")
 	}
+	// s ikonou v oblasti oznámení program po zatvorení okna beží ďalej
+	w4 := &Watchdog{Idle: time.Minute, Start: time.Minute, Now: func() time.Time { return now }, Resident: true}
+	w4.init()
+	now = now.Add(time.Hour)
+	if w4.Expired() {
+		t.Fatal("rezidentný program sa nemá ukončiť sám")
+	}
 	// Quit ukončí čakanie
 	w3 := NewWatchdog()
 	w3.Quit()
