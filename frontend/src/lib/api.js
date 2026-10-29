@@ -214,6 +214,10 @@ export const api = {
   saveRate: (r) => request('PUT', '/api/rates', r),
   updateRates: () => request('POST', '/api/rates/update'),
   deleteRate: (currency, date) => request('DELETE', `/api/rates/${currency}/${date}`),
+  aiSettings: () => request('GET', '/api/ai/settings'),
+  saveAISettings: (s) => request('PUT', '/api/ai/settings', s),
+  // PDF alebo fotka prijatej faktúry → koncept na kontrolu (Claude API)
+  extractPurchase: (cid, file) => request('POST', `/api/companies/${cid}/purchases/extract${query({ name: file.name })}`, file),
   legal: () => request('GET', '/api/legal'),
   saveLegal: (p) => request('PUT', '/api/legal', p),
   resetLegal: () => request('POST', '/api/legal/reset'),

@@ -60,6 +60,8 @@ func (s *Server) Handler() http.Handler {
 	open("GET /api/me/keys", s.listKeys)
 	open("POST /api/me/keys", s.createKey)
 	open("DELETE /api/me/keys/{id}", s.revokeKey)
+	open("GET /api/ai/settings", s.getAISettings)
+	open("PUT /api/ai/settings", s.putAISettings)
 	public("POST /api/auth/login", s.login)
 	open("POST /api/auth/logout", s.logout)
 	open("POST /api/auth/password", s.changePassword)
@@ -137,6 +139,7 @@ func (s *Server) Handler() http.Handler {
 	need("GET /api/companies/{cid}/items", auth.PermInvoicesRead, s.listItems)
 	need("POST /api/companies/{cid}/items", auth.PermInvoicesWrite, s.saveItem)
 	need("POST /api/companies/{cid}/items/import", auth.PermInvoicesWrite, s.importItems)
+	need("POST /api/companies/{cid}/purchases/extract", auth.PermPurchasesWrite, s.extractPurchase)
 	need("PUT /api/companies/{cid}/items/{id}", auth.PermInvoicesWrite, s.saveItem)
 	need("DELETE /api/companies/{cid}/items/{id}", auth.PermInvoicesWrite, s.deleteItem)
 

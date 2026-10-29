@@ -15,8 +15,37 @@ import { fiskusGridTheme, skGridLocale, gridRows } from '../lib/grid.js'
 import { matches, searchTerms } from '../lib/search.js'
 import { purchaseColumns } from '../lib/columns.js'
 import ExportButton from '../components/ExportButton.vue'
+import { useToast } from 'primevue/usetoast'
+import { setPurchaseDraft } from '../lib/drafts.js'
 
 const router = useRouter()
+const toast = useToast()
+
+// ---- doklad z PDF alebo fotky (Claude API) ----
+const aiReady = ref(false)
+const reading = ref(false)
+const pdfInput = ref(null)
+onMounted(async () => {
+  try {
+    aiReady.value = (await api.aiSettings()).keySet
+  } catch {
+    aiReady.value = false
+  }
+})
+async function readDocument(e) {
+  const file = e.target.files?.[0]
+  e.target.value = ''
+  if (!file) return
+  reading.value = true
+  try {
+    setPurchaseDraft(await api.extractPurchase(session.companyId, file))
+    router.push('/prijate/nova')
+  } catch (err) {
+    toast.add({ severity: 'error', summary: 'Doklad sa nepodarilo prečítať', detail: err.message, life: 8000 })
+  } finally {
+    reading.value = false
+  }
+}
 const thisYear = new Date().getFullYear()
 const years = [thisYear, thisYear - 1, thisYear - 2].map((y) => ({ label: String(y), value: y }))
 const year = ref(thisYear)
@@ -141,6 +170,12 @@ onBeforeUnmount(() => {
       <h1>Prijaté faktúry</h1>
       <Select v-model="year" :options="years" option-label="label" option-value="value" size="small" aria-label="Rok" />
       <div class="spacer" />
+      <template v-if="can('purchases.write')">
+        <input ref="pdfInput" type="file" accept="application/pdf,image/png,image/jpeg,image/webp" hidden @change="readDocument" />
+        <Button icon="pi pi-sparkles" label="Z PDF" aria-label="Načítať z PDF" class="ai-btn" severity="secondary" outlined size="small" :loading="reading" :disabled="!aiReady"
+          v-tooltip.bottom="aiReady ? 'Prečítať PDF alebo fotku faktúry cez Claude (AI) — údaje skontrolujete pred uložením' : 'Čítanie dokladov zapne správca v časti Prístup pre AI'"
+          @click="pdfInput.click()" />
+      </template>
       <Button v-if="can('purchases.write')" size="small" @click="router.push('/prijate/nova')">
         <i class="pi pi-plus" /><span>Nová prijatá faktúra</span><kbd class="hint">N</kbd>
       </Button>
@@ -303,6 +338,11 @@ onBeforeUnmount(() => {
 .error {
   color: var(--tone-overdue);
   margin: 0;
+}
+@media (max-width: 760px) {
+  .head :deep(.ai-btn .p-button-label) {
+    display: none;
+  }
 }
 @media (max-width: 760px) {
   .page {

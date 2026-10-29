@@ -46,6 +46,8 @@ type App struct {
 	// ECBURL je adresa kurzov ECB ("" = nesťahovať); FetchRates ju v testoch nahradí.
 	ECBURL     string
 	FetchRates func(ctx context.Context, url string) ([]fx.Rate, error)
+	// AIBaseURL je adresa Claude API ("" = api.anthropic.com; v testoch falošný server).
+	AIBaseURL string
 	// Mailer posiela e-maily (nil = SMTP podľa nastavenia firmy).
 	Mailer  mail.Sender
 	lic     atomic.Pointer[license.License]
