@@ -57,7 +57,7 @@ func TestAdvanceAPI(t *testing.T) {
 	if len(f.Advance.Deductions) != 2 || f.Summary.Total != "0.00" {
 		t.Fatalf("dve zálohy: %+v", f)
 	}
-	e.do("POST", fmt.Sprintf("%s/%d/advances/%d", base, f.ID, p2.ID), nil, 422, nil) // už je vo vyúčtovaní
+	e.do("POST", fmt.Sprintf("%s/%d/advances/%d", base, f.ID, p2.ID), nil, 422, nil)  // už je vo vyúčtovaní
 	e.do("DELETE", fmt.Sprintf("%s/%d/advances/%d", base, f.ID, p.ID), nil, 422, nil) // pôvodná záloha
 	e.do("DELETE", fmt.Sprintf("%s/%d/advances/%d", base, f.ID, p2.ID), nil, 200, &f)
 	if len(f.Advance.Deductions) != 1 {
