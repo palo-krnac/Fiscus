@@ -12,6 +12,8 @@ import { api } from '../lib/api.js'
 import { codes } from '../lib/codes.js'
 import { session } from '../lib/session.js'
 import { actionLabel, channelLabel, diffFields, isAlert } from '../lib/audit.js'
+import { auditColumns } from '../lib/columns.js'
+import ExportButton from '../components/ExportButton.vue'
 
 const PAGE = 100
 const toast = useToast()
@@ -79,6 +81,19 @@ watch(
 )
 onMounted(() => load())
 
+// export: všetky záznamy podľa filtra, nielen načítaná strana
+const exportColumns = computed(() => auditColumns(companyName))
+async function exportRows() {
+  const cid = filter.value.scope === 'company' ? session.companyId : 0
+  const out = []
+  for (;;) {
+    const res = await api.audit(cid, { ...params(out.length), limit: 500 })
+    out.push(...res.entries)
+    if (!res.entries.length || out.length >= res.total || out.length >= 100000) break
+  }
+  return out
+}
+
 function toggle(e) {
   open.value = open.value === e.id ? null : e.id
 }
@@ -106,6 +121,7 @@ function reset() {
         <i class="pi" :class="verify.ok ? 'pi-verified' : 'pi-exclamation-triangle'" />
         {{ verify.ok ? `Reťazec neporušený (${verify.entries})` : verify.error }}
       </span>
+      <ExportButton name="Audit" :columns="exportColumns" :rows="exportRows" />
       <Button
         v-if="superAdmin"
         label="Overiť celistvosť"
@@ -119,7 +135,7 @@ function reset() {
     </header>
 
     <div class="filters">
-      <Select v-if="superAdmin && session.caps.multiCompany" v-model="filter.scope" :options="scopes" option-label="label" option-value="value" size="small" class="scope" aria-label="Firma" />
+      <Select v-if="superAdmin && session.caps.mode === 'server'" v-model="filter.scope" :options="scopes" option-label="label" option-value="value" size="small" class="scope" aria-label="Firma" />
       <Select v-model="filter.category" :options="categories" option-label="label" option-value="code" placeholder="Všetky kategórie" show-clear size="small" class="cat" aria-label="Kategória" />
       <label class="date"><span>od</span><InputText v-model="filter.from" type="date" size="small" aria-label="Od dátumu" /></label>
       <label class="date"><span>do</span><InputText v-model="filter.to" type="date" size="small" aria-label="Do dátumu" /></label>

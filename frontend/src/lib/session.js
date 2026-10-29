@@ -20,6 +20,11 @@ export const session = reactive({
   },
 })
 
+/** Je prihlásený správca inštalácie (v desktopovej verzii vždy)? */
+export function isSuperAdmin() {
+  return !!session.me?.user?.superAdmin
+}
+
 /** Má prihlásený používateľ v aktuálnej firme právo? */
 export function can(perm) {
   return hasPerm(session.me, session.companyId, perm)

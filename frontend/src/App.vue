@@ -5,7 +5,7 @@ import Select from 'primevue/select'
 import Toast from 'primevue/toast'
 import ConfirmDialog from 'primevue/confirmdialog'
 import { modules } from './router.js'
-import { session, loadSession, selectCompany, can } from './lib/session.js'
+import { session, loadSession, selectCompany, can, isSuperAdmin } from './lib/session.js'
 import { visibleModules } from './lib/access.js'
 import Login from './views/Login.vue'
 import UserMenu from './components/UserMenu.vue'
@@ -17,9 +17,18 @@ onMounted(loadSession)
 watch(() => route.path, () => (navOpen.value = false))
 
 const menu = computed(() =>
-  visibleModules(modules, (i) => can(i.perm) && (!i.serverOnly || session.caps.mode === 'server')),
+  visibleModules(
+    modules,
+    (i) => (i.superAdmin ? isSuperAdmin() : can(i.perm)) && (!i.serverOnly || session.caps.mode === 'server'),
+  ),
 )
-const allowed = computed(() => can(route.meta.perm))
+const allowed = computed(() => (route.meta.superAdmin ? isSuperAdmin() : can(route.meta.perm)))
+// bez firmy sa dá otvoriť iba založenie firmy
+const showView = computed(() => session.ready && allowed.value && (session.companyId || route.meta.noCompany))
+const edition = computed(() => {
+  if (session.caps.mode !== 'server') return 'Desktop · zadarmo'
+  return session.caps.plan === 'multi' ? 'Server · viac firiem' : 'Server · jedna firma zadarmo'
+})
 const isActive = (path) => route.path === path || route.path.startsWith(path + '/')
 </script>
 
@@ -35,13 +44,13 @@ const isActive = (path) => route.path === path || route.path.startsWith(path + '
   </template>
   <div v-else class="shell" :class="{ 'nav-open': navOpen }">
     <aside class="sidebar" aria-label="Moduly">
-      <RouterLink to="/faktury" class="brand" aria-label="Fiskus – úvod">
+      <RouterLink to="/faktury" class="brand" aria-label="Fiškus – úvod">
         <svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true">
           <rect width="32" height="32" rx="7" fill="#f6f7f9" />
           <path d="M10 8h13v3.4h-9v3.6h8v3.3h-8V24h-4z" fill="#1f3a5c" />
           <rect x="18" y="20.5" width="5" height="3.5" fill="#d9a441" />
         </svg>
-        <span>Fiskus</span>
+        <span>Fiškus</span>
       </RouterLink>
 
       <nav>
@@ -61,7 +70,7 @@ const isActive = (path) => route.path === path || route.path.startsWith(path + '
       </nav>
 
       <footer class="edition">
-        {{ session.caps.mode === 'server' ? 'Serverová verzia' : 'Desktopová verzia' }}
+        {{ edition }}
       </footer>
     </aside>
 
@@ -75,7 +84,7 @@ const isActive = (path) => route.path === path || route.path.startsWith(path + '
 
         <div class="company">
           <Select
-            v-if="session.caps.multiCompany && session.companies.length > 1"
+            v-if="session.companies.length > 1"
             :model-value="session.companyId"
             :options="session.companies"
             option-label="name"
@@ -97,15 +106,19 @@ const isActive = (path) => route.path === path || route.path.startsWith(path + '
           <i class="pi pi-exclamation-triangle" />
           <p>{{ session.error }}</p>
         </div>
+        <RouterView v-else-if="showView" :key="session.companyId ?? 0" />
         <div v-else-if="session.ready && !session.companyId" class="fatal muted-box">
           <i class="pi pi-building" />
-          <p>Nemáte prístup do žiadnej firmy. Požiadajte správcu, aby vás pridal.</p>
+          <template v-if="isSuperAdmin()">
+            <p>Zatiaľ tu nie je žiadna firma.</p>
+            <RouterLink to="/firmy">Založiť firmu</RouterLink>
+          </template>
+          <p v-else>Nemáte prístup do žiadnej firmy. Požiadajte správcu, aby vás pridal.</p>
         </div>
         <div v-else-if="session.ready && !allowed" class="fatal muted-box">
           <i class="pi pi-lock" />
           <p>Na túto časť nemáte oprávnenie.</p>
         </div>
-        <RouterView v-else-if="session.ready && session.companyId" :key="session.companyId" />
       </main>
     </div>
 

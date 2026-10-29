@@ -41,9 +41,12 @@ var schemaV5 string
 //go:embed schema_v6.sql
 var schemaV6 string
 
+//go:embed schema_v7.sql
+var schemaV7 string
+
 // migrations[i] prevedie schému z verzie i na i+1. Existujúce migrácie sa
 // nikdy nemenia — zmena schémy je vždy nová migrácia na konci.
-var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4, schemaV5, schemaV6}
+var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4, schemaV5, schemaV6, schemaV7}
 
 // Store je SQLite úložisko.
 type Store struct{ db *sql.DB }
@@ -97,13 +100,13 @@ func (s *Store) Close() error { return s.db.Close() }
 
 // ---- firmy ----
 
-const companyCols = "id, name, street, city, zip, ico, dic, icdph, iban, email, phone, vat_payer, default_due_days, units_json, number_formats_json"
+const companyCols = "id, name, street, city, zip, ico, dic, icdph, iban, email, phone, vat_payer, default_due_days, units_json, number_formats_json, tax_office, vat_period"
 
 func scanCompany(r interface{ Scan(...any) error }) (store.Company, error) {
 	var c store.Company
 	var units, formats string
 	err := r.Scan(&c.ID, &c.Name, &c.Street, &c.City, &c.Zip, &c.ICO, &c.DIC, &c.ICDPH, &c.IBAN,
-		&c.Email, &c.Phone, &c.VATPayer, &c.DefaultDueDays, &units, &formats)
+		&c.Email, &c.Phone, &c.VATPayer, &c.DefaultDueDays, &units, &formats, &c.TaxOffice, &c.VATPeriod)
 	if err != nil {
 		return c, err
 	}
@@ -170,10 +173,10 @@ func (s *Store) CreateCompany(ctx context.Context, c store.Company) (store.Compa
 	}
 	res, err := s.db.ExecContext(ctx,
 		`INSERT INTO companies (name, street, city, zip, ico, dic, icdph, iban, email, phone, vat_payer, default_due_days,
-		 units_json, number_formats_json)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 units_json, number_formats_json, tax_office, vat_period)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		c.Name, c.Street, c.City, c.Zip, c.ICO, c.DIC, c.ICDPH, c.IBAN, c.Email, c.Phone, c.VATPayer, c.DefaultDueDays,
-		units, formats)
+		units, formats, c.TaxOffice, c.VATPeriod)
 	if err != nil {
 		return c, err
 	}
@@ -196,10 +199,10 @@ func (s *Store) UpdateCompany(ctx context.Context, c store.Company) error {
 	}
 	res, err := s.db.ExecContext(ctx, `UPDATE companies SET name = ?, street = ?, city = ?, zip = ?,
 		ico = ?, dic = ?, icdph = ?, iban = ?, email = ?, phone = ?, vat_payer = ?, default_due_days = ?,
-		units_json = ?, number_formats_json = ?
+		units_json = ?, number_formats_json = ?, tax_office = ?, vat_period = ?
 		WHERE id = ?`,
 		c.Name, c.Street, c.City, c.Zip, c.ICO, c.DIC, c.ICDPH, c.IBAN, c.Email, c.Phone, c.VATPayer, c.DefaultDueDays,
-		units, formats, c.ID)
+		units, formats, c.TaxOffice, c.VATPeriod, c.ID)
 	if err != nil {
 		return err
 	}

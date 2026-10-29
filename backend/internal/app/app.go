@@ -4,14 +4,18 @@ package app
 
 import (
 	"context"
+	"crypto/ed25519"
 	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	"github.com/palo-krnac/fiscus/backend/internal/audit"
 	"github.com/palo-krnac/fiscus/backend/internal/auth"
 	"github.com/palo-krnac/fiscus/backend/internal/edition"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
+	"github.com/palo-krnac/fiscus/backend/internal/license"
 	"github.com/palo-krnac/fiscus/backend/internal/party"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 )
@@ -22,8 +26,15 @@ var ErrCompanyLimit = errors.New("desktopová verzia podporuje iba jednu firmu �
 // App je aplikačná služba.
 type App struct {
 	Store store.Store
-	Caps  edition.Capabilities
-	Today func() invoice.Date // dá sa podvrhnúť v testoch
+	Caps  edition.Capabilities // režim bez licencie; aktuálne schopnosti vracia Capabilities()
+	Today func() invoice.Date  // dá sa podvrhnúť v testoch
+	Now   func() time.Time     // čas pre licenciu; nil = time.Now
+
+	// LicenseKeys sú verejné kľúče na overenie licencie; nil = license.TrustedKeys.
+	LicenseKeys []ed25519.PublicKey
+	// SaveLicense trvalo uloží licenčný kľúč (nastaví main); nil = iba v pamäti.
+	SaveLicense func(key string) error
+	lic         atomic.Pointer[license.License]
 }
 
 // New vytvorí službu.
@@ -37,8 +48,8 @@ func (a *App) CreateCompany(ctx context.Context, c store.Company) (store.Company
 	if err != nil {
 		return store.Company{}, err
 	}
-	if !a.Caps.CanAddCompany(n) {
-		return store.Company{}, ErrCompanyLimit
+	if !a.Capabilities().CanAddCompany(n) {
+		return store.Company{}, a.companyLimitError()
 	}
 	normalizeCompany(&c)
 	if err := validateCompany(c); err != nil {
@@ -83,6 +94,10 @@ func normalizeCompany(c *store.Company) {
 	c.IBAN = formatIBAN(c.IBAN)
 	if c.DefaultDueDays == 0 {
 		c.DefaultDueDays = defaultDueDays
+	}
+	c.TaxOffice = strings.TrimSpace(c.TaxOffice)
+	if c.VATPeriod == "" {
+		c.VATPeriod = store.VATPeriodMonth
 	}
 	// merné jednotky: bez prázdnych a duplicít, v zadanom poradí
 	seen := map[string]bool{}
@@ -130,6 +145,9 @@ func validateCompany(c store.Company) error {
 	add := func(f, m string) { fe = append(fe, invoice.FieldError{Field: f, Message: m}) }
 	if c.Name == "" {
 		add("name", "Zadajte názov firmy")
+	}
+	if c.VATPeriod != store.VATPeriodMonth && c.VATPeriod != store.VATPeriodQuarter {
+		add("vatPeriod", "Zdaňovacie obdobie je mesačné alebo štvrťročné")
 	}
 	if c.ICO != "" && !party.ValidICO(c.ICO) {
 		add("ico", "Neplatné IČO")

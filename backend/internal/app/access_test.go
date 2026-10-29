@@ -31,6 +31,7 @@ func newOffice(t *testing.T) office {
 	caps, _ := edition.For(edition.Server)
 	a := New(memstore.New(), caps)
 	a.Today = func() invoice.Date { return invoice.MustDate("2026-10-29") }
+	unlock(t, a)
 	if ok, err := a.EnsureAdmin(ctx, "sef@kancelaria.sk", "Šéf", "silne-heslo-123"); !ok || err != nil {
 		t.Fatal(err)
 	}

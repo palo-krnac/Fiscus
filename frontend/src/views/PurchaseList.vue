@@ -11,8 +11,10 @@ import SelectButton from 'primevue/selectbutton'
 import { api } from '../lib/api.js'
 import { session, can } from '../lib/session.js'
 import { formatAmount, formatDate, formatMoney, purchaseStatusOf } from '../lib/format.js'
-import { searchKey } from '../lib/contacts.js'
-import { fiskusGridTheme, skGridLocale } from '../lib/grid.js'
+import { fiskusGridTheme, skGridLocale, gridRows } from '../lib/grid.js'
+import { matches, searchTerms } from '../lib/search.js'
+import { purchaseColumns } from '../lib/columns.js'
+import ExportButton from '../components/ExportButton.vue'
 
 const router = useRouter()
 const thisYear = new Date().getFullYear()
@@ -45,12 +47,13 @@ watch(year, load)
 onMounted(load)
 
 const visibleRows = computed(() => {
-  const q = searchKey(search.value)
+  const terms = searchTerms(search.value)
   return rows.value.filter((r) => {
     if (view.value === 'unpaid' && r.status !== 'booked') return false
     if (view.value === 'overdue' && !r.overdue) return false
     if (view.value === 'paid' && r.status !== 'paid') return false
-    return !q || searchKey(`${r.number} ${r.supplierNumber} ${r.supplier.name} ${r.supplier.ico}`).includes(q)
+    const s = r.supplier ?? {}
+    return matches(terms, [r.number, r.supplierNumber, r.variableSymbol, s.name, s.ico, s.icdph, s.city, r.description, r.note, r.summary?.total])
   })
 })
 
@@ -166,8 +169,9 @@ onBeforeUnmount(() => {
       <SelectButton v-model="view" :options="views" option-label="label" option-value="value" :allow-empty="false" size="small" aria-label="Zobraziť" />
       <IconField class="search">
         <InputIcon class="pi pi-search" />
-        <InputText v-model="search" placeholder="Hľadať číslo, dodávateľa, IČO" size="small" aria-label="Hľadať" />
+        <InputText v-model="search" placeholder="Hľadať číslo, dodávateľa, IČO, predmet, sumu" size="small" aria-label="Hľadať" />
       </IconField>
+      <ExportButton :name="`Prijaté faktúry ${year}`" :columns="purchaseColumns" :rows="() => gridRows(gridApi, visibleRows)" />
     </div>
 
     <p v-if="loadError" class="error">{{ loadError }}</p>
@@ -330,7 +334,9 @@ onBeforeUnmount(() => {
     white-space: nowrap;
   }
   .search {
-    width: 100%;
+    flex: 1;
+    width: auto;
+    min-width: 0;
     margin-left: 0;
   }
 }

@@ -1,6 +1,29 @@
-# Fiskus
+# Fiškus
 
 Slovenský účtovný program pre živnostníkov a malé firmy. Beží ako **desktopová aplikácia** (jedna inštalácia, offline, jedna firma) aj ako **webová aplikácia na serveri** (viac firiem, prístup z prehliadača). Obe verzie majú jeden kód aj jeden frontend.
+
+## Edície a ceny
+
+| Edícia | Cena | Pre koho |
+|---|---|---|
+| Desktop | zadarmo | jedna firma, offline na vlastnom počítači |
+| Server – jedna firma | zadarmo | prístup z prehliadača, používatelia a roly |
+| Server – viac firiem | 39 € ročne (Paddle) | účtovné kancelárie a poskytovatelia služieb |
+
+Licencia je podpísaný kľúč `FISKUS1.…` (Ed25519). Program ho overí offline,
+bez spojenia so serverom. Nahrá ho správca inštalácie v časti **Firmy a licencia**,
+prípadne cez súbor `fiskus.license` vedľa databázy alebo premennú `FISKUS_LICENSE`.
+Po vypršaní platí ešte 30 dní na obnovenie. Potom sa nedajú zakladať nové firmy,
+ale existujúce firmy a ich dáta zostávajú prístupné.
+
+Vydanie licencie (po platbe cez Paddle):
+
+```
+go run ./cmd/fiskus-license keygen -out licencia.key        # raz; verejný kľúč pridať do internal/license
+go run ./cmd/fiskus-license sign -key licencia.key -customer "Kancelária s.r.o." -email a@b.sk -id txn_…
+```
+
+Súkromný kľúč `licencia.key` nepatrí do repozitára.
 
 ## Architektúra
 

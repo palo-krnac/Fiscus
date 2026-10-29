@@ -16,6 +16,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/auth"
 	"github.com/palo-krnac/fiscus/backend/internal/edition"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
+	"github.com/palo-krnac/fiscus/backend/internal/license/licensetest"
 	"github.com/palo-krnac/fiscus/backend/internal/registry"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 	"github.com/palo-krnac/fiscus/backend/internal/store/memstore"
@@ -41,11 +42,23 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+// setup spustí server; serverová verzia dostane licenciu pre viac firiem.
 func setup(t *testing.T, mode edition.Mode) *env {
+	return setupLicensed(t, mode, true)
+}
+
+func setupLicensed(t *testing.T, mode edition.Mode, licensed bool) *env {
 	t.Helper()
 	caps, _ := edition.For(mode)
 	a := app.New(memstore.New(), caps)
 	a.Today = func() invoice.Date { return invoice.MustDate("2026-10-29") }
+	if licensed {
+		keys, key := licensetest.Unlimited()
+		a.LicenseKeys = keys
+		if err := a.LoadLicense(key); err != nil {
+			t.Fatal(err)
+		}
+	}
 	c, err := a.CreateCompany(context.Background(), store.Company{Name: "Moja firma", VATPayer: true, ICDPH: "SK2020372640"})
 	if err != nil {
 		t.Fatal(err)

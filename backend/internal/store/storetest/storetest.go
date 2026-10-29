@@ -184,6 +184,7 @@ func Run(t *testing.T, newStore Factory) {
 		c.Name, c.IBAN, c.VATPayer, c.DefaultDueDays, c.Email = "Alfa s.r.o.", "SK31 1200", true, 30, "a@b.sk"
 		c.Units = []string{"ks", "hod", "m²"}
 		c.NumberFormats = map[string]string{"invoice": "{RRRR}/{NNN}", "credit_note": "DB{RRRR}{NNNN}"}
+		c.TaxOffice, c.VATPeriod = "Daňový úrad Banská Bystrica", store.VATPeriodQuarter
 		if err := s.UpdateCompany(ctx, c); err != nil {
 			t.Fatal(err)
 		}

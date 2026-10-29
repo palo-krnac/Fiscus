@@ -43,7 +43,17 @@ type Company struct {
 	// NumberFormats sú formáty číselných radov podľa druhu dokladu
 	// ("invoice", "credit_note", "proforma"); chýbajúci = predvolený.
 	NumberFormats map[string]string `json:"numberFormats"`
+	// TaxOffice je daňový úrad (hlavička priznania k DPH).
+	TaxOffice string `json:"taxOffice"`
+	// VATPeriod je zdaňovacie obdobie DPH: "month" alebo "quarter".
+	VATPeriod string `json:"vatPeriod"`
 }
+
+// Zdaňovacie obdobia DPH.
+const (
+	VATPeriodMonth   = "month"
+	VATPeriodQuarter = "quarter"
+)
 
 // DefaultUnits je predvolený číselník merných jednotiek.
 var DefaultUnits = []string{"ks", "hod", "m", "m²", "m³", "kg", "t", "l", "km", "bal", "súb", "deň", "mes", "paušál"}

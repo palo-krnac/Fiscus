@@ -33,7 +33,7 @@ export async function request(method, path, body, fetchImpl = globalThis.fetch) 
   try {
     res = await fetchImpl(path, init)
   } catch {
-    throw new ApiError(0, 'Server neodpovedá. Skontrolujte, či program Fiskus beží.')
+    throw new ApiError(0, 'Server neodpovedá. Skontrolujte, či program Fiškus beží.')
   }
   const text = await res.text()
   let data = null
@@ -66,6 +66,8 @@ export function query(params = {}) {
 export const api = {
   capabilities: () => request('GET', '/api/capabilities'),
   me: () => request('GET', '/api/me'),
+  license: () => request('GET', '/api/license'),
+  setLicense: (key) => request('POST', '/api/license', { key }),
   login: (email, password) => request('POST', '/api/auth/login', { email, password }),
   logout: () => request('POST', '/api/auth/logout'),
   changePassword: (current, password) => request('POST', '/api/auth/password', { current, password }),
@@ -78,6 +80,23 @@ export const api = {
   /** Audit firmy; cid = 0 → celá inštalácia (iba správca inštalácie). */
   audit: (cid, filter) => request('GET', (cid ? `/api/companies/${cid}/audit` : '/api/audit') + query(filter)),
   verifyAudit: () => request('GET', '/api/audit/verify'),
+
+  vat: (cid, period, excess) => request('GET', `/api/companies/${cid}/vat` + query({ period, excess })),
+  /** XML pre eDane ako Blob (kind: 'dph' | 'kv'). */
+  async vatXML(cid, kind, period, excess, fetchImpl = globalThis.fetch) {
+    const res = await fetchImpl(`/api/companies/${cid}/vat/${kind}.xml` + query({ period, excess }), { credentials: 'same-origin' })
+    if (!res.ok) {
+      let msg = `Chyba servera (${res.status})`
+      try {
+        msg = (await res.json()).error ?? msg
+      } catch {
+        /* telo nie je JSON */
+      }
+      throw new ApiError(res.status, msg)
+    }
+    const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? `${kind}.xml`
+    return { blob: await res.blob(), name }
+  },
 
   codes: () => request('GET', '/api/codes'),
   companies: () => request('GET', '/api/companies'),
