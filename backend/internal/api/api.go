@@ -73,6 +73,9 @@ func (s *Server) Handler() http.Handler {
 	open("GET /api/companies", s.listCompanies)
 	open("POST /api/companies", s.createCompany)
 	need("PUT /api/companies/{cid}", auth.PermSettingsWrite, s.updateCompany)
+	open("GET /api/companies/{cid}/logo", s.getLogo)
+	open("PUT /api/companies/{cid}/logo", s.putLogo)
+	open("DELETE /api/companies/{cid}/logo", s.deleteLogo)
 
 	need("GET /api/companies/{cid}/invoices", auth.PermInvoicesRead, s.listInvoices)
 	need("GET /api/companies/{cid}/invoices/{id}", auth.PermInvoicesRead, s.getInvoice)

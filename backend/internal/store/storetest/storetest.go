@@ -573,6 +573,46 @@ func Run(t *testing.T, newStore Factory) {
 		}
 	})
 
+	t.Run("logo firmy", func(t *testing.T) {
+		s := newStore(t)
+		a, _ := s.CreateCompany(ctx, store.Company{Name: "Alfa"})
+		b, _ := s.CreateCompany(ctx, store.Company{Name: "Beta"})
+		if _, err := s.GetLogo(ctx, a.ID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatalf("bez loga: %v", err)
+		}
+		at := time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC)
+		l := store.Logo{ContentType: "image/png", Data: []byte{0x89, 'P', 'N', 'G', 0, 1, 2}, Updated: at}
+		if err := s.SaveLogo(ctx, a.ID, l); err != nil {
+			t.Fatal(err)
+		}
+		got, err := s.GetLogo(ctx, a.ID)
+		if err != nil || !reflect.DeepEqual(got, l) {
+			t.Fatalf("načítanie: %+v %v", got, err)
+		}
+		if _, err := s.GetLogo(ctx, b.ID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("logo inej firmy")
+		}
+		l2 := store.Logo{ContentType: "image/jpeg", Data: []byte{0xff, 0xd8}, Updated: at.Add(time.Hour)}
+		if err := s.SaveLogo(ctx, a.ID, l2); err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := s.GetLogo(ctx, a.ID); got.ContentType != "image/jpeg" || len(got.Data) != 2 {
+			t.Fatalf("výmena loga: %+v", got)
+		}
+		if err := s.SaveLogo(ctx, 9999, l); !errors.Is(err, store.ErrNotFound) {
+			t.Fatalf("logo neexistujúcej firmy: %v", err)
+		}
+		if err := s.DeleteLogo(ctx, b.ID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("zmazanie neexistujúceho loga")
+		}
+		if err := s.DeleteLogo(ctx, a.ID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.GetLogo(ctx, a.ID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("po zmazaní")
+		}
+	})
+
 	t.Run("API kľúče", func(t *testing.T) {
 		s := newStore(t)
 		k1 := auth.APIKey{UserID: 7, Name: "Claude", Prefix: "fk_ab12", Hash: "h1", ReadOnly: true, CreatedAt: 1000}

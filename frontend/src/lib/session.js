@@ -14,6 +14,7 @@ export const session = reactive({
   companyId: null,
   me: null, // odpoveď /api/me
   needLogin: false, // serverová verzia bez platnej relácie
+  logoVersion: 0, // zvýši sa po zmene loga (obnoví obrázok bez cache)
 
   get company() {
     return this.companies.find((c) => c.id === this.companyId) ?? null

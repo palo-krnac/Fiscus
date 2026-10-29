@@ -188,6 +188,9 @@ export const api = {
   deleteRecurring: (cid, id) => request('DELETE', `/api/companies/${cid}/recurring/${id}`),
   overdue: (cid) => request('GET', `/api/companies/${cid}/overdue`),
   items: (cid) => request('GET', `/api/companies/${cid}/items`),
+  logoURL: (cid, v = 0) => `/api/companies/${cid}/logo?v=${v}`,
+  uploadLogo: (cid, file) => request('PUT', `/api/companies/${cid}/logo`, file),
+  deleteLogo: (cid) => request('DELETE', `/api/companies/${cid}/logo`),
   saveItem: (cid, it) =>
     it.id
       ? request('PUT', `/api/companies/${cid}/items/${it.id}`, it)

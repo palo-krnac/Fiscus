@@ -13,6 +13,7 @@ import IcoInput from '../components/IcoInput.vue'
 import { fillFromRegistry } from '../lib/registry.js'
 import { api, ApiError } from '../lib/api.js'
 import { session, replaceCompany } from '../lib/session.js'
+import CompanyLogo from '../components/CompanyLogo.vue'
 
 const toast = useToast()
 const clone = (c) => ({ ...c, units: [...(c.units ?? [])], numberFormats: { ...(c.numberFormats ?? {}) } })
@@ -53,6 +54,52 @@ const companyFields = [
   { key: 'email', label: 'E-mail', span: 2, autocomplete: 'email' },
   { key: 'phone', label: 'Telefón', span: 2, autocomplete: 'tel' },
 ]
+
+// ---- logo ----
+const logoInput = ref(null)
+const logoBusy = ref(false)
+const hasLogo = ref(false)
+async function checkLogo() {
+  try {
+    const res = await fetch(api.logoURL(session.companyId, session.logoVersion), { method: 'HEAD', credentials: 'same-origin' })
+    hasLogo.value = res.ok
+  } catch {
+    hasLogo.value = false
+  }
+}
+onMounted(checkLogo)
+async function uploadLogo(e) {
+  const file = e.target.files?.[0]
+  e.target.value = ''
+  if (!file) return
+  if (file.size > 512 * 1024) {
+    toast.add({ severity: 'error', summary: 'Logo je príliš veľké', detail: 'Najviac 512 kB — zmenšite obrázok.', life: 5000 })
+    return
+  }
+  logoBusy.value = true
+  try {
+    await api.uploadLogo(session.companyId, file)
+    session.logoVersion++
+    hasLogo.value = true
+    toast.add({ severity: 'success', summary: 'Logo nahrané', life: 2500 })
+  } catch (err) {
+    toast.add({ severity: 'error', summary: 'Logo sa nenahralo', detail: err.message, life: 6000 })
+  } finally {
+    logoBusy.value = false
+  }
+}
+async function removeLogo() {
+  logoBusy.value = true
+  try {
+    await api.deleteLogo(session.companyId)
+    session.logoVersion++
+    hasLogo.value = false
+  } catch (err) {
+    toast.add({ severity: 'error', summary: 'Logo sa neodstránilo', detail: err.message, life: 6000 })
+  } finally {
+    logoBusy.value = false
+  }
+}
 
 async function save() {
   busy.value = true
@@ -101,6 +148,22 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
             <IcoInput v-if="f.key === 'ico'" v-model="form.ico" :invalid="!!errors.ico" @found="(c) => (form = fillFromRegistry(form, c))" />
             <InputText v-else v-model="form[f.key]" size="small" :invalid="!!errors[f.key]" :inputmode="f.inputmode" :autocomplete="f.autocomplete" />
           </FormField>
+        </div>
+      </fieldset>
+
+      <fieldset class="form-section">
+        <legend>Logo na dokladoch</legend>
+        <div class="logo-row">
+          <div class="logo-box">
+            <CompanyLogo height="64px" />
+            <span v-if="!hasLogo" class="logo-empty">bez loga</span>
+          </div>
+          <div class="logo-actions">
+            <input ref="logoInput" type="file" accept="image/png,image/jpeg,image/webp" class="visually-hidden" @change="uploadLogo" />
+            <Button :label="hasLogo ? 'Zmeniť logo' : 'Nahrať logo'" icon="pi pi-upload" severity="secondary" outlined size="small" :loading="logoBusy" @click="logoInput.click()" />
+            <Button v-if="hasLogo" label="Odstrániť" severity="danger" text size="small" :disabled="logoBusy" @click="removeLogo" />
+            <small class="help">PNG, JPEG alebo WebP do 512 kB. Zobrazí sa na faktúre, ponuke, upomienke a pokladničnom doklade.</small>
+          </div>
         </div>
       </fieldset>
 
@@ -192,6 +255,42 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 </template>
 
 <style scoped>
+.logo-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.logo-box {
+  display: grid;
+  place-items: center;
+  min-width: 160px;
+  height: 80px;
+  padding: 8px;
+  background: #fff;
+  border: 1px dashed var(--rule);
+}
+.logo-empty {
+  font-size: var(--fs-sm);
+  color: var(--ink-faint);
+}
+.logo-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  max-width: 460px;
+}
+.logo-actions .help {
+  flex-basis: 100%;
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
 .bar {
   position: sticky;
   top: 0;
