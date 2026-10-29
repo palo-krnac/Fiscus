@@ -17,7 +17,8 @@ import { attention, badgeText, refreshDrafts } from './lib/attention.js'
 const route = useRoute()
 const navOpen = ref(false)
 
-onMounted(loadSession)
+// verejná stránka (odkaz pre zákazníka) reláciu nenačítava
+onMounted(() => !route.meta.public && !location.pathname.startsWith('/ponuka/') && loadSession())
 watch(() => route.path, () => (navOpen.value = false))
 // odznak v menu: koncepty z pravidelnej fakturácie na kontrolu
 watch(
@@ -76,6 +77,10 @@ const isActive = (path) => route.path === path || route.path.startsWith(path + '
   <div v-if="stopped" class="stopped">
     <p><strong>Fiškus je ukončený.</strong> Toto okno môžete zavrieť. Program znova otvoríte ikonou Fiškus.</p>
   </div>
+  <!-- ponuka pre zákazníka cez odkaz: bez prihlásenia a bez menu -->
+  <template v-else-if="route.meta.public">
+    <RouterView />
+  </template>
   <template v-else-if="session.needLogin">
     <Login />
     <Toast position="bottom-right" />

@@ -22,6 +22,7 @@ import Backups from './views/Backups.vue'
 import CashPrint from './views/CashPrint.vue'
 import QuoteList from './views/QuoteList.vue'
 import RecurringList from './views/RecurringList.vue'
+import PublicQuote from './views/PublicQuote.vue'
 import Reminders from './views/Reminders.vue'
 import Emails from './views/Emails.vue'
 import Rates from './views/Rates.vue'
@@ -103,6 +104,7 @@ export const router = createRouter({
   routes: [
     { path: '/', redirect: '/faktury' },
     { path: '/oauth/povolit', component: OAuthConsent, meta: { title: 'Pripojenie aplikácie', consent: true } },
+    { path: '/ponuka/:token', component: PublicQuote, props: true, meta: { title: 'Cenová ponuka', public: true } },
     { path: '/faktury', component: InvoiceList, meta: { title: 'Vydané faktúry', perm: 'invoices.read' } },
     { path: '/faktury/nova', component: InvoiceEdit, meta: { title: 'Nová faktúra', perm: 'invoices.write' } },
     { path: '/faktury/:id(\\d+)', component: InvoiceEdit, props: true, meta: { title: 'Faktúra', perm: 'invoices.read' } },
