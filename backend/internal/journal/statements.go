@@ -153,3 +153,44 @@ func AssetStatement(cur, prev AssetValues) []Row {
 		row("21", "Rozdiel majetku a záväzkov (r. 15 − r. 20)", r21, true, "", ""),
 	}
 }
+
+// TaxB sú podklady pre VI. oddiel daňového priznania FO typu B (DPFOBv25):
+// tabuľka č. 1 (príjmy a výdavky zo živnosti), r. 39–42 a tabuľka č. 1a
+// (údaje z účtovníctva na začiatku a na konci zdaňovacieho obdobia).
+// Sumy sú v eurách s centami ako v priznaní.
+type TaxB struct {
+	Income   money.Dec `json:"income"`    // tab. 1 stĺ. 1, r. 39
+	Expenses money.Dec `json:"expenses"`  // tab. 1 stĺ. 2, r. 40
+	Profit   money.Dec `json:"profit"`    // r. 41 (kladný rozdiel)
+	Loss     money.Dec `json:"loss"`      // r. 42 (záporný rozdiel ako kladné číslo)
+	Insur    money.Dec `json:"insurance"` // zaplatené poistné a príspevky (stĺpec e4) — na kontrolu
+	Table1a  []Row     `json:"table1a"`   // Previous = začiatok, Current = koniec obdobia
+}
+
+// TaxReturnB zostaví podklady z denníka a hodnôt majetku a záväzkov.
+func TaxReturnB(t Totals, end, begin AssetValues) TaxB {
+	out := TaxB{Income: t.TaxInc, Expenses: t.TaxExp, Insur: t.Columns[ExpInsur]}
+	if d := t.TaxInc.Sub(t.TaxExp); d.Sign() >= 0 {
+		out.Profit = d
+	} else {
+		out.Loss = d.Neg()
+	}
+	row := func(code, label string, f func(AssetValues) money.Dec) Row {
+		return Row{Code: code, Label: label, Current: f(end), Previous: f(begin)}
+	}
+	out.Table1a = []Row{
+		row("1", "Zostatková cena hmotného majetku", func(v AssetValues) money.Dec { return v.Inputs.TangibleDM }),
+		row("2", "Zostatková cena nehmotného majetku", func(v AssetValues) money.Dec { return v.Inputs.IntangibleDM }),
+		row("3", "Zásoby", func(v AssetValues) money.Dec {
+			return v.Inputs.Material.Add(v.Inputs.Goods).Add(v.Inputs.OtherStock)
+		}),
+		row("4", "Pohľadávky", func(v AssetValues) money.Dec { return v.Facts.Receivables.Add(v.Inputs.OtherRecv) }),
+		row("5", "Záväzky", func(v AssetValues) money.Dec {
+			return v.Facts.Payables.Add(v.Inputs.OtherLiab).Add(v.Inputs.Loans)
+		}),
+		row("6", "Finančný majetok", func(v AssetValues) money.Dec {
+			return v.Facts.Cash.Add(v.Facts.Bank).Add(v.Inputs.OtherCashEq).Add(v.Inputs.FinancialDM)
+		}),
+	}
+	return out
+}

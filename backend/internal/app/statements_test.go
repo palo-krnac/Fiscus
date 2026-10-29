@@ -52,6 +52,9 @@ func TestStatements(t *testing.T) {
 			t.Errorf("r. %s: %s, chcem %s", code, as[code].Current, w)
 		}
 	}
+	if st.TaxB.Income.String() != "400.00" || st.TaxB.Profit.String() != "183.88" || rowsByCode(st.TaxB.Table1a)["4"].Current.String() != "492.00" {
+		t.Errorf("podklady DP: %+v", st.TaxB)
+	}
 	if !st.PrevEmpty {
 		t.Error("prvá závierka: predchádzajúce obdobie je prázdne")
 	}

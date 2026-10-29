@@ -52,3 +52,26 @@ func TestAssetStatement(t *testing.T) {
 		t.Errorf("%+v", r)
 	}
 }
+
+func TestTaxReturnB(t *testing.T) {
+	tot := Sum([]Entry{
+		{Means: Bank, Amount: m.MustParse("3780.40"), Lines: lines(IncServices, "3780.40")},
+		{Means: Bank, Amount: m.MustParse("-216.12"), Lines: lines(ExpInsur, "216.12")},
+		{Means: Closing, Lines: lines(ExpOther, "1200")},
+	})
+	end := AssetValues{Inputs: AssetInputs{TangibleDM: m.MustParse("3000"), Material: m.MustParse("100"), Goods: m.MustParse("50"), Loans: m.MustParse("800")},
+		Facts: AssetFacts{Receivables: m.MustParse("492"), Payables: m.MustParse("123"), Cash: m.MustParse("280"), Bank: m.MustParse("1275.88")}}
+	b := TaxReturnB(tot, end, AssetValues{Inputs: AssetInputs{TangibleDM: m.MustParse("4200")}})
+	if b.Income.String() != "3780.40" || b.Expenses.String() != "1416.12" || b.Profit.String() != "2364.28" || !b.Loss.IsZero() || b.Insur.String() != "216.12" {
+		t.Fatalf("%+v", b)
+	}
+	r := rowMap(b.Table1a)
+	if r["1"].Current.String() != "3000.00" || r["1"].Previous.String() != "4200.00" || r["3"].Current.String() != "150.00" ||
+		r["5"].Current.String() != "923.00" || r["6"].Current.String() != "1555.88" {
+		t.Fatalf("%+v", b.Table1a)
+	}
+	loss := TaxReturnB(Sum([]Entry{{Means: Closing, Lines: lines(ExpOther, "10")}}), AssetValues{}, AssetValues{})
+	if loss.Loss.String() != "10.00" || !loss.Profit.IsZero() {
+		t.Fatalf("strata: %+v", loss)
+	}
+}

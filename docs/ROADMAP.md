@@ -78,7 +78,8 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] Stavy pokladnice a účtov v peňažnom denníku (počiatočný stav účtu podľa výpisu, pokladnica z dokladov), kniha pohľadávok a záväzkov k zvolenému dňu (úhrady po dni sa neberú, cudzia mena v eurách, dni po splatnosti)
 - [x] Výkazy JÚ v celých eurách: Výkaz o príjmoch a výdavkoch (Úč FO 1-01) z peňažného denníka, Výkaz o majetku a záväzkoch (Úč FO 2-01) z kníh, pokladne a účtov + ručne zadané riadky (dlhodobý majetok, zásoby, úvery…), predchádzajúce obdobie, tlač, export, MCP
 - [x] Uzávierkové operácie k 31. 12. (odpisy, zostatková cena predaného majetku, úpravy príjmov a výdavkov) v peňažnom denníku, bez vplyvu na stavy peňazí; prenesú sa do výkazov
-- [ ] Jednoduché účtovníctvo ďalej: elektronické uloženie závierky do RÚZ, podklady pre daňové priznanie typu B
+- [x] Podklady pre DP FO typ B (DPFOBv25, VI. oddiel): tabuľka č. 1 r. 2, r. 39–42, tabuľka č. 1a na začiatku a na konci obdobia, zaplatené poistné na kontrolu
+- [ ] Jednoduché účtovníctvo ďalej: elektronické uloženie závierky do RÚZ, XML daňového priznania typu B pre eDane
 - [ ] Číselníky účtovníctva: rámcová účtová osnova, účtový rozvrh firmy, predkontácie, strediská, zákazky
 - [ ] Podvojné účtovníctvo: denník, hlavná kniha, automatické účtovanie podľa predkontácií
 - [ ] Účtovné obdobia, uzávierky, výkazy, uloženie závierky do RÚZ

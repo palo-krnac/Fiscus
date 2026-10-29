@@ -25,6 +25,7 @@ type Statements struct {
 	Facts        journal.AssetFacts  `json:"facts"`
 	PrevEmpty    bool                `json:"previousEmpty"` // prvá závierka: stĺpce predchádzajúceho obdobia sa nevypĺňajú
 	Unclassified int                 `json:"unclassified"`  // nerozpísané pohyby v denníku (výkaz nie je úplný)
+	TaxB         journal.TaxB        `json:"taxB"`          // podklady pre DP FO typ B, VI. oddiel
 }
 
 func statementsKey(companyID int64, year int) string {
@@ -102,10 +103,13 @@ func (a *App) StatementsFor(ctx context.Context, companyID int64, year int) (Sta
 		return Statements{}, err
 	}
 	prevEmpty := !prevSaved && len(prev.Entries) == 0 && prevFacts == (journal.AssetFacts{})
+	curVals := journal.AssetValues{Inputs: curIn, Facts: curFacts}
+	prevVals := journal.AssetValues{Inputs: prevIn, Facts: prevFacts}
 	return Statements{
+		TaxB:         journal.TaxReturnB(cur.Totals, curVals, prevVals),
 		Year:         year,
 		Income:       journal.IncomeStatement(cur.Totals, prev.Totals),
-		Assets:       journal.AssetStatement(journal.AssetValues{Inputs: curIn, Facts: curFacts}, journal.AssetValues{Inputs: prevIn, Facts: prevFacts}),
+		Assets:       journal.AssetStatement(curVals, prevVals),
 		Inputs:       curIn,
 		Facts:        curFacts,
 		PrevEmpty:    prevEmpty,
