@@ -25,6 +25,8 @@ go run ./cmd/fiskus-license sign -key licencia.key -customer "Kancelária s.r.o.
 
 Súkromný kľúč `licencia.key` nepatrí do repozitára.
 
+Po spustení predaja vydáva licencie automaticky služba `fiskus-shop` (webhook Paddle → podpísaný kľúč → e-mail zákazníkovi). Web s cenníkom a nákupom je v priečinku [`site/`](site/README.md).
+
 ## AI asistent (MCP)
 
 Fiškus má zabudovaný MCP server na adrese `/mcp`, takže sa k nemu dá pripojiť Claude alebo iný AI asistent. Kľúč si každý používateľ vytvorí v časti **Prístup pre AI**. Asistent má práva svojho používateľa; kľúč môže byť obmedzený len na čítanie. Každé volanie nástroja sa zapíše do auditu.
