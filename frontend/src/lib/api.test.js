@@ -101,4 +101,9 @@ describe('download', () => {
     const body = JSON.stringify({ error: 'E-faktúru nemožno vytvoriť', fields: [{ field: 'customer.dic', message: 'Doplňte DIČ odberateľa' }] })
     await expect(download('/x', 'a.xml', async () => res(422, body))).rejects.toMatchObject({ status: 422, fields: [{ field: 'customer.dic' }] })
   })
+  it('pošle POST s telom a hlavičkou proti CSRF', async () => {
+    let seen
+    await download('/x', 'a.xml', async (path, init) => ((seen = init), res(200, '<D/>')), { ids: [1], date: '2026-10-30' })
+    expect(seen).toMatchObject({ method: 'POST', headers: { 'X-Fiskus': '1' }, body: '{"ids":[1],"date":"2026-10-30"}' })
+  })
 })

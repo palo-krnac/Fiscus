@@ -56,8 +56,13 @@ export async function request(method, path, body, fetchImpl = globalThis.fetch) 
 }
 
 /** Stiahne súbor ako Blob s menom z hlavičky Content-Disposition. */
-export async function download(path, fallbackName, fetchImpl = globalThis.fetch) {
-  const res = await fetchImpl(path, { credentials: 'same-origin' })
+export async function download(path, fallbackName, fetchImpl = globalThis.fetch, body) {
+  const init = { credentials: 'same-origin' }
+  if (body !== undefined) {
+    // POST s JSON telom (napr. platobný príkaz z vybraných faktúr)
+    Object.assign(init, { method: 'POST', headers: { 'X-Fiskus': '1', 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  }
+  const res = await fetchImpl(path, init)
   if (!res.ok) {
     let data = null
     try {
@@ -268,6 +273,9 @@ export const api = {
   previewReminder: (cid, req) => request('POST', `/api/companies/${cid}/reminders/preview`, req),
   createReminder: (cid, req) => request('POST', `/api/companies/${cid}/reminders`, req),
   deleteReminder: (cid, id) => request('DELETE', `/api/companies/${cid}/reminders/${id}`),
+  paymentCandidates: (cid) => request('GET', `/api/companies/${cid}/purchases/payment-order`),
+  paymentOrder: (cid, ids, date, fetchImpl = globalThis.fetch) =>
+    download(`/api/companies/${cid}/purchases/payment-order`, 'prikaz.xml', fetchImpl, { ids, date }),
   payPurchase: (cid, id) => request('POST', `/api/companies/${cid}/purchases/${id}/pay`),
   unpayPurchase: (cid, id) => request('POST', `/api/companies/${cid}/purchases/${id}/unpay`),
   deletePurchase: (cid, id) => request('DELETE', `/api/companies/${cid}/purchases/${id}`),

@@ -162,3 +162,45 @@ func failPurchase(w http.ResponseWriter, err error) {
 	}
 	fail(w, err)
 }
+
+// paymentCandidates: GET …/purchases/payment-order — neuhradené faktúry pre príkaz.
+func (s *Server) paymentCandidates(w http.ResponseWriter, r *http.Request) {
+	cid, ok := s.company(w, r)
+	if !ok {
+		return
+	}
+	list, err := s.App.PaymentCandidates(r.Context(), cid)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, list)
+}
+
+// paymentOrder: POST …/purchases/payment-order — XML pain.001 na stiahnutie.
+func (s *Server) paymentOrder(w http.ResponseWriter, r *http.Request) {
+	cid, ok := s.company(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		IDs  []int64      `json:"ids"`
+		Date invoice.Date `json:"date"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	name, data, err := s.App.PaymentOrder(r.Context(), cid, body.IDs, body.Date)
+	var poe *app.PaymentOrderError
+	if errors.As(err, &poe) {
+		writeErr(w, http.StatusUnprocessableEntity, poe.Msg, nil)
+		return
+	}
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`"`)
+	_, _ = w.Write(data)
+}
