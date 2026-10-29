@@ -61,7 +61,11 @@ func (a *App) VATReturn(ctx context.Context, companyID int64, period string, exc
 	if excess.Sign() < 0 {
 		excess = money.Zero
 	}
-	r := vatreturn.Compute(vatreturn.Input{Period: p, Invoices: invs, Purchases: purs, ExcessCarried: excess})
+	cashDocs, err := a.Store.ListCashDocuments(ctx, companyID, p.Year)
+	if err != nil {
+		return vatreturn.Return{}, c, err
+	}
+	r := vatreturn.Compute(vatreturn.Input{Period: p, Invoices: invs, Purchases: purs, CashDocs: cashDocs, ExcessCarried: excess})
 	return r, c, nil
 }
 

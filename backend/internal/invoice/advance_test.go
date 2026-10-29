@@ -2,6 +2,7 @@ package invoice
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	m "github.com/palo-krnac/fiscus/backend/internal/money"
@@ -26,7 +27,7 @@ func ln(desc, qty, price string, rate vat.Rate) Line {
 
 func TestAdvanceReceipt(t *testing.T) {
 	p := paidProforma(t, ln("Rozvádzač", "1", "1000", 23), ln("Literatúra", "2", "15", 5))
-	r, err := NewAdvanceReceipt(p, MustDate("2026-10-12"))
+	r, err := NewAdvanceReceipt(p, p.Summary.Total, p.PaidDate, MustDate("2026-10-12"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +50,7 @@ func TestAdvanceReceipt(t *testing.T) {
 		edit func(*Invoice)
 		want error
 	}{
-		{"neuhradená", func(p *Invoice) { p.Status = StatusIssued }, ErrAdvanceNotPaid},
+		{"bez dátumu platby", func(p *Invoice) { p.PaidDate = Date{} }, ErrAdvanceNotPaid},
 		{"bežná faktúra", func(p *Invoice) { p.Kind = KindInvoice }, ErrNotAdvance},
 		{"zahraničie", func(p *Invoice) { p.Customer.Country = "DE" }, ErrForeignAdvance},
 		{"prenesenie", func(p *Invoice) { p.ReverseCharge = true }, ErrForeignAdvance},
@@ -57,16 +58,85 @@ func TestAdvanceReceipt(t *testing.T) {
 	for _, c := range cases {
 		x := p
 		c.edit(&x)
-		if _, err := NewAdvanceReceipt(x, MustDate("2026-10-12")); !errors.Is(err, c.want) {
+		if _, err := NewAdvanceReceipt(x, x.Summary.Total, x.PaidDate, MustDate("2026-10-12")); !errors.Is(err, c.want) {
 			t.Errorf("%s: %v", c.name, err)
 		}
+	}
+	if _, err := NewAdvanceReceipt(p, m.Zero, p.PaidDate, MustDate("2026-10-12")); !errors.Is(err, ErrAdvanceNotPaid) {
+		t.Errorf("nulová platba: %v", err)
+	}
+}
+
+func TestPartialAdvanceReceipts(t *testing.T) {
+	// záloha 1 261,50 € (1 230 € v 23 % + 31,50 € v 5 %) zaplatená na dva razy
+	p := paidProforma(t, ln("Rozvádzač", "1", "1000", 23), ln("Literatúra", "2", "15", 5))
+	p.Status, p.PaidDate = StatusIssued, Date{}
+	first, err := NewAdvanceReceipt(p, m.MustParse("500"), MustDate("2026-10-05"), MustDate("2026-10-06"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 500 × 1230 / 1261,50 = 487,51 v 23 %, zvyšok 12,49 v 5 %
+	if first.DeliveryDate.String() != "2026-10-05" || first.Summary.Total.String() != "500.00" || len(first.Summary.Rates) != 2 ||
+		first.Summary.Rates[0].Total.String() != "487.51" || first.Summary.Rates[1].Total.String() != "12.49" ||
+		first.Summary.Rates[0].VAT.String() != "91.16" {
+		t.Fatalf("prvá platba: %+v", first.Summary)
+	}
+	second, _ := NewAdvanceReceipt(p, m.MustParse("761.50"), MustDate("2026-10-12"), MustDate("2026-10-12"))
+	first.ID, first.Number, second.ID, second.Number = 11, "ZD20260001", 12, "ZD20260002"
+
+	// vyúčtovanie po prvej platbe: odpočet iba prijatej časti, zvyšok na úhradu
+	p.Payments = []Payment{{Date: MustDate("2026-10-05"), Amount: m.MustParse("500")}}
+	f, err := NewFinalInvoice(p, []Invoice{first}, MustDate("2026-10-20"), 14)
+	if err != nil || f.Summary.Total.String() != "761.50" || len(f.Advance.Deductions) != 1 {
+		t.Fatalf("po prvej platbe: %+v %v", f.Summary, err)
+	}
+	// chýba doklad k druhej platbe
+	p.Payments = append(p.Payments, Payment{Date: MustDate("2026-10-12"), Amount: m.MustParse("761.50")})
+	p.Status = StatusPaid
+	if _, err := NewFinalInvoice(p, []Invoice{first}, MustDate("2026-10-20"), 14); err == nil {
+		t.Fatal("platba bez dokladu")
+	}
+	f, err = NewFinalInvoice(p, []Invoice{first, second}, MustDate("2026-10-20"), 14)
+	if err != nil || !f.Summary.Total.IsZero() || len(f.Advance.Deductions) != 2 || f.Advance.Deductions[1].Number != "ZD20260002" {
+		t.Fatalf("po dvoch platbách: %+v %v", f.Summary, err)
+	}
+	// nič nezaplatené → vyúčtovať sa nedá
+	p.Payments, p.Status = nil, StatusIssued
+	if _, err := NewFinalInvoice(p, nil, MustDate("2026-10-20"), 14); !errors.Is(err, ErrAdvanceNotPaid) {
+		t.Fatalf("bez platby: %v", err)
+	}
+}
+
+func TestAdvanceReceiptsAndSettled(t *testing.T) {
+	p := paidProforma(t, ln("Montáž", "1", "100", 23))
+	p.Advance = &Advance{ReceiptID: 4, ReceiptNumber: "ZD1"}
+	if got := p.AllReceipts(); len(got) != 1 || got[0].ID != 4 || !got[0].Amount.Equal(p.Summary.Total) {
+		t.Fatalf("staré údaje: %+v", got)
+	}
+	p.AddReceipt(ReceiptRef{ID: 5, Number: "ZD2", Amount: m.MustParse("10")})
+	if got := p.AllReceipts(); len(got) != 2 || p.Advance.ReceiptID != 4 {
+		t.Fatalf("pridanie: %+v", got)
+	}
+	n := Invoice{Kind: KindProforma}
+	n.AddReceipt(ReceiptRef{ID: 8, Number: "ZD8"})
+	if n.Advance.ReceiptID != 8 || len(n.AllReceipts()) != 1 {
+		t.Fatalf("prvý doklad: %+v", n.Advance)
+	}
+	// vyúčtovaná záloha nie je po splatnosti a ďalšiu platbu neprijme
+	p.Status, p.Payments = StatusIssued, []Payment{{Date: MustDate("2026-10-10"), Amount: m.MustParse("50")}}
+	p.Advance.FinalID, p.Advance.FinalNumber = 9, "FA20260009"
+	if !p.Settled() || p.Overdue(MustDate("2026-12-31")) {
+		t.Fatal("vyúčtovaná záloha po splatnosti")
+	}
+	if err := p.AddPayment(Payment{Date: MustDate("2026-10-11"), Amount: m.MustParse("10")}); !errors.Is(err, ErrAlreadySettled) {
+		t.Fatalf("platba po vyúčtovaní: %v", err)
 	}
 }
 
 func TestFinalInvoice(t *testing.T) {
 	// ceny bez DPH, ktoré pri výpočte „zhora“ dávajú inú daň o cent
 	p := paidProforma(t, ln("Montáž", "3", "33.33", 23))
-	r, _ := NewAdvanceReceipt(p, MustDate("2026-10-10"))
+	r, _ := NewAdvanceReceipt(p, p.Summary.Total, p.PaidDate, MustDate("2026-10-10"))
 	r.ID, r.Number = 9, "ZD20260001"
 
 	cases := []struct {
@@ -81,7 +151,7 @@ func TestFinalInvoice(t *testing.T) {
 		{"iná sadzba", []Line{ln("Kniha", "1", "20", 5)}, "21.00", 1, false},
 	}
 	for _, c := range cases {
-		f, err := NewFinalInvoice(p, &r, MustDate("2026-10-20"), 14)
+		f, err := NewFinalInvoice(p, []Invoice{r}, MustDate("2026-10-20"), 14)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -103,7 +173,7 @@ func TestFinalInvoice(t *testing.T) {
 		}
 	}
 	// presný odpočet: zostatok sadzby 23 % je presne rozdiel dokladov, nie prepočet
-	f, _ := NewFinalInvoice(p, &r, MustDate("2026-10-20"), 14)
+	f, _ := NewFinalInvoice(p, []Invoice{r}, MustDate("2026-10-20"), 14)
 	if len(f.Summary.Rates) != 0 || !f.Summary.VAT.IsZero() {
 		t.Fatalf("100 %% záloha: %+v", f.Summary)
 	}
@@ -130,12 +200,71 @@ func TestFinalInvoice(t *testing.T) {
 	}
 	settled := p
 	settled.Advance = &Advance{FinalID: 3}
-	if _, err := NewFinalInvoice(settled, &r, MustDate("2026-10-20"), 14); !errors.Is(err, ErrAlreadySettled) {
+	if _, err := NewFinalInvoice(settled, []Invoice{r}, MustDate("2026-10-20"), 14); !errors.Is(err, ErrAlreadySettled) {
 		t.Fatalf("druhé vyúčtovanie: %v", err)
 	}
 	foreign := p
 	foreign.Customer.Country = "CZ"
-	if _, err := NewFinalInvoice(foreign, &r, MustDate("2026-10-20"), 14); !errors.Is(err, ErrForeignAdvance) {
+	if _, err := NewFinalInvoice(foreign, []Invoice{r}, MustDate("2026-10-20"), 14); !errors.Is(err, ErrForeignAdvance) {
 		t.Fatalf("zahraničie: %v", err)
+	}
+}
+
+func TestAddRemoveAdvance(t *testing.T) {
+	p1 := paidProforma(t, ln("Rozvádzač", "1", "1000", 23))
+	p2 := paidProforma(t, ln("Montáž", "1", "200", 23))
+	p2.ID, p2.Number = 8, "ZF20260004"
+	r1, _ := NewAdvanceReceipt(p1, p1.Summary.Total, p1.PaidDate, p1.PaidDate)
+	r2, _ := NewAdvanceReceipt(p2, p2.Summary.Total, p2.PaidDate, p2.PaidDate)
+	r1.ID, r1.Number, r2.ID, r2.Number = 11, "ZD1", 12, "ZD2"
+	f, err := NewFinalInvoice(p1, []Invoice{r1}, MustDate("2026-10-20"), 14)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.Advance.Deductions[0].ProformaID != 7 {
+		t.Fatalf("odpočet bez zálohy: %+v", f.Advance.Deductions)
+	}
+	other := p2
+	other.Customer.Name = "Iný odberateľ"
+	tests := []struct {
+		name string
+		p    Invoice
+		want string
+	}{
+		{"iný odberateľ", other, "inému odberateľovi"},
+		{"tá istá záloha", p1, "už je vo vyúčtovaní"},
+	}
+	for _, tt := range tests {
+		x := f
+		x.Advance = &Advance{ProformaID: f.Advance.ProformaID, Deductions: append([]Deduction(nil), f.Advance.Deductions...)}
+		if err := x.AddAdvance(tt.p, []Invoice{r2}); err == nil || !strings.Contains(err.Error(), tt.want) {
+			t.Errorf("%s: %v", tt.name, err)
+		}
+	}
+	if err := f.AddAdvance(p2, []Invoice{r2}); err != nil {
+		t.Fatal(err)
+	}
+	if ids := f.ProformaIDs(); len(ids) != 2 || ids[1] != 8 || len(f.Lines) != 2 || !f.Summary.Total.IsZero() ||
+		!strings.Contains(f.Note, "ZF20260004") {
+		t.Fatalf("po pridaní: %v %+v", ids, f.Summary)
+	}
+	if err := f.RemoveAdvance(7); err == nil {
+		t.Fatal("pôvodnú zálohu nemožno odobrať")
+	}
+	if err := f.RemoveAdvance(8); err != nil || len(f.Advance.Deductions) != 1 || f.Summary.Total.String() != "246.00" {
+		t.Fatalf("po odobraní: %v %+v", err, f.Summary)
+	}
+	if err := f.RemoveAdvance(8); err == nil {
+		t.Fatal("dvakrát odobraná")
+	}
+	issued := f
+	issued.Status = StatusIssued
+	if err := issued.AddAdvance(p2, []Invoice{r2}); err == nil {
+		t.Fatal("pridanie do vystavenej")
+	}
+	// IČO rozhoduje pred názvom
+	a := Invoice{Customer: Party{ICO: "123", Name: "A"}}
+	if !a.SameCustomer(Invoice{Customer: Party{ICO: "123", Name: "A s.r.o."}}) || a.SameCustomer(Invoice{Customer: Party{ICO: "999", Name: "A"}}) {
+		t.Fatal("rovnaký odberateľ podľa IČO")
 	}
 }

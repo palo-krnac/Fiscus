@@ -29,7 +29,9 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] Pravidelná fakturácia: automatické odoslanie vystavenej faktúry e-mailom
 - [ ] Pravidelná fakturácia: upozornenie na koncepty na kontrolu
 - [x] Zálohová faktúra (nie je daňový doklad), po úhrade automaticky daňový doklad k prijatej platbe (dátum dodania = deň prijatia platby, § 19 ods. 4), vyúčtovacia faktúra s presným odpočtom zálohy po sadzbách; do DPH a KV iba zostatok, pri 100 % zálohe sa vyúčtovanie do KV neuvádza
-- [ ] Zálohy: čiastočná úhrada zálohy, viac záloh na jedno vyúčtovanie, zálohy do zahraničia a s prenesením daňovej povinnosti, dodanie do 15 dní od platby bez dokladu k platbe
+- [x] Zálohy: čiastočná úhrada zálohy (daňový doklad ku každej platbe, sadzby v pomere zálohy), vyúčtovanie s odpočtom všetkých dokladov k platbám aj po čiastočnej úhrade; vyúčtovaná záloha sa nevymáha
+- [x] Zálohy: viac zálohových faktúr toho istého odberateľa na jedno vyúčtovanie (pridanie a odobratie v koncepte)
+- [ ] Zálohy: zálohy do zahraničia a s prenesením daňovej povinnosti, dodanie do 15 dní od platby bez dokladu k platbe
 - [ ] Cenová ponuka: prijatie zákazníkom cez odkaz, objednávka
 - [x] Prijaté faktúry: evidencia z rekapitulácie DPH dodávateľa, odpočet / bez odpočtu, prenesenie, kontrola duplicít, úhrady
 - [x] AI vyťaženie prijatých faktúr z PDF a fotky (Claude API; AI iba navrhuje, používateľ skontroluje)
@@ -37,7 +39,8 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] Banka: výpisy GPC, CSV a Excel, čiastočné úhrady
 - [ ] Banka: platobné príkazy (pain.001), napojenie na banku cez API
 - [x] Pokladňa: príjmové a výdavkové doklady (PPD/VPD), kontrola záporného zostatku, úhrada faktúr v hotovosti, storno, tlač so sumou slovom
-- [ ] Pokladňa: DPH na pokladničných dokladoch (B.3), viac pokladní, cudzia mena, ERP / e-kasa (D.1)
+- [x] Pokladňa: DPH na pokladničných dokladoch — blok ako zjednodušená faktúra (odpočet, KV B.3.1/B.3.2 podľa limitu 3 000 €), tržba z e-kasy (daň na výstupe, KV D.1), rozpis v peňažnom denníku
+- [ ] Pokladňa: časť B.3 v XML kontrolného výkazu (overiť voči XSD KVDPHv25), viac pokladní, cudzia mena, načítanie uzávierky e-kasy
 - [x] **Priznanie k DPH (DPHv25) a kontrolný výkaz (KVDPHv25)**: výpočet z dokladov, XML pre eDane, mesačne aj štvrťročne
 - [x] Súhrnný výkaz (SVDPHv20): tovar do EÚ (kód 0), služby do EÚ (kód 2); r. 13–15 pre dodanie do EÚ a vývoz; nadobudnutie tovaru z EÚ (r. 05–08) a služby zo zahraničia (r. 09–10)
 - [x] A.2 a tuzemské prenesenie pri dodaní (§ 69 ods. 12) pri položkách: druhy a) až j), kód colného sadzobníka, hranica 5 000 €, XML

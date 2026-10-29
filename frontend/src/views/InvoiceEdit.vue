@@ -31,7 +31,7 @@ import { quoteActions, quoteStatusOf, validDays as quoteValidDays } from '../lib
 import { firstOfNextMonth, intervals, placeholders, recurringStatusOf } from '../lib/recurring.js'
 import InputNumber from 'primevue/inputnumber'
 import { filterItems, itemFromLine, lineFromItem, sameNameItem } from '../lib/catalog.js'
-import { canCredit, canSettle, editorTitle, hasDeductions } from '../lib/advance.js'
+import { canCredit, canSettle, editorTitle, hasDeductions, receiptsOf, settledAdvances } from '../lib/advance.js'
 import SendMailDialog from '../components/SendMailDialog.vue'
 import { currencyOptions, isForeignCurrency, rateHint, rateText } from '../lib/fx.js'
 
@@ -578,6 +578,39 @@ async function settle() {
   }
 }
 
+// ---- ďalšie zálohy vo vyúčtovaní ----
+const advCands = ref([])
+const advPick = ref(null)
+async function loadAdvCands() {
+  advCands.value = []
+  advPick.value = null
+  if (!inv.value?.id || inv.value.status !== 'draft' || !deductions.value.length) return
+  try {
+    advCands.value = await api.advanceCandidates(session.companyId, inv.value.id)
+  } catch {
+    /* bez návrhov */
+  }
+}
+watch(() => [inv.value?.id, inv.value?.status, deductions.value.length], loadAdvCands)
+async function changeAdvances(fn, msg) {
+  if (dirty.value && !(await save({ quiet: true }))) return
+  busy.value = true
+  try {
+    const saved = await fn()
+    inv.value = saved
+    lines.value = saved.lines.length ? saved.lines.map(withKey) : [blankLine()]
+    dirty.value = false
+    toast.add({ severity: 'success', summary: msg, life: 3000 })
+    await loadAdvCands()
+  } catch (e) {
+    applyError(e)
+  } finally {
+    busy.value = false
+  }
+}
+const addAdvance = () => changeAdvances(() => api.addAdvance(session.companyId, inv.value.id, advPick.value), 'Záloha pridaná do vyúčtovania')
+const removeAdvance = (a) => changeAdvances(() => api.removeAdvance(session.companyId, inv.value.id, a.id), `Záloha ${a.number} odobraná`)
+
 // ---- úhrada (aj čiastočná) ----
 const payDlg = ref(null) // { date: Date, amount: number }
 const balanceAbs = computed(() => Math.abs(Number(inv.value?.balance ?? inv.value?.summary?.total ?? 0)))
@@ -593,7 +626,7 @@ async function markPaid() {
     const amount = partial ? (isCredit.value ? -d.amount : d.amount).toFixed(2) : undefined
     inv.value = await api.pay(session.companyId, inv.value.id, toISODate(d.date), amount)
     payDlg.value = null
-    const rn = inv.value.advance?.receiptNumber
+    const rn = receiptsOf(inv.value).at(-1)?.number
     toast.add({
       severity: 'success',
       summary: inv.value.status === 'paid' ? 'Označená ako uhradená' : `Čiastočná úhrada, zostáva ${formatMoney(inv.value.balance, inv.value.currency)}`,
@@ -891,15 +924,15 @@ const customerFields = reactive([
         <p v-if="einvStatus" class="advance-note einv-status"><i class="pi pi-send" /> <span>{{ einvStatus }}</span></p>
         <p v-if="isProforma" class="advance-note">
           <i class="pi pi-info-circle" />
-          <span v-if="inv.status !== 'paid'">Zálohová faktúra nie je daňový doklad. Po úhrade vznikne daňový doklad k prijatej platbe a zálohu potom vyúčtujete.</span>
-          <span v-else-if="inv.advance?.receiptId">
-            Uhradená {{ formatDate(inv.paidDate) }} — daňový doklad
-            <RouterLink :to="`/faktury/${inv.advance.receiptId}`">{{ inv.advance.receiptNumber }}</RouterLink>.
-            <template v-if="inv.advance.finalId">Vyúčtovaná faktúrou <RouterLink :to="`/faktury/${inv.advance.finalId}`">{{ inv.advance.finalNumber || 'koncept' }}</RouterLink>.</template>
-          </span>
-          <span v-else>
-            Uhradená {{ formatDate(inv.paidDate) }}.
-            <template v-if="inv.advance?.finalId">Vyúčtovaná faktúrou <RouterLink :to="`/faktury/${inv.advance.finalId}`">{{ inv.advance.finalNumber || 'koncept' }}</RouterLink>.</template>
+          <span>
+            <template v-if="inv.status === 'paid'">Uhradená {{ formatDate(inv.paidDate) }}.</template>
+            <template v-else-if="Number(inv.paidAmount) > 0">Uhradená časť {{ formatMoney(inv.paidAmount, inv.currency) }}, zostáva {{ formatMoney(inv.balance, inv.currency) }}.</template>
+            <template v-else>Zálohová faktúra nie je daňový doklad. Ku každej prijatej platbe (aj čiastočnej) vznikne daňový doklad k prijatej platbe a zálohu potom vyúčtujete.</template>
+            <template v-if="receiptsOf(inv).length">
+              {{ ' ' }}{{ receiptsOf(inv).length === 1 ? 'Daňový doklad' : 'Daňové doklady' }}
+              <template v-for="(r, i) in receiptsOf(inv)" :key="r.id"><template v-if="i">, </template><RouterLink :to="`/faktury/${r.id}`">{{ r.number }}</RouterLink></template>.
+            </template>
+            <template v-if="inv.advance?.finalId">{{ ' ' }}Vyúčtovaná faktúrou <RouterLink :to="`/faktury/${inv.advance.finalId}`">{{ inv.advance.finalNumber || 'koncept' }}</RouterLink><template v-if="inv.advance.finalNumber && inv.status !== 'paid'"> — zvyšok zálohy sa už nevymáha, doplatok je na vyúčtovaní</template>.</template>
           </span>
         </p>
         <p v-if="isReceipt && inv.advance" class="advance-note">
@@ -910,13 +943,23 @@ const customerFields = reactive([
             Daňová povinnosť vznikla dňom prijatia platby {{ formatDate(inv.deliveryDate) }}.
           </span>
         </p>
-        <p v-if="deductions.length" class="advance-note">
+        <div v-if="deductions.length" class="advance-note advances">
           <i class="pi pi-info-circle" />
-          <span>
-            Vyúčtovanie zálohovej faktúry <RouterLink :to="`/faktury/${inv.advance.proformaId}`">{{ inv.advance.proformaNumber }}</RouterLink>.
-            Upravte položky podľa skutočnej dodávky, záloha sa odpočíta automaticky.
-          </span>
-        </p>
+          <div>
+            <p>
+              Vyúčtovanie {{ settledAdvances(inv).length > 1 ? 'zálohových faktúr' : 'zálohovej faktúry' }}
+              <template v-for="(a, i) in settledAdvances(inv)" :key="a.id"><template v-if="i">, </template><RouterLink :to="`/faktury/${a.id}`">{{ a.number }}</RouterLink><Button
+                v-if="editable && a.id !== inv.advance.proformaId" icon="pi pi-times" text size="small" class="adv-remove" :aria-label="`Odobrať zálohu ${a.number}`"
+                v-tooltip.bottom="'Odobrať zálohu z vyúčtovania (položky ostanú na úpravu)'" @click="removeAdvance(a)" /></template>.
+              Upravte položky podľa skutočnej dodávky, zálohy sa odpočítajú automaticky.
+            </p>
+            <div v-if="editable && advCands.length" class="adv-add">
+              <Select v-model="advPick" :options="advCands" option-value="id" :option-label="(c) => `${c.number} · uhradené ${formatMoney(c.paid, c.currency || 'EUR')}`"
+                placeholder="Ďalšia záloha toho istého odberateľa" size="small" aria-label="Ďalšia záloha" />
+              <Button label="Pridať zálohu" icon="pi pi-plus" size="small" severity="secondary" outlined :disabled="!advPick || busy" @click="addAdvance" />
+            </div>
+          </div>
+        </div>
         <fieldset v-if="isCredit && inv.correction" class="block correction">
           <legend>Oprava faktúry</legend>
           <p class="corrects">
@@ -1396,7 +1439,7 @@ const customerFields = reactive([
         <label>
           <span>Suma ({{ inv.currency || 'EUR' }})</span>
           <InputNumber v-model="payDlg.amount" :min="0.01" :min-fraction-digits="2" :max-fraction-digits="2" locale="sk-SK" size="small" />
-          <small>Zostatok {{ formatMoney(balanceAbs, inv.currency) }}. Menšia suma = čiastočná úhrada.</small>
+          <small>Zostatok {{ formatMoney(balanceAbs, inv.currency) }}. Menšia suma = čiastočná úhrada.<template v-if="isProforma && !inv.nonVatPayer"> K prijatej sume vznikne daňový doklad k prijatej platbe.</template></small>
         </label>
       </div>
       <template #footer>
@@ -1972,6 +2015,26 @@ legend {
   border-left: 3px solid var(--blue);
   font-size: var(--fs-sm);
   color: var(--ink-soft);
+}
+.advances p {
+  margin: 0;
+}
+.adv-remove {
+  width: 1.4rem;
+  height: 1.4rem;
+  padding: 0;
+  margin-left: 1px;
+  vertical-align: middle;
+}
+.adv-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.adv-add :deep(.p-select) {
+  min-width: 16rem;
+  max-width: 100%;
 }
 .advance-note a {
   color: var(--blue-deep);
