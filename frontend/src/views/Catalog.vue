@@ -12,6 +12,7 @@ import InputNumber from 'primevue/inputnumber'
 import Select from 'primevue/select'
 import SelectButton from 'primevue/selectbutton'
 import Textarea from 'primevue/textarea'
+import Dialog from 'primevue/dialog'
 import IconField from 'primevue/iconfield'
 import InputIcon from 'primevue/inputicon'
 import FormField from '../components/FormField.vue'
@@ -22,7 +23,7 @@ import { codes, ratesOn } from '../lib/codes.js'
 import { formatAmount } from '../lib/format.js'
 import { fiskusGridTheme, skGridLocale, gridRows } from '../lib/grid.js'
 import { itemColumns } from '../lib/columns.js'
-import { filterItems } from '../lib/catalog.js'
+import { filterItems, importActions, importErrors, importLabel } from '../lib/catalog.js'
 
 const props = defineProps({ id: String })
 const router = useRouter()
@@ -46,6 +47,43 @@ const priceModes = [
   { label: 'bez DPH', value: 'net' },
   { label: 's DPH', value: 'gross' },
 ]
+
+// ---- import zo súboru CSV / Excel ----
+const fileInput = ref(null)
+const importFile = ref(null)
+const importPreview = ref(null)
+const importing = ref(false)
+async function pickImport(e) {
+  const file = e.target.files?.[0]
+  e.target.value = ''
+  if (!file) return
+  if (file.size > 5 * 1024 * 1024) {
+    toast.add({ severity: 'error', summary: 'Súbor je príliš veľký', detail: 'Najviac 5 MB.', life: 5000 })
+    return
+  }
+  importing.value = true
+  try {
+    importPreview.value = await api.importItems(session.companyId, file)
+    importFile.value = file
+  } catch (err) {
+    toast.add({ severity: 'error', summary: 'Súbor sa nedá načítať', detail: err.message, life: 8000 })
+  } finally {
+    importing.value = false
+  }
+}
+async function runImport() {
+  importing.value = true
+  try {
+    const res = await api.importItems(session.companyId, importFile.value, true)
+    toast.add({ severity: 'success', summary: 'Cenník importovaný', detail: `${res.created} nových, ${res.updated} zmenených`, life: 4000 })
+    importPreview.value = null
+    load()
+  } catch (err) {
+    toast.add({ severity: 'error', summary: 'Import zlyhal', detail: err.message, life: 8000 })
+  } finally {
+    importing.value = false
+  }
+}
 
 async function load() {
   loading.value = true
@@ -168,6 +206,9 @@ onBeforeUnmount(() => {
         <h1>Cenník</h1>
         <span class="count">{{ items.length }}</span>
         <div class="spacer" />
+        <input ref="fileInput" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="visually-hidden" @change="pickImport" />
+        <Button v-if="canWrite" icon="pi pi-upload" label="Import" severity="secondary" outlined size="small" :loading="importing && !importPreview"
+          v-tooltip.bottom="'Načítať cenník z CSV alebo Excelu'" @click="fileInput.click()" />
         <ExportButton name="Cenník" :columns="itemColumns" :rows="() => gridRows(gridApi, rows)" />
         <Button v-if="canWrite" size="small" @click="router.push('/cennik/nova')">
           <i class="pi pi-plus" /><span>Nová položka</span><kbd class="hint">N</kbd>
@@ -249,10 +290,102 @@ onBeforeUnmount(() => {
         <Button v-if="canWrite" label="Uložiť" icon="pi pi-check" size="small" :loading="busy" @click="save" />
       </footer>
     </aside>
+    <Dialog :visible="!!importPreview" modal header="Import cenníka" :style="{ width: '52rem' }" :breakpoints="{ '760px': '96vw' }"
+      @update:visible="(v) => !v && (importPreview = null)">
+      <template v-if="importPreview">
+        <p class="imp-sum">
+          <span class="tag" data-tone="paid"><span class="tag-text">{{ importPreview.created }} nových</span></span>
+          <span class="tag" data-tone="issued"><span class="tag-text">{{ importPreview.updated }} zmenených</span></span>
+          <span v-if="importPreview.skipped" class="tag" data-tone="overdue"><span class="tag-text">{{ importPreview.skipped }} s chybou sa preskočí</span></span>
+        </p>
+        <p class="imp-help">Položka s rovnakým kódom (bez kódu s rovnakým názvom) sa prepíše, ostatné pribudnú. Nič sa nemaže.</p>
+        <div class="imp-table">
+          <table>
+            <thead>
+              <tr><th>Riadok</th><th></th><th>Kód</th><th>Názov</th><th>MJ</th><th class="num">Cena</th><th class="num">DPH</th></tr>
+            </thead>
+            <tbody>
+              <template v-for="r in importPreview.rows.slice(0, 300)" :key="r.line">
+                <tr :class="{ bad: r.action === 'skip' }">
+                  <td>{{ r.line }}</td>
+                  <td><span class="tag" :data-tone="importActions[r.action].tone"><span class="tag-text">{{ importActions[r.action].label }}</span></span></td>
+                  <td>{{ r.item.code }}</td>
+                  <td>{{ r.item.name }}</td>
+                  <td>{{ r.item.unit }}</td>
+                  <td class="num">{{ formatAmount(r.item.price) }}<small v-if="r.item.priceMode === 'gross'"> s DPH</small></td>
+                  <td class="num">{{ r.item.vatRate }} %</td>
+                </tr>
+                <tr v-if="r.errors?.length" class="err-row"><td></td><td colspan="6">{{ importErrors(r) }}</td></tr>
+              </template>
+            </tbody>
+          </table>
+          <p v-if="importPreview.rows.length > 300" class="imp-help">… a ďalších {{ importPreview.rows.length - 300 }} riadkov</p>
+        </div>
+      </template>
+      <template #footer>
+        <Button label="Zrušiť" severity="secondary" text size="small" @click="importPreview = null" />
+        <Button :label="importLabel((importPreview?.created ?? 0) + (importPreview?.updated ?? 0))" icon="pi pi-check" size="small"
+          :loading="importing" :disabled="!importPreview || importPreview.created + importPreview.updated === 0" @click="runImport" />
+      </template>
+    </Dialog>
   </div>
 </template>
 
 <style scoped>
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+.imp-sum {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 0 0 6px;
+}
+.imp-help {
+  margin: 0 0 10px;
+  font-size: var(--fs-sm);
+  color: var(--ink-soft);
+}
+.imp-table {
+  max-height: 50vh;
+  overflow: auto;
+  border: 1px solid var(--rule);
+}
+.imp-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+.imp-table th {
+  position: sticky;
+  top: 0;
+  background: var(--sheet);
+  text-align: left;
+  font-weight: 600;
+  color: var(--ink-soft);
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--rule);
+}
+.imp-table td {
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--rule-soft);
+}
+.imp-table .num {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.imp-table tr.bad td {
+  color: var(--ink-faint);
+}
+.imp-table .err-row td {
+  color: var(--tone-overdue);
+  border-bottom: 1px solid var(--rule);
+}
 .catalog {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

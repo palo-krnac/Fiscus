@@ -8,7 +8,7 @@ Slovenský účtovný program pre živnostníkov a malé firmy. Beží ako **des
 |---|---|---|
 | Desktop | zadarmo | jedna firma, offline na vlastnom počítači |
 | Server – jedna firma | zadarmo | prístup z prehliadača, používatelia a roly |
-| Server – viac firiem | 39 € ročne (Paddle) | účtovné kancelárie a poskytovatelia služieb |
+| Server – viac firiem | 99 € ročne (Paddle) | účtovné kancelárie a poskytovatelia služieb |
 
 Licencia je podpísaný kľúč `FISKUS1.…` (Ed25519). Program ho overí offline,
 bez spojenia so serverom. Nahrá ho správca inštalácie v časti **Firmy a licencia**,

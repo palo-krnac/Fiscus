@@ -1,8 +1,10 @@
 package api
 
 import (
+	"io"
 	"net/http"
 
+	"github.com/palo-krnac/fiscus/backend/internal/app"
 	"github.com/palo-krnac/fiscus/backend/internal/catalog"
 )
 
@@ -55,4 +57,21 @@ func (s *Server) deleteItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// importItems: POST …/items/import — telo je súbor CSV alebo XLSX;
+// ?apply=1 import vykoná, inak vráti náhľad.
+func (s *Server) importItems(w http.ResponseWriter, r *http.Request) {
+	cid, _ := pathID(w, r, "cid")
+	data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, app.MaxImportBytes))
+	if err != nil {
+		writeErr(w, http.StatusRequestEntityTooLarge, "Súbor je príliš veľký (najviac 5 MB)", nil)
+		return
+	}
+	res, err := s.App.ImportItems(r.Context(), cid, data, r.URL.Query().Get("apply") == "1")
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
 }

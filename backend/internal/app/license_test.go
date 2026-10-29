@@ -41,7 +41,7 @@ func TestLicenseUnlocksCompanies(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err := a.CreateCompany(admin, store.Company{Name: "Druhá"})
-	if !errors.Is(err, ErrCompanyLimit) || !strings.Contains(err.Error(), "39 €") {
+	if !errors.Is(err, ErrCompanyLimit) || !strings.Contains(err.Error(), "99 €") {
 		t.Fatalf("bez licencie: %v", err)
 	}
 

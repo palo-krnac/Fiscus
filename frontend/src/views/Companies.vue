@@ -156,7 +156,7 @@ async function create() {
         </div>
         <div class="plan" :class="{ on: server && caps.plan === 'multi' }">
           <strong>Server – viac firiem</strong>
-          <span class="price">39 € <small>ročne</small></span>
+          <span class="price">99 € <small>ročne</small></span>
           <small>pre účtovné kancelárie a poskytovateľov služieb</small>
           <a class="buy" href="https://fiskus.sk" target="_blank" rel="noopener">Kúpiť na fiskus.sk</a>
         </div>

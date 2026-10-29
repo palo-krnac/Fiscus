@@ -22,3 +22,18 @@ export function lineFromItem(it, { priceMode = 'net', nonVat = false } = {}) {
     amount: '0',
   }
 }
+
+export const importActions = {
+  create: { label: 'nová', tone: 'paid' },
+  update: { label: 'zmena', tone: 'issued' },
+  skip: { label: 'preskočí sa', tone: 'overdue' },
+}
+
+/** Text chýb riadku importu. */
+export const importErrors = (row) => (row.errors ?? []).map((e) => e.message).join('; ')
+
+/** Text tlačidla importu so správnym tvarom: 1 položku, 2–4 položky, 5 položiek. */
+export function importLabel(n) {
+  const word = n === 1 ? 'položku' : n >= 2 && n <= 4 ? 'položky' : 'položiek'
+  return `Importovať ${n} ${word}`
+}

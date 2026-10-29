@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { filterItems, lineFromItem } from './catalog.js'
+import { filterItems, lineFromItem, importActions, importErrors, importLabel } from './catalog.js'
 
 const items = [
   { id: 1, code: 'PLC', name: 'Programovanie PLC', unit: 'hod', priceNet: '48.00', priceGross: '59.04', vatRate: 23 },
@@ -27,4 +27,23 @@ describe('cenník', () => {
   ])('riadok faktúry %o', (opt, price) => {
     expect(lineFromItem(items[0], opt)).toEqual({ description: 'Programovanie PLC', quantity: '1', unit: 'hod', unitPrice: price, vatRate: 23, amount: '0' })
   })
+})
+
+describe('import cenníka', () => {
+  it('chyby riadku', () => {
+    expect(importErrors({ errors: [{ message: 'Zadajte názov položky' }, { message: 'Chýba cena' }] })).toBe('Zadajte názov položky; Chýba cena')
+    expect(importErrors({})).toBe('')
+  })
+  it('všetky akcie majú popis', () => {
+    for (const a of ['create', 'update', 'skip']) expect(importActions[a].label).toBeTruthy()
+  })
+})
+
+describe('importLabel', () => {
+  it.each([
+    [0, 'Importovať 0 položiek'],
+    [1, 'Importovať 1 položku'],
+    [3, 'Importovať 3 položky'],
+    [5, 'Importovať 5 položiek'],
+  ])('%d', (n, want) => expect(importLabel(n)).toBe(want))
 })

@@ -3,12 +3,15 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/palo-krnac/fiscus/backend/internal/audit"
 	"github.com/palo-krnac/fiscus/backend/internal/auth"
 	"github.com/palo-krnac/fiscus/backend/internal/catalog"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
+	"github.com/palo-krnac/fiscus/backend/internal/table"
+	"github.com/palo-krnac/fiscus/backend/internal/vat"
 )
 
 // ItemRow je položka cenníka s cenami bez DPH a s DPH pre editor faktúry.
@@ -80,4 +83,67 @@ func (a *App) DeleteItem(ctx context.Context, companyID, id int64) error {
 	}
 	a.record(ctx, companyID, audit.CatCatalog, "delete", "item", id, "Zmazaná položka cenníka "+it.Name, it, nil)
 	return nil
+}
+
+// ItemImport je náhľad alebo výsledok importu cenníka.
+type ItemImport struct {
+	Rows    []catalog.ImportRow `json:"rows"`
+	Created int                 `json:"created"`
+	Updated int                 `json:"updated"`
+	Skipped int                 `json:"skipped"`
+	Done    bool                `json:"done"` // false = iba náhľad
+}
+
+// MaxImportBytes je najväčší súbor importu.
+const MaxImportBytes = 5 << 20
+
+// ImportItems načíta cenník zo súboru CSV alebo XLSX. Položka s rovnakým
+// kódom (bez kódu s rovnakým názvom) sa prepíše, ostatné pribudnú; riadky
+// s chybou sa preskočia. S apply=false vráti iba náhľad.
+func (a *App) ImportItems(ctx context.Context, companyID int64, data []byte, apply bool) (ItemImport, error) {
+	if err := a.Require(ctx, companyID, auth.PermInvoicesWrite); err != nil {
+		return ItemImport{}, err
+	}
+	bad := func(msg string) error {
+		return &invoice.ValidationError{Fields: []invoice.FieldError{{Field: "file", Message: msg}}}
+	}
+	rows, err := table.Read(data)
+	if err != nil {
+		return ItemImport{}, bad(err.Error())
+	}
+	parsed, err := catalog.ParseItems(rows, vat.Rate23)
+	if err != nil {
+		return ItemImport{}, bad(err.Error())
+	}
+	existing, err := a.Store.ListItems(ctx, companyID)
+	if err != nil {
+		return ItemImport{}, err
+	}
+	catalog.Match(parsed, existing)
+	res := ItemImport{Rows: parsed, Done: apply}
+	for _, r := range parsed {
+		switch r.Action {
+		case "create":
+			res.Created++
+		case "update":
+			res.Updated++
+		default:
+			res.Skipped++
+		}
+	}
+	if !apply {
+		return res, nil
+	}
+	for i := range res.Rows {
+		r := &res.Rows[i]
+		if r.Action == "skip" {
+			continue
+		}
+		if err := a.Store.SaveItem(ctx, companyID, &r.Item); err != nil {
+			return res, err
+		}
+	}
+	a.record(ctx, companyID, audit.CatCatalog, "import", "item", 0,
+		fmt.Sprintf("Import cenníka: %d nových, %d zmenených, %d preskočených", res.Created, res.Updated, res.Skipped), nil, nil)
+	return res, nil
 }
