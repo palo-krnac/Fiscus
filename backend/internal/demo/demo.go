@@ -31,16 +31,16 @@ func icdph(n int) string {
 	return fmt.Sprintf("SK%d", n)
 }
 
-type customer struct{ name, city, ico string }
+type customer struct{ name, city, ico, icdph string }
 
 var customers = []customer{
-	{"Elektro Hron s.r.o.", "Banská Bystrica", ico("4612345")},
-	{"Stavmont Zvolen, a.s.", "Zvolen", ico("3687412")},
-	{"Agro Liptov družstvo", "Liptovský Mikuláš", ico("0061234")},
-	{"TechnoPack Slovakia s.r.o.", "Žilina", ico("5098765")},
-	{"Mlyn Brezno s.r.o.", "Brezno", ico("4477120")},
-	{"Ing. Peter Kováč – PK Automation", "Banská Bystrica", ico("5233341")},
-	{"Automotive Parts Nitra s.r.o.", "Nitra", ico("4790011")},
+	{"Elektro Hron s.r.o.", "Banská Bystrica", ico("4612345"), icdph(2120461234)},
+	{"Stavmont Zvolen, a.s.", "Zvolen", ico("3687412"), icdph(2120368741)},
+	{"Agro Liptov družstvo", "Liptovský Mikuláš", ico("0061234"), ""},
+	{"TechnoPack Slovakia s.r.o.", "Žilina", ico("5098765"), icdph(2120509876)},
+	{"Mlyn Brezno s.r.o.", "Brezno", ico("4477120"), ""},
+	{"Ing. Peter Kováč – PK Automation", "Banská Bystrica", ico("5233341"), ""},
+	{"Automotive Parts Nitra s.r.o.", "Nitra", ico("4790011"), ""},
 }
 
 type item struct {
@@ -64,6 +64,7 @@ func Seed(ctx context.Context, a *app.App) (store.Company, error) {
 	c, err := a.CreateCompany(ctx, store.Company{
 		Name: "Demo elektroservis", Street: "Námestie SNP 1", City: "Banská Bystrica", Zip: "974 01",
 		ICO: ico("5512345"), DIC: "2120000003", ICDPH: "SK2120000003", IBAN: "SK31 1200 0000 1987 4263 7541", VATPayer: true,
+		TaxOffice: "Daňový úrad Banská Bystrica", VATPeriod: "month",
 	})
 	if err != nil {
 		return c, err
@@ -75,7 +76,7 @@ func Seed(ctx context.Context, a *app.App) (store.Company, error) {
 		if i%3 == 0 {
 			due = 30
 		}
-		ct, err := a.SaveContact(ctx, c.ID, store.Contact{Name: cu.name, City: cu.city, ICO: cu.ico, Country: "SK", DueDays: due})
+		ct, err := a.SaveContact(ctx, c.ID, store.Contact{Name: cu.name, City: cu.city, ICO: cu.ico, ICDPH: cu.icdph, Country: "SK", DueDays: due})
 		if err != nil {
 			return c, err
 		}
@@ -88,7 +89,7 @@ func Seed(ctx context.Context, a *app.App) (store.Company, error) {
 		cu := customers[ci]
 		issue := today.AddDays(-i*4 - 1)
 		inv := invoice.Invoice{
-			Customer:     invoice.Party{Name: cu.name, City: cu.city, Country: "SK", ICO: cu.ico},
+			Customer:     invoice.Party{Name: cu.name, City: cu.city, Country: "SK", ICO: cu.ico, ICDPH: cu.icdph},
 			ContactID:    contactIDs[ci],
 			IssueDate:    issue,
 			DeliveryDate: issue,

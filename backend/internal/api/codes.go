@@ -9,6 +9,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 	"github.com/palo-krnac/fiscus/backend/internal/vat"
+	"github.com/palo-krnac/fiscus/backend/internal/vatreturn"
 )
 
 // codes vráti systémové číselníky (rovnaké pre všetky firmy).
@@ -20,6 +21,7 @@ func (s *Server) codes(w http.ResponseWriter, _ *http.Request) {
 		"defaultFormats":  defaultFormats(),
 		"roles":           auth.Roles,
 		"auditCategories": audit.Categories,
+		"vatRows":         vatreturn.Rows,
 	})
 }
 

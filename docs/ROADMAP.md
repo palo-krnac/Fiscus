@@ -28,7 +28,11 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [ ] AI vyťaženie prijatých faktúr z PDF (AI iba navrhuje, účtuje pevne naprogramovaný automat)
 - [ ] Banka: import výpisov (camt.053 / CSV), párovanie platieb
 - [ ] Pokladňa
-- [ ] **Priznanie DPH, kontrolný výkaz, súhrnný výkaz**: XML pre eDane / finančnú správu
+- [x] **Priznanie k DPH (DPHv25) a kontrolný výkaz (KVDPHv25)**: výpočet z dokladov, XML pre eDane, mesačne aj štvrťročne
+- [ ] Súhrnný výkaz (dodania do EÚ), A.2 a tuzemské prenesenie pri dodaní, nadobudnutie tovaru z EÚ (r. 05–08), dovoz
+- [ ] Dobropisy od dodávateľov (C.2, r. 28), zjednodušené faktúry a pokladničné doklady (B.3, D.1), čiastočný odpočet (koeficient)
+- [ ] Opravné a dodatočné priznanie / KV (KOpr, r. 36–37)
+- [ ] Podanie priamo na portál finančnej správy (vyžaduje autentifikáciu)
 - [ ] Upomienky
 - [ ] Obrazovka záloh a obnovy, nastavenie priečinka a hesla
 - [ ] Inštalačky: Inno Setup (Windows), DMG (macOS), AppImage (Linux)

@@ -87,6 +87,9 @@ func (s *Server) Handler() http.Handler {
 	need("DELETE /api/companies/{cid}/users/{uid}", auth.PermUsersManage, s.removeMember)
 
 	need("GET /api/companies/{cid}/audit", auth.PermAuditRead, s.companyAudit)
+
+	need("GET /api/companies/{cid}/vat", auth.PermVATRead, s.vatReturn)
+	need("GET /api/companies/{cid}/vat/{kind}", auth.PermVATRead, s.vatExport)
 	open("GET /api/audit", s.allAudit)
 	open("GET /api/audit/verify", s.verifyAudit)
 
@@ -130,6 +133,9 @@ func fail(w http.ResponseWriter, err error) {
 		writeErr(w, http.StatusConflict, err.Error(), nil)
 	case errors.Is(err, app.ErrCompanyLimit), errors.Is(err, app.ErrForbidden):
 		writeErr(w, http.StatusForbidden, err.Error(), nil)
+	case errors.Is(err, app.ErrNotVATPayer), errors.Is(err, app.ErrPeriodTooOld), errors.Is(err, app.ErrPeriodInFuture),
+		errors.Is(err, app.ErrMissingVATData):
+		writeErr(w, http.StatusUnprocessableEntity, err.Error(), nil)
 	case errors.Is(err, app.ErrNoSession):
 		writeErr(w, http.StatusUnauthorized, err.Error(), nil)
 	case errors.Is(err, app.ErrLastAdmin), errors.Is(err, app.ErrSelfDemote), errors.Is(err, store.ErrDuplicate):

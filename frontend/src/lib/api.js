@@ -81,6 +81,23 @@ export const api = {
   audit: (cid, filter) => request('GET', (cid ? `/api/companies/${cid}/audit` : '/api/audit') + query(filter)),
   verifyAudit: () => request('GET', '/api/audit/verify'),
 
+  vat: (cid, period, excess) => request('GET', `/api/companies/${cid}/vat` + query({ period, excess })),
+  /** XML pre eDane ako Blob (kind: 'dph' | 'kv'). */
+  async vatXML(cid, kind, period, excess, fetchImpl = globalThis.fetch) {
+    const res = await fetchImpl(`/api/companies/${cid}/vat/${kind}.xml` + query({ period, excess }), { credentials: 'same-origin' })
+    if (!res.ok) {
+      let msg = `Chyba servera (${res.status})`
+      try {
+        msg = (await res.json()).error ?? msg
+      } catch {
+        /* telo nie je JSON */
+      }
+      throw new ApiError(res.status, msg)
+    }
+    const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? `${kind}.xml`
+    return { blob: await res.blob(), name }
+  },
+
   codes: () => request('GET', '/api/codes'),
   companies: () => request('GET', '/api/companies'),
   createCompany: (c) => request('POST', '/api/companies', c),

@@ -6,6 +6,7 @@ import InputText from 'primevue/inputtext'
 import InputNumber from 'primevue/inputnumber'
 import ToggleSwitch from 'primevue/toggleswitch'
 import AutoComplete from 'primevue/autocomplete'
+import SelectButton from 'primevue/selectbutton'
 import { codes, previewNumber } from '../lib/codes.js'
 import FormField from '../components/FormField.vue'
 import IcoInput from '../components/IcoInput.vue'
@@ -111,6 +112,19 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
         <div v-if="form.vatPayer" class="form-grid vat-grid">
           <FormField label="IČ DPH" :error="errors.icdph" hint="SK a 10 číslic">
             <InputText v-model="form.icdph" size="small" :invalid="!!errors.icdph" placeholder="SK…" />
+          </FormField>
+          <FormField label="Zdaňovacie obdobie" :error="errors.vatPeriod">
+            <SelectButton
+              v-model="form.vatPeriod"
+              :options="[{ label: 'Mesačne', value: 'month' }, { label: 'Štvrťročne', value: 'quarter' }]"
+              option-label="label"
+              option-value="value"
+              :allow-empty="false"
+              size="small"
+            />
+          </FormField>
+          <FormField label="Daňový úrad" :error="errors.taxOffice" :span="2" hint="Do hlavičky priznania k DPH">
+            <InputText v-model="form.taxOffice" size="small" placeholder="Daňový úrad Banská Bystrica" />
           </FormField>
         </div>
       </fieldset>

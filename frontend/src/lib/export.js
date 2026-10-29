@@ -95,7 +95,7 @@ export function exportFileName(base, ext, today = new Date()) {
   return `${slug || 'export'}-${d}.${ext}`
 }
 
-function save(blob, name) {
+export function saveBlob(blob, name) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -115,9 +115,9 @@ export async function downloadXLSX(base, columns, rows, sheet = 'Export') {
     fontFamily: 'Calibri',
     fontSize: 11,
   }).toBlob()
-  save(blob, exportFileName(base, 'xlsx'))
+  saveBlob(blob, exportFileName(base, 'xlsx'))
 }
 
 export function downloadCSV(base, columns, rows) {
-  save(new Blob([toCSV(columns, rows)], { type: 'text/csv;charset=utf-8' }), exportFileName(base, 'csv'))
+  saveBlob(new Blob([toCSV(columns, rows)], { type: 'text/csv;charset=utf-8' }), exportFileName(base, 'csv'))
 }

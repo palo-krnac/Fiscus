@@ -95,6 +95,10 @@ func normalizeCompany(c *store.Company) {
 	if c.DefaultDueDays == 0 {
 		c.DefaultDueDays = defaultDueDays
 	}
+	c.TaxOffice = strings.TrimSpace(c.TaxOffice)
+	if c.VATPeriod == "" {
+		c.VATPeriod = store.VATPeriodMonth
+	}
 	// merné jednotky: bez prázdnych a duplicít, v zadanom poradí
 	seen := map[string]bool{}
 	units := []string{}
@@ -141,6 +145,9 @@ func validateCompany(c store.Company) error {
 	add := func(f, m string) { fe = append(fe, invoice.FieldError{Field: f, Message: m}) }
 	if c.Name == "" {
 		add("name", "Zadajte názov firmy")
+	}
+	if c.VATPeriod != store.VATPeriodMonth && c.VATPeriod != store.VATPeriodQuarter {
+		add("vatPeriod", "Zdaňovacie obdobie je mesačné alebo štvrťročné")
 	}
 	if c.ICO != "" && !party.ValidICO(c.ICO) {
 		add("ico", "Neplatné IČO")

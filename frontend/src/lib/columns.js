@@ -111,3 +111,22 @@ export function auditColumns(companyName) {
     t('Odtlačok', (r) => r.hash, 20),
   ]
 }
+
+export const vatRowColumns = [
+  t('Riadok', (r) => r.code.replace(/^r/, ''), 8),
+  t('Popis', (r) => r.label, 60),
+  money('Suma', (r) => r.value),
+]
+
+export const kvColumns = [
+  t('Časť', (r) => r.section, 6),
+  t('IČ DPH', (r) => r.partner, 14),
+  t('Názov', (r) => r.name, 30),
+  t('Číslo faktúry', (r) => r.number, 16),
+  t('Pôvodná faktúra', (r) => r.original, 16),
+  date('Dátum dodania', (r) => r.date),
+  money('Základ', (r) => r.base ?? r.baseDiff),
+  money('Daň', (r) => r.vat ?? r.vatDiff),
+  { header: 'Sadzba %', value: (r) => r.rate, type: 'number', width: 8 },
+  money('Odpočítaná daň', (r) => r.deducted),
+]

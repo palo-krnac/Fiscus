@@ -52,16 +52,17 @@ const (
 	PermSettingsWrite  Perm = "settings.write"
 	PermUsersManage    Perm = "users.manage"
 	PermAuditRead      Perm = "audit.read"
+	PermVATRead        Perm = "vat.read" // priznanie k DPH, kontrolný výkaz
 )
 
 var rolePerms = map[Role][]Perm{
 	RoleAdmin: {PermInvoicesRead, PermInvoicesWrite, PermPurchasesRead, PermPurchasesWrite,
-		PermContactsRead, PermContactsWrite, PermSettingsWrite, PermUsersManage, PermAuditRead},
+		PermContactsRead, PermContactsWrite, PermSettingsWrite, PermUsersManage, PermAuditRead, PermVATRead},
 	RoleAccountant: {PermInvoicesRead, PermInvoicesWrite, PermPurchasesRead, PermPurchasesWrite,
-		PermContactsRead, PermContactsWrite, PermAuditRead},
+		PermContactsRead, PermContactsWrite, PermAuditRead, PermVATRead},
 	RoleInvoicer: {PermInvoicesRead, PermInvoicesWrite, PermContactsRead, PermContactsWrite},
-	RoleClient:   {PermInvoicesRead, PermPurchasesRead, PermContactsRead},
-	RoleViewer:   {PermInvoicesRead, PermPurchasesRead, PermContactsRead},
+	RoleClient:   {PermInvoicesRead, PermPurchasesRead, PermContactsRead, PermVATRead},
+	RoleViewer:   {PermInvoicesRead, PermPurchasesRead, PermContactsRead, PermVATRead},
 }
 
 // Can vráti true, ak rola má oprávnenie.
