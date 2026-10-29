@@ -97,6 +97,9 @@ func TestValidate(t *testing.T) {
 		{"zlý IBAN", func(p *Purchase) { p.SupplierIBAN = "SK00 1234" }, "supplierIban"},
 		{"zahraničný dodávateľ bez druhu plnenia", func(p *Purchase) { p.Supplier.Country = "CZ" }, "supplyKind"},
 		{"zahraničný dodávateľ – tovar", func(p *Purchase) { p.Supplier.Country = "CZ"; p.SupplyKind = invoice.SupplyGoods }, ""},
+		{"neznáma mena", func(p *Purchase) { p.Currency, p.FXRate = "XYZ", m.MustParse("2") }, "currency"},
+		{"cudzia mena bez kurzu", func(p *Purchase) { p.Currency = "CZK" }, "fxRate"},
+		{"cudzia mena s kurzom", func(p *Purchase) { p.Currency, p.FXRate = "CZK", m.MustParse("24.5") }, ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -153,5 +156,57 @@ func TestSameDocument(t *testing.T) {
 	b.SupplierNumber = "X"
 	if SameDocument(a, b) {
 		t.Fatal("iné číslo")
+	}
+}
+
+func TestForeignCurrency(t *testing.T) {
+	cases := []struct {
+		name                  string
+		currency, rate        string
+		reverse               bool
+		ok                    bool
+		base, vat, total, ded string
+	}{
+		{"euro", "", "", false, true, "100.00", "23.00", "123.00", "23.00"},
+		{"EUR sa vyčistí", "EUR", "1", false, true, "100.00", "23.00", "123.00", "23.00"},
+		{"CZK bez kurzu", "CZK", "", false, false, "0", "0", "0", "0"},
+		// 2450 / 24,5 = 100; 563,50 / 24,5 = 23
+		{"CZK", "CZK", "24.5", false, true, "100.00", "23.00", "123.00", "23.00"},
+		{"USD zaokrúhlenie", "USD", "1.0837", false, true, "2260.77", "519.98", "2780.75", "519.98"},
+		{"prenesenie platí základ", "CZK", "24.5", true, true, "100.00", "23.00", "100.00", "23.00"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			p := sample()
+			p.Currency, p.ReverseCharge = c.currency, c.reverse
+			if c.rate != "" {
+				p.FXRate = m.MustParse(c.rate)
+			}
+			if c.currency != "" && c.currency != "EUR" {
+				p.Rates[0].Base = m.MustParse("2450")
+			}
+			p.Normalize()
+			if c.currency == "EUR" && (p.Currency != "" || !p.FXRate.IsZero()) {
+				t.Fatal("pri eurách sa údaje o kurze vyčistia")
+			}
+			tax, ok := p.Tax()
+			if ok != c.ok {
+				t.Fatalf("ok %v", ok)
+			}
+			got := []string{tax.Summary.Base.String(), tax.Summary.VAT.String(), tax.Summary.Total.String(), p.Deductible().String()}
+			want := []string{c.base, c.vat, c.total, c.ded}
+			if !c.ok {
+				got = []string{"0", "0", "0", p.Deductible().String()}
+				if !p.Deductible().IsZero() || !p.TotalEUR().IsZero() {
+					t.Fatal("bez kurzu nič v eurách")
+				}
+				return
+			}
+			for i := range got {
+				if !m.MustParse(got[i]).Equal(m.MustParse(want[i])) {
+					t.Fatalf("%d: %s, chcem %s (%+v)", i, got[i], want[i], tax.Summary)
+				}
+			}
+		})
 	}
 }

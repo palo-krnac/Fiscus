@@ -35,6 +35,9 @@ export function rateHint(inv) {
 /** Rekapitulácia v eurách (pri cudzej mene prepočet zo servera). */
 export const eurSummary = (inv) => (isForeignCurrency(inv?.currency) && inv.local ? inv.local : inv?.summary)
 
+/** Súčty prijatej faktúry v eurách (server posiela prepočet v local.summary). */
+export const purchaseEUR = (p) => (isForeignCurrency(p?.currency) && p.local ? p.local.summary : p?.summary)
+
 export const sourceLabel = (s) => (s === 'manual' ? 'ručne' : 'ECB')
 
 /** Hľadanie v kurzoch: mena, dátum (aj „23. 10. 2026“), kurz, zdroj. */

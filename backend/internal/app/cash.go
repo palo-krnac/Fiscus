@@ -137,6 +137,9 @@ func (a *App) checkLink(ctx context.Context, companyID int64, d *cash.Document) 
 		if p.Status != purchase.StatusBooked {
 			return bad("Prijatá faktúra " + p.Number + " je už uhradená")
 		}
+		if p.Foreign() {
+			return bad("Prijatá faktúra " + p.Number + " je v mene " + p.Currency + " — pokladňa je v eurách")
+		}
 		if !p.Summary.Total.Equal(d.Amount) {
 			return bad(fmt.Sprintf("Suma sa musí rovnať sume dokladu %s (%s €)", p.Number, p.Summary.Total.Display()))
 		}

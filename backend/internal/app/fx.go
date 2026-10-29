@@ -12,6 +12,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/fx"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/money"
+	"github.com/palo-krnac/fiscus/backend/internal/purchase"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 )
 
@@ -106,26 +107,41 @@ func (a *App) DeleteRate(ctx context.Context, currency, date string) error {
 // applyRate doplní kurz ECB faktúre v cudzej mene: kurz vyhlásený pred dňom
 // vzniku daňovej povinnosti (dátum dodania). Ručne zadaný kurz ostane.
 func (a *App) applyRate(ctx context.Context, inv *invoice.Invoice) error {
-	if !inv.Foreign() || (inv.FXManual && inv.FXRate.Sign() > 0) {
+	if !inv.Foreign() {
 		return nil
 	}
-	inv.FXManual = false
-	point := inv.DeliveryDate
+	return a.fillRate(ctx, inv.Currency, inv.DeliveryDate, inv.IssueDate, &inv.FXRate, &inv.FXDate, &inv.FXManual)
+}
+
+// applyPurchaseRate doplní kurz prijatej faktúre v cudzej mene (rovnaké pravidlo).
+func (a *App) applyPurchaseRate(ctx context.Context, p *purchase.Purchase) error {
+	if !p.Foreign() {
+		return nil
+	}
+	return a.fillRate(ctx, p.Currency, p.DeliveryDate, p.IssueDate, &p.FXRate, &p.FXDate, &p.FXManual)
+}
+
+func (a *App) fillRate(ctx context.Context, currency string, delivery, issue invoice.Date, rate *money.Dec, date *invoice.Date, manual *bool) error {
+	if *manual && rate.Sign() > 0 {
+		return nil
+	}
+	*manual = false
+	point := delivery
 	if point.IsZero() {
-		point = inv.IssueDate
+		point = issue
 	}
 	if point.IsZero() {
 		point = a.Today()
 	}
-	r, err := a.Store.RateBefore(ctx, inv.Currency, point.String())
+	r, err := a.Store.RateBefore(ctx, currency, point.String())
 	switch {
 	case errors.Is(err, store.ErrNotFound):
-		inv.FXRate, inv.FXDate = money.Zero, invoice.Date{}
+		*rate, *date = money.Zero, invoice.Date{}
 		return nil
 	case err != nil:
 		return err
 	}
-	inv.FXRate = r.Rate
-	inv.FXDate, err = invoice.ParseDate(r.Date)
+	*rate = r.Rate
+	*date, err = invoice.ParseDate(r.Date)
 	return err
 }

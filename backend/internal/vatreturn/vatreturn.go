@@ -248,8 +248,12 @@ func Compute(in Input) Return {
 		}
 		doc := p.Number
 		s := p.Supplier
+		tax, ok := p.Tax() // sumy v eurách (cudzia mena prepočítaná kurzom)
 		switch {
-		case p.Summary.Base.Sign() < 0:
+		case !ok:
+			warn(doc, "purchase", p.ID, "Prijatá faktúra v mene "+p.Currency+" nemá kurz — doplňte ho, inak nejde do priznania")
+			continue
+		case tax.Summary.Base.Sign() < 0:
 			warn(doc, "purchase", p.ID, "Dobropis od dodávateľa (C.2, r. 28) zatiaľ nie je podporovaný — doplňte ručne")
 			continue
 		case foreign(s.Country) && !p.ReverseCharge:
@@ -269,7 +273,7 @@ func Compute(in Input) Return {
 		if date.IsZero() {
 			date = p.IssueDate
 		}
-		for _, r := range p.Rates {
+		for _, r := range tax.Rates {
 			if r.Rate == 0 {
 				continue
 			}

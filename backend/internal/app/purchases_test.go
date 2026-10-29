@@ -85,7 +85,7 @@ func TestPreviewPurchase(t *testing.T) {
 	p := validPurchase()
 	p.Rates[0].VAT = m.MustParse("20.00")
 	p.Supplier.ICDPH = ""
-	out := a.PreviewPurchase(p)
+	out := a.PreviewPurchase(ctx, p)
 	if len(out.Warnings) != 1 || len(out.Errors) != 1 || out.Errors[0].Field != "supplier.icdph" {
 		t.Fatalf("%+v %+v", out.Warnings, out.Errors)
 	}
