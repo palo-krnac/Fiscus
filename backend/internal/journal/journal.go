@@ -109,6 +109,9 @@ type Means string
 const (
 	Cash Means = "cash"
 	Bank Means = "bank"
+	// Closing je uzávierková operácia k 31. 12. (§ 8 ods. 4): úprava príjmov
+	// a výdavkov bez pohybu peňazí, napr. odpisy dlhodobého majetku.
+	Closing Means = "close"
 )
 
 // Line je časť pohybu v jednom stĺpci.
@@ -188,6 +191,33 @@ func Check(amount money.Dec, lines []Line) error {
 	return nil
 }
 
+// CheckClosing overí uzávierkovú operáciu: aspoň jeden riadok, známe stĺpce
+// (nie priebežné položky), centy, nenulové sumy. Súčet sa nekontroluje —
+// peniaze sa nepohnú.
+func CheckClosing(lines []Line) error {
+	if len(lines) == 0 {
+		return errors.New("uzávierková operácia musí mať aspoň jeden riadok")
+	}
+	seen := map[Column]bool{}
+	for _, l := range lines {
+		info, ok := l.Column.Info()
+		if !ok {
+			return fmt.Errorf("%w: %q", ErrUnknownColumn, l.Column)
+		}
+		if info.Group == GroupTransit {
+			return errors.New("priebežné položky nie sú uzávierková operácia")
+		}
+		if seen[l.Column] {
+			return fmt.Errorf("stĺpec %s je v rozpise dvakrát", l.Column)
+		}
+		seen[l.Column] = true
+		if l.Amount.IsZero() || !l.Amount.Equal(l.Amount.RoundCents()) {
+			return fmt.Errorf("suma v stĺpci %s musí byť nenulová a v centoch", l.Column)
+		}
+	}
+	return nil
+}
+
 // Totals sú súčty denníka.
 type Totals struct {
 	Columns  map[Column]money.Dec `json:"columns"`
@@ -208,6 +238,8 @@ func Sum(entries []Entry) Totals {
 	t := Totals{Columns: map[Column]money.Dec{}}
 	for _, e := range entries {
 		switch {
+		case e.Means == Closing:
+			// bez pohybu peňazí
 		case e.Means == Cash && e.Amount.Sign() >= 0:
 			t.CashIn = t.CashIn.Add(e.Amount)
 		case e.Means == Cash:
@@ -282,6 +314,9 @@ func Balances(entries []Entry, cash money.Dec, bank map[string]money.Dec, accoun
 		get(Bank, a)
 	}
 	for _, e := range entries {
+		if e.Means == Closing {
+			continue
+		}
 		acc := e.Account
 		if e.Means == Bank {
 			acc = normAcc(acc)

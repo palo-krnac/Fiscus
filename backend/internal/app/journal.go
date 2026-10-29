@@ -56,8 +56,12 @@ func (a *App) Journal(ctx context.Context, companyID int64, year int) (JournalBo
 	if err != nil {
 		return JournalBook{}, err
 	}
+	entries = append(entries, closingEntries(overrides, year)...)
 	docs := docCache{a: a, ctx: ctx, cid: companyID}
 	for i := range entries {
+		if entries[i].Means == journal.Closing {
+			continue
+		}
 		e := &entries[i]
 		if o, ok := overrides[e.Key]; ok && journal.Check(e.Amount, o.Lines) == nil {
 			e.Lines, e.Note = o.Lines, o.Note
@@ -191,6 +195,66 @@ func (a *App) journalSources(ctx context.Context, companyID int64, year int) ([]
 	return out, nil
 }
 
+// closingPrefix je začiatok kľúča uzávierkovej operácie: close:ROK:N.
+func closingPrefix(year int) string { return "close:" + strconv.Itoa(year) + ":" }
+
+// closingEntries vráti uzávierkové operácie roka (k 31. 12.).
+func closingEntries(overrides map[string]store.JournalOverride, year int) []journal.Entry {
+	var out []journal.Entry
+	end := invoice.MustDate(fmt.Sprintf("%d-12-31", year))
+	for k, o := range overrides {
+		if strings.HasPrefix(k, closingPrefix(year)) {
+			out = append(out, journal.Entry{Key: k, Date: end, Means: journal.Closing, Account: "Uzávierka", Number: "UZ",
+				Text: o.Note, Lines: o.Lines})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
+	return out
+}
+
+// AddClosing pridá uzávierkovú operáciu k 31. 12. roka (napr. odpisy).
+func (a *App) AddClosing(ctx context.Context, companyID int64, year int, text string, lines []journal.Line) (string, error) {
+	if err := a.Require(ctx, companyID, auth.PermLedgerWrite); err != nil {
+		return "", err
+	}
+	if year < 2000 || year > 2100 {
+		return "", mfaFieldErr("year", "Neplatný rok")
+	}
+	overrides, err := a.Store.ListJournalOverrides(ctx, companyID)
+	if err != nil {
+		return "", err
+	}
+	n := 1
+	for k := range overrides {
+		if rest, ok := strings.CutPrefix(k, closingPrefix(year)); ok {
+			if i, err := strconv.Atoi(rest); err == nil && i >= n {
+				n = i + 1
+			}
+		}
+	}
+	key := fmt.Sprintf("%s%03d", closingPrefix(year), n)
+	return key, a.saveClosing(ctx, companyID, key, text, lines)
+}
+
+func (a *App) saveClosing(ctx context.Context, companyID int64, key, text string, lines []journal.Line) error {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return mfaFieldErr("text", "Zadajte popis operácie (napr. Odpisy dlhodobého majetku)")
+	}
+	if err := journal.CheckClosing(lines); err != nil {
+		return mfaFieldErr("lines", err.Error())
+	}
+	if err := a.Store.SaveJournalOverride(ctx, companyID, store.JournalOverride{Key: key, Lines: lines, Note: text}); err != nil {
+		return err
+	}
+	parts := make([]string, 0, len(lines))
+	for _, l := range lines {
+		parts = append(parts, fmt.Sprintf("%s %s €", l.Column, l.Amount.Display()))
+	}
+	a.record(ctx, companyID, audit.CatLedger, "closing", "journal", 0, "Uzávierková operácia "+key+": "+text+" → "+strings.Join(parts, ", "), nil, lines)
+	return nil
+}
+
 // docCache načíta spárované doklady raz.
 type docCache struct {
 	a    *App
@@ -299,6 +363,23 @@ func (a *App) journalEntry(ctx context.Context, companyID int64, key string) (jo
 func (a *App) ClassifyJournal(ctx context.Context, companyID int64, key string, lines []journal.Line, note string) error {
 	if err := a.Require(ctx, companyID, auth.PermLedgerWrite); err != nil {
 		return err
+	}
+	if strings.HasPrefix(key, "close:") {
+		overrides, err := a.Store.ListJournalOverrides(ctx, companyID)
+		if err != nil {
+			return err
+		}
+		if _, ok := overrides[key]; !ok {
+			return store.ErrNotFound
+		}
+		if lines == nil {
+			if err := a.Store.DeleteJournalOverride(ctx, companyID, key); err != nil {
+				return err
+			}
+			a.record(ctx, companyID, audit.CatLedger, "closing", "journal", 0, "Zmazaná uzávierková operácia "+key, overrides[key], nil)
+			return nil
+		}
+		return a.saveClosing(ctx, companyID, key, note, lines)
 	}
 	e, err := a.journalEntry(ctx, companyID, key)
 	if err != nil {

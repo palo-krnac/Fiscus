@@ -134,3 +134,24 @@ func (s *Server) setStatementInputs(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+func (s *Server) addClosing(w http.ResponseWriter, r *http.Request) {
+	cid, ok := s.company(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		Year  int            `json:"year"`
+		Text  string         `json:"text"`
+		Lines []journal.Line `json:"lines"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	key, err := s.App.AddClosing(r.Context(), cid, body.Year, body.Text, body.Lines)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]string{"key": key})
+}

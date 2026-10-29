@@ -81,11 +81,17 @@ const columnDefs = [
     colId: 'means',
     headerName: '',
     width: 44,
-    valueGetter: (p) => (p.data.means === 'cash' ? 'P' : 'B'),
-    tooltipValueGetter: (p) => (p.data.means === 'cash' ? 'Pokladnica' : `Banka ${p.data.account}`),
+    valueGetter: (p) => ({ cash: 'P', bank: 'B', close: 'U' })[p.data.means],
+    tooltipValueGetter: (p) => ({ cash: 'Pokladnica', close: 'Uzávierková operácia' })[p.data.means] ?? `Banka ${p.data.account}`,
     cellClass: 'cell-means',
   },
-  { field: 'partner', headerName: 'Partner', flex: 1, minWidth: 120 },
+  {
+    colId: 'partner',
+    headerName: 'Partner',
+    valueGetter: (p) => p.data.partner || (p.data.means === 'close' ? p.data.text : ''),
+    flex: 1,
+    minWidth: 120,
+  },
   {
     colId: 'text',
     headerName: 'Text',
@@ -98,8 +104,8 @@ const columnDefs = [
     headerName: 'Suma',
     type: 'rightAligned',
     width: 110,
-    valueFormatter: (p) => formatAmount(p.value),
-    cellClass: (p) => (Number(p.value) >= 0 ? 'ag-right-aligned-cell cell-in' : 'ag-right-aligned-cell'),
+    valueFormatter: (p) => (p.data.means === 'close' ? '—' : formatAmount(p.value)),
+    cellClass: (p) => (p.data.means === 'close' ? 'ag-right-aligned-cell' : Number(p.value) >= 0 ? 'ag-right-aligned-cell cell-in' : 'ag-right-aligned-cell'),
     comparator: (a, b) => Number(a) - Number(b),
   },
   {
@@ -144,19 +150,40 @@ const editOpen = computed({
     if (!v) current.value = null
   },
 })
-const choices = computed(() => (current.value ? columnsFor(cols.value, current.value.amount) : []))
+// uzávierková operácia (means close): všetky stĺpce okrem priebežných, súčet sa nekontroluje
+const closing = computed(() => current.value?.means === 'close')
+const choices = computed(() =>
+  !current.value ? [] : closing.value ? cols.value.filter((c) => c.group !== 'c') : columnsFor(cols.value, current.value.amount),
+)
+const closingPresets = [
+  { column: 'e6', label: 'Odpisy dlhodobého majetku', text: 'Odpisy dlhodobého majetku' },
+  { column: 'e6', label: 'Zostatková cena predaného majetku', text: 'Zostatková cena predaného dlhodobého majetku' },
+  { column: 'd3', label: 'Úprava príjmov', text: 'Úprava príjmov' },
+]
 const rest = computed(() => (current.value ? unallocated(current.value.amount, draft.value) : '0.00'))
 
 function open(e) {
   current.value = e
   draft.value = (e.lines ?? []).map((l) => ({ column: l.column, amount: String(l.amount) }))
   if (!draft.value.length) draft.value = [{ column: null, amount: absAmount(e.amount) }]
-  note.value = e.note ?? ''
+  note.value = (e.means === 'close' ? e.text : e.note) ?? ''
   editError.value = ''
 }
 
 function preset(p) {
+  if (closing.value) {
+    draft.value = [{ column: p.column, amount: draft.value[0]?.amount ?? '' }]
+    if (!note.value) note.value = p.text
+    return
+  }
   draft.value = [{ column: p.column, amount: absAmount(current.value.amount) }]
+}
+
+function newClosing() {
+  current.value = { key: '', means: 'close', amount: '0', date: `${year.value}-12-31`, lines: [], isNew: true }
+  draft.value = [{ column: 'e6', amount: '' }]
+  note.value = ''
+  editError.value = ''
 }
 
 function addLine() {
@@ -171,9 +198,13 @@ async function save() {
   }
   busy.value = true
   try {
-    const lines = draft.value.map((l) => ({ column: l.column, amount: String(l.amount).replace(',', '.').trim() }))
-    await api.classifyJournal(session.companyId, current.value.key, lines, note.value)
-    toast.add({ severity: 'success', summary: 'Pohyb rozpísaný', life: 2000 })
+    const lines = draft.value.map((l) => ({ column: l.column, amount: String(l.amount).replace(/\s/g, '').replace(',', '.') }))
+    if (current.value.isNew) {
+      await api.addClosing(session.companyId, year.value, note.value, lines)
+    } else {
+      await api.classifyJournal(session.companyId, current.value.key, lines, note.value)
+    }
+    toast.add({ severity: 'success', summary: closing.value ? 'Uzávierková operácia uložená' : 'Pohyb rozpísaný', life: 2000 })
     current.value = null
     await load()
   } catch (e) {
@@ -227,6 +258,9 @@ const docLink = (d) => (d.kind === 'invoice' ? `/faktury/${d.id}` : `/prijate/${
     <header class="head">
       <h1>Peňažný denník</h1>
       <Select v-model="year" :options="years" option-label="label" option-value="value" size="small" aria-label="Rok" />
+      <div class="spacer" />
+      <Button v-if="canWrite" label="Uzávierková operácia" icon="pi pi-plus" size="small" severity="secondary" outlined
+        v-tooltip.bottom="'Úprava k 31. 12. bez pohybu peňazí, napr. odpisy'" @click="newClosing" />
     </header>
 
     <section class="ledger" aria-label="Súhrn">
@@ -324,10 +358,14 @@ const docLink = (d) => (d.kind === 'invoice' ? `/faktury/${d.id}` : `/prijate/${
       />
     </div>
 
-    <Drawer v-model:visible="editOpen" position="right" class="journal-panel" header="Rozpis pohybu">
+    <Drawer v-model:visible="editOpen" position="right" class="journal-panel" :header="closing ? 'Uzávierková operácia' : 'Rozpis pohybu'">
       <div v-if="current" class="edit">
-        <p class="amount" :class="{ in: Number(current.amount) >= 0 }">{{ formatMoney(current.amount) }}</p>
-        <dl class="facts">
+        <p v-if="closing" class="muted">
+          K 31. 12. {{ year }}, bez pohybu peňazí (§ 8 ods. 4 postupov účtovania): odpisy, zostatková cena predaného majetku,
+          úpravy príjmov a výdavkov. Kladná suma vo výdavkovom stĺpci zvýši výdavky, záporná ich zníži.
+        </p>
+        <p v-else class="amount" :class="{ in: Number(current.amount) >= 0 }">{{ formatMoney(current.amount) }}</p>
+        <dl v-if="!closing" class="facts">
           <dt>Dátum</dt><dd>{{ formatDate(current.date) }}</dd>
           <dt>{{ current.means === 'cash' ? 'Pokladnica' : 'Banka' }}</dt><dd>{{ current.number || current.account }}</dd>
           <template v-if="current.partner"><dt>Partner</dt><dd>{{ current.partner }}</dd></template>
@@ -340,7 +378,7 @@ const docLink = (d) => (d.kind === 'invoice' ? `/faktury/${d.id}` : `/prijate/${
 
         <template v-if="canWrite">
           <div class="presets" role="group" aria-label="Rýchly rozpis">
-            <button v-for="p in presets(current.amount)" :key="p.column" type="button" @click="preset(p)">{{ p.label }}</button>
+            <button v-for="p in closing ? closingPresets : presets(current.amount)" :key="p.label" type="button" @click="preset(p)">{{ p.label }}</button>
           </div>
 
           <table class="split">
@@ -360,13 +398,14 @@ const docLink = (d) => (d.kind === 'invoice' ? `/faktury/${d.id}` : `/prijate/${
           </table>
           <div class="split-foot">
             <button type="button" class="link" @click="addLine"><i class="pi pi-plus" /> Pridať riadok</button>
-            <span :class="{ off: rest !== '0.00' }">Nerozpísané: {{ formatAmount(rest) }} €</span>
+            <span v-if="!closing" :class="{ off: rest !== '0.00' }">Nerozpísané: {{ formatAmount(rest) }} €</span>
           </div>
-          <label class="note"><span>Poznámka</span><InputText v-model="note" size="small" fluid /></label>
+          <label class="note"><span>{{ closing ? 'Popis operácie' : 'Poznámka' }}</span><InputText v-model="note" size="small" fluid /></label>
           <p v-if="editError" class="error">{{ editError }}</p>
           <div class="actions">
-            <Button v-if="!current.auto && current.lines?.length" label="Vrátiť návrh Fiškusa" text size="small" severity="secondary" :disabled="busy" @click="reset" />
-            <Button label="Uložiť rozpis" icon="pi pi-check" size="small" :loading="busy" @click="save" />
+            <Button v-if="closing && !current.isNew" label="Zmazať operáciu" text size="small" severity="danger" :disabled="busy" @click="reset" />
+            <Button v-else-if="!closing && !current.auto && current.lines?.length" label="Vrátiť návrh Fiškusa" text size="small" severity="secondary" :disabled="busy" @click="reset" />
+            <Button :label="closing ? 'Uložiť operáciu' : 'Uložiť rozpis'" icon="pi pi-check" size="small" :loading="busy" @click="save" />
           </div>
         </template>
         <p v-else class="muted">{{ linesText(cols, current.lines, formatAmount) || 'Pohyb ešte nie je rozpísaný.' }}</p>
@@ -390,6 +429,9 @@ const docLink = (d) => (d.kind === 'invoice' ? `/faktury/${d.id}` : `/prijate/${
 }
 .head h1 {
   font-size: var(--fs-xl);
+}
+.spacer {
+  flex: 1;
 }
 .ledger {
   display: flex;
@@ -654,6 +696,9 @@ input.num {
   }
   .figure .value {
     font-size: var(--fs-lg);
+  }
+  .head :deep(.p-button-label) {
+    display: none;
   }
   .search {
     order: 3;
