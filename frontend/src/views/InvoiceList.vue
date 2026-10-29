@@ -14,6 +14,7 @@ import { formatAmount, formatDate, formatMoney, statusOf } from '../lib/format.j
 import { fiskusGridTheme, skGridLocale, gridRows } from '../lib/grid.js'
 import { matches, searchTerms } from '../lib/search.js'
 import { invoiceColumns } from '../lib/columns.js'
+import { kindBadge } from '../lib/advance.js'
 import ExportButton from '../components/ExportButton.vue'
 
 const router = useRouter()
@@ -72,7 +73,8 @@ const visibleRows = computed(() => {
 // Súhrn za rok — nezávisle od filtra zobrazenia.
 const sum = (list) => list.reduce((acc, r) => acc + Number(r.summary.total), 0)
 const ledger = computed(() => {
-  const counted = rows.value.filter((r) => r.status === 'issued' || r.status === 'paid')
+  // zálohová faktúra nie je výnos — fakturované sú faktúry, dobropisy a doklady k prijatej platbe
+  const counted = rows.value.filter((r) => (r.status === 'issued' || r.status === 'paid') && r.kind !== 'proforma')
   const unpaid = rows.value.filter((r) => r.status === 'issued')
   const overdue = unpaid.filter((r) => r.overdue)
   return {
@@ -85,7 +87,7 @@ const ledger = computed(() => {
 })
 
 const totalsRow = computed(() => {
-  const list = visibleRows.value.filter((r) => r.status !== 'cancelled' && r.status !== 'draft')
+  const list = visibleRows.value.filter((r) => r.status !== 'cancelled' && r.status !== 'draft' && r.kind !== 'proforma')
   const add = (k) => list.reduce((a, r) => a + Number(r.summary[k]), 0).toFixed(2)
   return [{
     number: `Spolu ${list.length}`,
@@ -113,9 +115,10 @@ const columnDefs = [
     cellRenderer: (p) => {
       if (p.data._totals) return p.value
       const num = p.value || 'koncept'
-      return p.data.kind === 'credit_note' ? `${num}<span class="kind-badge">dobropis</span>` : num
+      const badge = kindBadge(p.data.kind)
+      return badge ? `${num}<span class="kind-badge">${badge}</span>` : num
     },
-    width: 150,
+    width: 178,
     cellClass: (p) => (p.data._totals ? '' : p.value ? 'cell-number' : 'cell-draft'),
   },
   { colId: 'customer', headerName: 'Odberateľ', valueGetter: (p) => p.data.customer.name, flex: 1, minWidth: 130 },
@@ -187,6 +190,8 @@ onBeforeUnmount(() => {
       <h1>Vydané faktúry</h1>
       <Select v-model="year" :options="years" option-label="label" option-value="value" size="small" aria-label="Rok" />
       <div class="spacer" />
+      <Button v-if="can('invoices.write')" label="Zálohová faktúra" icon="pi pi-plus" severity="secondary" outlined size="small"
+        class="hide-narrow" @click="router.push('/faktury/nova?druh=zaloha')" />
       <Button v-if="can('invoices.write')" size="small" @click="router.push('/faktury/nova')">
         <template #default>
           <i class="pi pi-plus" /><span>Nová faktúra</span><kbd class="hint">N</kbd>
@@ -384,6 +389,9 @@ onBeforeUnmount(() => {
     font-size: var(--fs-lg);
   }
   .hint {
+    display: none;
+  }
+  .hide-narrow {
     display: none;
   }
   .ledger {

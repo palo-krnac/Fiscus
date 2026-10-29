@@ -5,6 +5,7 @@ import { actionLabel, channelLabel } from './audit.js'
 import { quoteStatusOf } from './quotes.js'
 import { intervalLabel, recurringStatusOf } from './recurring.js'
 import { levelShort } from './reminders.js'
+import { kindLabel } from './advance.js'
 
 const t = (header, value, width) => ({ header, value, width })
 const money = (header, value) => ({ header, value, type: 'money', width: 14 })
@@ -13,7 +14,7 @@ const yes = (b) => (b ? 'áno' : '')
 
 export const invoiceColumns = [
   t('Číslo', (r) => r.number || 'koncept', 14),
-  t('Druh', (r) => (r.kind === 'credit_note' ? 'dobropis' : 'faktúra'), 10),
+  t('Druh', (r) => kindLabel(r.kind), 16),
   t('Odberateľ', (r) => r.customer?.name, 32),
   t('IČO', (r) => r.customer?.ico, 11),
   t('DIČ', (r) => r.customer?.dic, 12),

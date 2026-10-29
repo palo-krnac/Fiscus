@@ -155,6 +155,7 @@ export const api = {
   pay: (cid, id, date) => request('POST', `${inv(cid)}/${id}/pay`, date ? { date } : undefined),
   cancel: (cid, id) => request('POST', `${inv(cid)}/${id}/cancel`),
   creditNote: (cid, id) => request('POST', `${inv(cid)}/${id}/credit-note`),
+  settleAdvance: (cid, id) => request('POST', `${inv(cid)}/${id}/settle`),
 
   purchases(cid, { year, q } = {}) {
     const p = new URLSearchParams()

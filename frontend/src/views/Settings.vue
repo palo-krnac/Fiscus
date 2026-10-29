@@ -26,6 +26,7 @@ const seriesFields = [
   { kind: 'invoice', label: 'Faktúry' },
   { kind: 'credit_note', label: 'Dobropisy' },
   { kind: 'proforma', label: 'Zálohové faktúry' },
+  { kind: 'advance_receipt', label: 'Daňové doklady k prijatej platbe' },
   { kind: 'quote', label: 'Cenové ponuky' },
   { kind: 'reminder', label: 'Upomienky' },
   { kind: 'purchase', label: 'Prijaté faktúry (interné číslo)' },

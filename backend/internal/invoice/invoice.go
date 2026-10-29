@@ -114,8 +114,10 @@ type Invoice struct {
 	Note          string        `json:"note"`
 	// Correction sú údaje dobropisu (opravnej faktúry); nil pri bežnej faktúre.
 	Correction *Correction `json:"correction,omitempty"`
-	Lines      []Line      `json:"lines"`
-	Summary    vat.Summary `json:"summary"`
+	// Advance sú väzby záloh (zálohová faktúra, doklad k platbe, vyúčtovanie).
+	Advance *Advance    `json:"advance,omitempty"`
+	Lines   []Line      `json:"lines"`
+	Summary vat.Summary `json:"summary"`
 }
 
 // Recalculate prepočíta sumy položiek a rekapituláciu DPH.
@@ -140,6 +142,7 @@ func (inv *Invoice) Recalculate() error {
 		return err
 	}
 	inv.Summary = s
+	inv.applyDeductions()
 	return nil
 }
 
@@ -208,6 +211,7 @@ func (inv *Invoice) Validate() error {
 		add("deliveryDate", "Zadajte dátum dodania")
 	}
 	errs = append(errs, inv.validateCorrection()...)
+	errs = append(errs, inv.validateAdvance()...)
 	if inv.DueDate.IsZero() {
 		add("dueDate", "Zadajte dátum splatnosti")
 	} else if !inv.IssueDate.IsZero() && inv.DueDate.Before(inv.IssueDate) {
@@ -279,7 +283,7 @@ func (inv *Invoice) Cancel() error {
 // Overdue vráti true, ak je faktúra po splatnosti k danému dňu.
 func (inv *Invoice) Overdue(today Date) bool {
 	// dobropis je záväzok voči odberateľovi, nie pohľadávka po splatnosti
-	return inv.Status == StatusIssued && inv.Kind != KindCreditNote && today.After(inv.DueDate)
+	return inv.Status == StatusIssued && (inv.Kind == KindInvoice || inv.Kind == KindProforma) && today.After(inv.DueDate)
 }
 
 // SequenceKey je kľúč číselného radu podľa druhu dokladu. Je nezávislý
@@ -290,6 +294,8 @@ func SequenceKey(k Kind) string {
 		return "DB"
 	case KindProforma:
 		return "ZF"
+	case KindAdvanceReceipt:
+		return "ZD"
 	}
 	return "FA"
 }

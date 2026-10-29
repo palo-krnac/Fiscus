@@ -22,11 +22,14 @@ const qr = ref('')
 
 const company = computed(() => session.company ?? {})
 const nonVat = computed(() => !!inv.value?.nonVatPayer)
+const receipt = computed(() => inv.value?.kind === 'advance_receipt')
+const deductions = computed(() => inv.value?.advance?.deductions ?? [])
 const docTitle = computed(() => {
   if (props.quote) return 'Cenová ponuka'
   switch (inv.value?.kind) {
     case 'credit_note': return nonVat.value ? 'Dobropis – opravná faktúra' : 'Dobropis – opravný daňový doklad'
-    case 'proforma': return 'Zálohová faktúra'
+    case 'proforma': return 'Zálohová faktúra – nie je daňový doklad'
+    case 'advance_receipt': return 'Daňový doklad k prijatej platbe'
   }
   return nonVat.value ? 'Faktúra' : 'Faktúra – daňový doklad'
 })
@@ -83,8 +86,8 @@ const ids = (p) =>
         </dl>
         <dl v-else class="dates">
           <div><dt>Dátum vystavenia</dt><dd>{{ formatDate(inv.issueDate) }}</dd></div>
-          <div><dt>Dátum dodania</dt><dd>{{ formatDate(inv.deliveryDate) }}</dd></div>
-          <div class="due"><dt>Dátum splatnosti</dt><dd>{{ formatDate(inv.dueDate) }}</dd></div>
+          <div><dt>{{ receipt ? 'Dátum prijatia platby' : 'Dátum dodania' }}</dt><dd>{{ formatDate(inv.deliveryDate) }}</dd></div>
+          <div v-if="!receipt" class="due"><dt>Dátum splatnosti</dt><dd>{{ formatDate(inv.dueDate) }}</dd></div>
         </dl>
       </header>
 
@@ -116,7 +119,12 @@ const ids = (p) =>
         </div>
       </section>
 
-      <section v-if="!quote" class="payment">
+      <section v-if="inv.advance && (receipt || deductions.length)" class="correction">
+        <div><span>{{ receipt ? 'K zálohovej faktúre' : 'Vyúčtovanie zálohovej faktúry' }}</span><strong>{{ inv.advance.proformaNumber }}</strong></div>
+        <div v-if="receipt"><span>Daňová povinnosť vznikla dňom</span><strong>{{ formatDate(inv.deliveryDate) }}</strong></div>
+      </section>
+
+      <section v-if="!quote && !receipt" class="payment">
         <div><span>Spôsob úhrady</span><strong>{{ paymentLabel(inv.paymentMethod) }}</strong></div>
         <div v-if="(inv.paymentMethod || 'transfer') === 'transfer'"><span>IBAN</span><strong>{{ company.iban || '—' }}</strong></div>
         <div v-else><span>&nbsp;</span><strong>&nbsp;</strong></div>
@@ -146,6 +154,31 @@ const ids = (p) =>
         </tbody>
       </table>
 
+      <table v-if="deductions.length" class="lines deduct">
+        <thead>
+          <tr>
+            <th class="desc">Odpočet zálohy</th>
+            <th>Prijatá</th>
+            <th v-if="!nonVat" class="num">Sadzba</th>
+            <th v-if="!nonVat" class="num">Základ</th>
+            <th v-if="!nonVat" class="num">DPH</th>
+            <th class="num">Spolu</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template v-for="d in deductions" :key="d.number">
+            <tr v-for="(rs, i) in d.rates" :key="d.number + rs.rate">
+              <td class="desc">{{ i === 0 ? (d.receiptId ? `Daňový doklad k prijatej platbe ${d.number}` : `Uhradená záloha ${d.number}`) : '' }}</td>
+              <td>{{ i === 0 ? formatDate(d.date) : '' }}</td>
+              <td v-if="!nonVat" class="num">{{ rs.rate }} %</td>
+              <td v-if="!nonVat" class="num">−{{ formatAmount(rs.base) }}</td>
+              <td v-if="!nonVat" class="num">−{{ formatAmount(rs.vat) }}</td>
+              <td class="num">−{{ formatAmount(rs.total) }}</td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+
       <section class="bottom">
         <div class="qr-block">
           <template v-if="qr">
@@ -157,7 +190,7 @@ const ids = (p) =>
         <div class="totals">
           <table v-if="!nonVat" class="recap">
             <thead>
-              <tr><th>Sadzba DPH</th><th class="num">Základ</th><th class="num">DPH</th><th class="num">Spolu</th></tr>
+              <tr><th>{{ deductions.length ? 'Po odpočte zálohy' : 'Sadzba DPH' }}</th><th class="num">Základ</th><th class="num">DPH</th><th class="num">Spolu</th></tr>
             </thead>
             <tbody>
               <tr v-for="r in inv.summary.rates" :key="r.rate">
@@ -176,8 +209,12 @@ const ids = (p) =>
               </tr>
             </tfoot>
           </table>
+          <div v-if="deductions.length && inv.advance.supply" class="supply-line">
+            <span>Dodávka spolu</span>
+            <span>{{ formatMoney(inv.advance.supply.total, inv.currency) }}</span>
+          </div>
           <div class="payable">
-            <span>{{ quote ? 'Cena spolu' : inv.kind === 'credit_note' ? 'Suma dobropisu' : 'K úhrade' }}</span>
+            <span>{{ quote ? 'Cena spolu' : inv.kind === 'credit_note' ? 'Suma dobropisu' : receipt ? 'Prijatá platba' : 'K úhrade' }}</span>
             <strong>{{ formatMoney(inv.summary.total, inv.currency) }}</strong>
           </div>
         </div>
@@ -457,6 +494,18 @@ td:last-child {
   font-weight: 600;
   border-bottom: 0;
   border-top: 0.75pt solid #1d2633;
+}
+.deduct {
+  margin-top: 4mm;
+}
+.deduct td:last-child {
+  font-weight: 400;
+}
+.supply-line {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 3mm;
+  color: #4e5866;
 }
 .payable {
   display: flex;

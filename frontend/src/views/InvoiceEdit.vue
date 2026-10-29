@@ -27,6 +27,7 @@ import { quoteActions, quoteStatusOf, validDays as quoteValidDays } from '../lib
 import { firstOfNextMonth, intervals, placeholders, recurringStatusOf } from '../lib/recurring.js'
 import InputNumber from 'primevue/inputnumber'
 import { filterItems, lineFromItem } from '../lib/catalog.js'
+import { canCredit, canSettle, editorTitle, hasDeductions } from '../lib/advance.js'
 
 // Ten istý editor slúži aj cenovej ponuke (quote) a šablóne pravidelnej faktúry
 // (recurring): rovnaké položky a výpočet DPH, iné dátumy a akcie.
@@ -68,11 +69,11 @@ const title = computed(() => {
   if (!inv.value) return ''
   if (isRecurring.value) return inv.value.id ? inv.value.name || 'Pravidelná faktúra' : 'Nová pravidelná faktúra'
   if (isQuote.value) return inv.value.number ? `Ponuka ${inv.value.number}` : inv.value.id ? 'Koncept ponuky' : 'Nová ponuka'
-  const doc = isCredit.value ? 'Dobropis' : 'Faktúra'
-  if (inv.value.number) return `${doc} ${inv.value.number}`
-  if (isCredit.value) return 'Koncept dobropisu'
-  return inv.value.id ? 'Koncept faktúry' : 'Nová faktúra'
+  return editorTitle(inv.value)
 })
+const isProforma = computed(() => inv.value?.kind === 'proforma')
+const isReceipt = computed(() => inv.value?.kind === 'advance_receipt')
+const deductions = computed(() => (hasDeductions(inv.value) ? inv.value.advance.deductions : []))
 
 function setReason(v) {
   inv.value.correction = { ...inv.value.correction, reason: v }
@@ -139,7 +140,7 @@ async function load() {
             summary: { rates: [], base: '0', vat: '0', total: '0' },
           }
         : {
-        kind: 'invoice',
+        kind: route.query.druh === 'zaloha' ? 'proforma' : 'invoice',
         status: 'draft',
         customer: { name: '', street: '', city: '', zip: '', country: 'SK', ico: '', dic: '', icdph: '', email: '' },
         issueDate: today,
@@ -407,11 +408,30 @@ function issue() {
   })
 }
 
+async function settle() {
+  busy.value = true
+  try {
+    const f = await api.settleAdvance(session.companyId, inv.value.id)
+    toast.add({ severity: 'info', summary: 'Koncept vyúčtovacej faktúry', detail: 'Upravte položky podľa skutočnej dodávky — záloha sa odpočíta sama.', life: 5000 })
+    router.push(`/faktury/${f.id}`)
+  } catch (e) {
+    applyError(e)
+  } finally {
+    busy.value = false
+  }
+}
+
 async function markPaid() {
   busy.value = true
   try {
     inv.value = await api.pay(session.companyId, inv.value.id)
-    toast.add({ severity: 'success', summary: 'Označená ako uhradená', life: 2500 })
+    const rn = inv.value.advance?.receiptNumber
+    toast.add({
+      severity: 'success',
+      summary: 'Označená ako uhradená',
+      detail: rn ? `Vystavený daňový doklad k prijatej platbe ${rn}.` : undefined,
+      life: rn ? 5000 : 2500,
+    })
   } catch (e) {
     applyError(e)
   } finally {
@@ -653,8 +673,10 @@ const customerFields = reactive([
         <Button v-if="qa.invoice" label="Vytvoriť faktúru" icon="pi pi-file-export" size="small" :disabled="busy" @click="invoiceQuote" />
       </template>
       <template v-else-if="!isQuote && canWrite && (inv.status === 'issued' || inv.status === 'paid')">
+        <Button v-if="canSettle(inv)" label="Vyúčtovať" icon="pi pi-calculator" size="small" :disabled="busy"
+          v-tooltip.bottom="'Vyúčtovacia faktúra s odpočtom zálohy'" @click="settle" />
         <Button
-          v-if="!isCredit"
+          v-if="canCredit(inv)"
           label="Dobropis"
           icon="pi pi-undo"
           severity="secondary"
@@ -673,6 +695,34 @@ const customerFields = reactive([
 
     <div class="body">
       <div class="form">
+        <p v-if="isProforma" class="advance-note">
+          <i class="pi pi-info-circle" />
+          <span v-if="inv.status !== 'paid'">Zálohová faktúra nie je daňový doklad. Po úhrade vznikne daňový doklad k prijatej platbe a zálohu potom vyúčtujete.</span>
+          <span v-else-if="inv.advance?.receiptId">
+            Uhradená {{ formatDate(inv.paidDate) }} — daňový doklad
+            <RouterLink :to="`/faktury/${inv.advance.receiptId}`">{{ inv.advance.receiptNumber }}</RouterLink>.
+            <template v-if="inv.advance.finalId">Vyúčtovaná faktúrou <RouterLink :to="`/faktury/${inv.advance.finalId}`">{{ inv.advance.finalNumber || 'koncept' }}</RouterLink>.</template>
+          </span>
+          <span v-else>
+            Uhradená {{ formatDate(inv.paidDate) }}.
+            <template v-if="inv.advance?.finalId">Vyúčtovaná faktúrou <RouterLink :to="`/faktury/${inv.advance.finalId}`">{{ inv.advance.finalNumber || 'koncept' }}</RouterLink>.</template>
+          </span>
+        </p>
+        <p v-if="isReceipt && inv.advance" class="advance-note">
+          <i class="pi pi-info-circle" />
+          <span>
+            Daňový doklad k prijatej platbe k zálohovej faktúre
+            <RouterLink :to="`/faktury/${inv.advance.proformaId}`">{{ inv.advance.proformaNumber }}</RouterLink>.
+            Daňová povinnosť vznikla dňom prijatia platby {{ formatDate(inv.deliveryDate) }}.
+          </span>
+        </p>
+        <p v-if="deductions.length" class="advance-note">
+          <i class="pi pi-info-circle" />
+          <span>
+            Vyúčtovanie zálohovej faktúry <RouterLink :to="`/faktury/${inv.advance.proformaId}`">{{ inv.advance.proformaNumber }}</RouterLink>.
+            Upravte položky podľa skutočnej dodávky, záloha sa odpočíta automaticky.
+          </span>
+        </p>
         <fieldset v-if="isCredit && inv.correction" class="block correction">
           <legend>Oprava faktúry</legend>
           <p class="corrects">
@@ -958,7 +1008,7 @@ const customerFields = reactive([
       </div>
 
       <aside class="recap" aria-label="Rekapitulácia DPH">
-        <h2>{{ nonVat ? 'Súhrn' : 'Rekapitulácia DPH' }}</h2>
+        <h2>{{ nonVat ? 'Súhrn' : deductions.length ? 'DPH po odpočte zálohy' : 'Rekapitulácia DPH' }}</h2>
         <table v-if="!nonVat">
           <thead>
             <tr>
@@ -974,7 +1024,7 @@ const customerFields = reactive([
               <td class="num">{{ formatAmount(r.vat) }}</td>
             </tr>
             <tr v-if="!inv.summary.rates?.length">
-              <td colspan="3" class="empty">Pridajte položky</td>
+              <td colspan="3" class="empty">{{ deductions.length ? 'Celé plnenie uhradené zálohou' : 'Pridajte položky' }}</td>
             </tr>
           </tbody>
           <tfoot>
@@ -985,8 +1035,20 @@ const customerFields = reactive([
             </tr>
           </tfoot>
         </table>
+        <dl v-if="deductions.length && inv.advance.supply" class="deductions">
+          <dt>Dodávka spolu</dt>
+          <dd>{{ formatMoney(inv.advance.supply.total, inv.currency) }}</dd>
+          <template v-for="d in deductions" :key="d.number">
+            <dt>
+              Odpočet zálohy
+              <RouterLink v-if="d.receiptId" :to="`/faktury/${d.receiptId}`">{{ d.number }}</RouterLink>
+              <template v-else>{{ d.number }}</template>
+            </dt>
+            <dd>−{{ formatMoney(d.total, inv.currency) }}</dd>
+          </template>
+        </dl>
         <div class="payable">
-          <span>{{ isQuote ? 'Cena spolu' : isRecurring ? 'Suma faktúry' : isCredit ? 'Suma dobropisu' : 'K úhrade' }}</span>
+          <span>{{ isQuote ? 'Cena spolu' : isRecurring ? 'Suma faktúry' : isCredit ? 'Suma dobropisu' : isReceipt ? 'Prijatá platba' : isProforma ? 'Záloha na úhradu' : 'K úhrade' }}</span>
           <strong class="num">{{ formatMoney(inv.summary.total, inv.currency) }}</strong>
         </div>
         <p v-if="nonVat" class="note-rc">Nie som platiteľ DPH. Faktúra je bez DPH.</p>
@@ -1477,6 +1539,41 @@ legend {
 }
 .sample p {
   margin: 0 0 2px;
+}
+.advance-note {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  background: var(--blue-wash);
+  border-left: 3px solid var(--blue);
+  font-size: var(--fs-sm);
+  color: var(--ink-soft);
+}
+.advance-note a {
+  color: var(--blue-deep);
+  font-weight: 600;
+}
+.deductions {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 3px 10px;
+  margin: 12px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--rule);
+  font-size: var(--fs-sm);
+}
+.deductions dt {
+  color: var(--ink-soft);
+}
+.deductions dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.deductions a {
+  color: var(--blue);
 }
 .pay-info dd.expired {
   color: var(--tone-overdue);

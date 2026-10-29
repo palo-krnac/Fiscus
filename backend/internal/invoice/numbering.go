@@ -20,6 +20,8 @@ var DefaultFormats = map[Kind]string{
 	KindInvoice:    "FA{RRRR}{NNNN}",
 	KindCreditNote: "DB{RRRR}{NNNN}",
 	KindProforma:   "ZF{RRRR}{NNNN}",
+	// daňový doklad k prijatej platbe
+	KindAdvanceReceipt: "ZD{RRRR}{NNNN}",
 }
 
 var (

@@ -180,7 +180,7 @@ func validateCompany(c store.Company) error {
 	if c.DefaultDueDays < 0 || c.DefaultDueDays > 365 {
 		add("defaultDueDays", "Splatnosť musí byť 0 až 365 dní")
 	}
-	for _, k := range []string{string(invoice.KindInvoice), string(invoice.KindCreditNote), string(invoice.KindProforma), PurchaseFormatKey, CashInFormatKey, CashOutFormatKey, QuoteFormatKey, ReminderFormatKey} {
+	for _, k := range []string{string(invoice.KindInvoice), string(invoice.KindCreditNote), string(invoice.KindProforma), string(invoice.KindAdvanceReceipt), PurchaseFormatKey, CashInFormatKey, CashOutFormatKey, QuoteFormatKey, ReminderFormatKey} {
 		if err := invoice.ValidateFormat(c.NumberFormats[k]); err != nil {
 			add("numberFormats."+k, err.Error())
 		}
@@ -249,6 +249,7 @@ func (a *App) SaveDraft(ctx context.Context, companyID int64, inv invoice.Invoic
 		// druh dokladu a odkaz na pôvodnú faktúru sa nedajú zmeniť z klienta,
 		// meniť sa dá iba dôvod opravy
 		inv.Kind = old.Kind
+		inv.Advance = old.Advance // odpočet zálohy nastavuje program
 		if old.Correction != nil {
 			c := *old.Correction
 			if inv.Correction != nil {
@@ -261,6 +262,11 @@ func (a *App) SaveDraft(ctx context.Context, companyID int64, inv invoice.Invoic
 	} else if inv.Kind == invoice.KindCreditNote || inv.Correction != nil {
 		return inv, &invoice.ValidationError{Fields: []invoice.FieldError{{Field: "kind",
 			Message: "Dobropis sa vytvára z vystavenej faktúry tlačidlom Dobropis"}}}
+	} else if inv.Kind == invoice.KindAdvanceReceipt {
+		return inv, &invoice.ValidationError{Fields: []invoice.FieldError{{Field: "kind",
+			Message: "Daňový doklad k prijatej platbe vznikne sám pri úhrade zálohovej faktúry"}}}
+	} else {
+		inv.Advance = nil
 	}
 	saved, err := a.saveDraft(ctx, companyID, inv)
 	if err != nil {
@@ -403,22 +409,44 @@ func (a *App) Issue(ctx context.Context, companyID, id int64) (invoice.Invoice, 
 	}
 	a.record(ctx, companyID, audit.CatInvoices, "issue", "invoice", inv.ID,
 		what+inv.Number+" pre "+inv.Customer.Name+", "+inv.Summary.Total.Display()+" €", nil, inv)
+	if adv := inv.Advance; adv != nil && len(adv.Deductions) > 0 {
+		if err := a.linkFinal(ctx, companyID, inv); err != nil {
+			return inv, err
+		}
+		if inv.Summary.Total.IsZero() {
+			// celé plnenie uhradené zálohou
+			return a.MarkPaid(ctx, companyID, inv.ID, inv.IssueDate)
+		}
+	}
 	return inv, nil
 }
 
 // MarkPaid označí faktúru ako uhradenú.
 func (a *App) MarkPaid(ctx context.Context, companyID, id int64, on invoice.Date) (invoice.Invoice, error) {
-	return a.transition(ctx, companyID, id, "pay", "Uhradená ", func(inv *invoice.Invoice) error {
+	inv, err := a.transition(ctx, companyID, id, "pay", "Uhradená ", func(inv *invoice.Invoice) error {
 		if on.IsZero() {
 			on = a.Today()
 		}
 		return inv.MarkPaid(on)
 	})
+	if err == nil && inv.NeedsReceipt() {
+		// prijatá záloha: daňová povinnosť vzniká dňom prijatia platby
+		inv, err = a.issueAdvanceReceipt(ctx, companyID, inv)
+	}
+	return inv, err
 }
 
 // Unpay zruší úhradu faktúry.
 func (a *App) Unpay(ctx context.Context, companyID, id int64) (invoice.Invoice, error) {
-	return a.transition(ctx, companyID, id, "unpay", "Zrušená úhrada ", (*invoice.Invoice).Unpay)
+	return a.transition(ctx, companyID, id, "unpay", "Zrušená úhrada ", func(inv *invoice.Invoice) error {
+		if inv.Advance != nil && inv.Advance.ReceiptID != 0 {
+			return fmt.Errorf("%w %s", ErrReceiptIssued, inv.Advance.ReceiptNumber)
+		}
+		if inv.Kind == invoice.KindAdvanceReceipt {
+			return ErrReceiptIssued
+		}
+		return inv.Unpay()
+	})
 }
 
 // Cancel stornuje faktúru.
