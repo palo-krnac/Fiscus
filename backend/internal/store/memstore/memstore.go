@@ -14,6 +14,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/cash"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/purchase"
+	"github.com/palo-krnac/fiscus/backend/internal/quote"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 )
 
@@ -33,6 +34,7 @@ type Store struct {
 	bankTx    map[int64]bank.Transaction
 	apiKeys   map[int64]auth.APIKey
 	cashDocs  map[int64]cash.Document
+	quotes    map[int64]quote.Quote
 	users     map[int64]auth.User
 	members   map[memKey]auth.Role
 	sessions  map[string]auth.Session

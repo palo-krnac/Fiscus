@@ -1,5 +1,6 @@
 <script setup>
-// Faktúra na tlač / uloženie do PDF (A4). PDF vytvorí prehliadač cez „Tlačiť → Uložiť ako PDF“.
+// Faktúra alebo cenová ponuka (quote) na tlač / uloženie do PDF (A4).
+// PDF vytvorí prehliadač cez „Tlačiť → Uložiť ako PDF“.
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
@@ -9,7 +10,8 @@ import { formatAmount, formatDate, formatMoney, formatQuantity } from '../lib/fo
 import { payBySquare, qrSvg } from '../lib/payqr.js'
 import { countryName, paymentLabel, vatExemptionNote } from '../lib/codes.js'
 
-const props = defineProps({ id: String })
+const props = defineProps({ id: String, quote: Boolean })
+const back = computed(() => `${props.quote ? '/ponuky' : '/faktury'}/${props.id}`)
 const print = () => window.print()
 const router = useRouter()
 
@@ -20,6 +22,7 @@ const qr = ref('')
 const company = computed(() => session.company ?? {})
 const nonVat = computed(() => !!inv.value?.nonVatPayer)
 const docTitle = computed(() => {
+  if (props.quote) return 'Cenová ponuka'
   switch (inv.value?.kind) {
     case 'credit_note': return nonVat.value ? 'Dobropis – opravná faktúra' : 'Dobropis – opravný daňový doklad'
     case 'proforma': return 'Zálohová faktúra'
@@ -29,6 +32,11 @@ const docTitle = computed(() => {
 
 onMounted(async () => {
   try {
+    if (props.quote) {
+      inv.value = await api.quote(session.companyId, props.id)
+      document.title = inv.value.number ? `Cenová ponuka ${inv.value.number}` : 'Koncept ponuky'
+      return // ponuka sa neplatí — bez QR kódu
+    }
     inv.value = await api.invoice(session.companyId, props.id)
     document.title = inv.value.number ? `Faktúra ${inv.value.number}` : 'Koncept faktúry'
     const code = payBySquare(inv.value, company.value)
@@ -50,7 +58,7 @@ const ids = (p) =>
 <template>
   <div class="print-root">
     <nav class="toolbar">
-      <Button icon="pi pi-arrow-left" label="Späť" text size="small" @click="router.push(`/faktury/${id}`)" />
+      <Button icon="pi pi-arrow-left" label="Späť" text size="small" @click="router.push(back)" />
       <div class="spacer" />
       <span class="tip">V okne tlače zvoľte „Uložiť ako PDF“</span>
       <Button icon="pi pi-print" label="Tlačiť / PDF" size="small" :disabled="!inv" @click="print" />
@@ -67,7 +75,11 @@ const ids = (p) =>
           <p class="kind">{{ docTitle }}</p>
           <h1 class="number">{{ inv.number || 'Koncept' }}</h1>
         </div>
-        <dl class="dates">
+        <dl v-if="quote" class="dates">
+          <div><dt>Dátum ponuky</dt><dd>{{ formatDate(inv.issueDate) }}</dd></div>
+          <div class="due"><dt>Platná do</dt><dd>{{ formatDate(inv.validUntil) }}</dd></div>
+        </dl>
+        <dl v-else class="dates">
           <div><dt>Dátum vystavenia</dt><dd>{{ formatDate(inv.issueDate) }}</dd></div>
           <div><dt>Dátum dodania</dt><dd>{{ formatDate(inv.deliveryDate) }}</dd></div>
           <div class="due"><dt>Dátum splatnosti</dt><dd>{{ formatDate(inv.dueDate) }}</dd></div>
@@ -92,7 +104,7 @@ const ids = (p) =>
           <p v-if="company.email || company.phone" class="contact">{{ [company.email, company.phone].filter(Boolean).join(', ') }}</p>
         </div>
         <div class="party">
-          <h2>Odberateľ</h2>
+          <h2>{{ quote ? 'Pre' : 'Odberateľ' }}</h2>
           <p class="name">{{ inv.customer.name }}</p>
           <p v-for="l in addressLines(inv.customer)" :key="l">{{ l }}</p>
           <p v-if="inv.customer.country && inv.customer.country !== 'SK'">{{ countryName(inv.customer.country) }}</p>
@@ -102,7 +114,7 @@ const ids = (p) =>
         </div>
       </section>
 
-      <section class="payment">
+      <section v-if="!quote" class="payment">
         <div><span>Spôsob úhrady</span><strong>{{ paymentLabel(inv.paymentMethod) }}</strong></div>
         <div v-if="(inv.paymentMethod || 'transfer') === 'transfer'"><span>IBAN</span><strong>{{ company.iban || '—' }}</strong></div>
         <div v-else><span>&nbsp;</span><strong>&nbsp;</strong></div>
@@ -163,7 +175,7 @@ const ids = (p) =>
             </tfoot>
           </table>
           <div class="payable">
-            <span>{{ inv.kind === 'credit_note' ? 'Suma dobropisu' : 'K úhrade' }}</span>
+            <span>{{ quote ? 'Cena spolu' : inv.kind === 'credit_note' ? 'Suma dobropisu' : 'K úhrade' }}</span>
             <strong>{{ formatMoney(inv.summary.total, inv.currency) }}</strong>
           </div>
         </div>
@@ -173,6 +185,7 @@ const ids = (p) =>
         <p v-if="nonVat">Dodávateľ nie je platiteľ DPH.</p>
         <p v-if="inv.reverseCharge && !nonVat">{{ vatExemptionNote(inv) }}</p>
         <p v-if="inv.note" class="user-note">{{ inv.note }}</p>
+        <p v-if="quote">Cenová ponuka nie je daňový doklad.</p>
       </footer>
     </article>
   </div>

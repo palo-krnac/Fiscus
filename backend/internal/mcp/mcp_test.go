@@ -11,6 +11,8 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/auth"
 	"github.com/palo-krnac/fiscus/backend/internal/edition"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
+	"github.com/palo-krnac/fiscus/backend/internal/money"
+	"github.com/palo-krnac/fiscus/backend/internal/quote"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 	"github.com/palo-krnac/fiscus/backend/internal/store/memstore"
 )
@@ -114,7 +116,7 @@ func TestProtocol(t *testing.T) {
 			t.Errorf("%s: schéma", x.Name)
 		}
 	}
-	for name, ro := range map[string]bool{"list_invoices": true, "vat_return": true, "create_invoice_draft": false, "issue_invoice": false} {
+	for name, ro := range map[string]bool{"list_invoices": true, "list_quotes": true, "vat_return": true, "create_invoice_draft": false, "issue_invoice": false} {
 		if got, ok := names[name]; !ok || got != ro {
 			t.Errorf("%s: readOnly=%v (%v)", name, got, ok)
 		}
@@ -203,4 +205,41 @@ func TestReadOnlyAndPermissions(t *testing.T) {
 	if r := callTool(t, s, stranger, "list_invoices", map[string]any{"company_id": cid}); !r.IsError || !strings.Contains(r.Content[0].Text, "neexistuje") {
 		t.Fatalf("cudzia firma: %+v", r)
 	}
+}
+
+func TestQuoteTool(t *testing.T) {
+	s, ctx, cid := setup(t)
+	q := validQuoteForMCP()
+	q, err := s.App.SaveQuote(ctx, cid, q)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.App.IssueQuote(ctx, cid, q.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.App.SaveQuote(ctx, cid, validQuoteForMCP()); err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		args  map[string]any
+		count float64
+	}{
+		{map[string]any{}, 2},
+		{map[string]any{"status": "issued"}, 1},
+		{map[string]any{"status": "draft"}, 1},
+		{map[string]any{"status": "expired"}, 0},
+		{map[string]any{"query": "cp2026"}, 1},
+		{map[string]any{"query": "zakaznik"}, 2},
+	}
+	for _, c := range cases {
+		r := callTool(t, s, ctx, "list_quotes", c.args)
+		if r.IsError || r.Structured["count"].(float64) != c.count {
+			t.Errorf("%v: %+v", c.args, r.Structured)
+		}
+	}
+}
+
+func validQuoteForMCP() quote.Quote {
+	return quote.Quote{Customer: invoice.Party{Name: "Zákazník a.s.", Country: "SK"},
+		Lines: []invoice.Line{{Description: "Práca", Quantity: money.MustParse("1"), Unit: "hod", UnitPrice: money.MustParse("50"), Rate: 23}}}
 }

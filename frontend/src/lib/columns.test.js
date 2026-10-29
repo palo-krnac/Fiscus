@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { auditColumns, contactColumns, invoiceColumns, purchaseColumns } from './columns.js'
+import { auditColumns, contactColumns, invoiceColumns, purchaseColumns, quoteColumns } from './columns.js'
 import { toCSV } from './export.js'
 
 const inv = {
@@ -19,8 +19,20 @@ describe('stĺpce exportov', () => {
     expect(col('Vystavená')).toBe('29.10.2026')
     expect(col('Stav')).toBe('Vystavená')
   })
+  it('ponuka: stav a faktúra', () => {
+    const q = { number: 'CP20260003', status: 'invoiced', invoiceId: 7, invoiceNumber: '', customer: { name: 'X' },
+      issueDate: '2026-10-01', validUntil: '2026-10-31', summary: { total: '123.00' } }
+    const csv = toCSV(quoteColumns, [q, { ...q, status: 'issued', expired: true, invoiceId: 0 }]).slice(1).split('\r\n')
+    const head = csv[0].split(';')
+    const col = (i, h) => csv[i].split(';')[head.indexOf(h)]
+    expect(col(1, 'Stav')).toBe('Vyfakturovaná')
+    expect(col(1, 'Faktúra')).toBe('koncept')
+    expect(col(1, 'Platná do')).toBe('31.10.2026')
+    expect(col(2, 'Stav')).toBe('Po platnosti')
+    expect(col(2, 'Faktúra')).toBe('')
+  })
   it('každý stĺpec má hlavičku a nespadne na prázdnom riadku', () => {
-    for (const cols of [invoiceColumns, purchaseColumns, contactColumns, auditColumns(() => '')]) {
+    for (const cols of [invoiceColumns, purchaseColumns, contactColumns, quoteColumns, auditColumns(() => '')]) {
       for (const c of cols) {
         expect(c.header).toBeTruthy()
         expect(() => c.value({ summary: {}, customer: {}, supplier: {}, user: {}, time: '2026-10-29T10:00:00Z' })).not.toThrow()

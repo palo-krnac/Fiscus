@@ -23,8 +23,13 @@ import {
 } from '../lib/format.js'
 import { fiskusGridTheme, skGridLocale } from '../lib/grid.js'
 import { contactFromCustomer, customerFromContact, dueDaysFor, filterContacts } from '../lib/contacts.js'
+import { quoteActions, quoteStatusOf, validDays as quoteValidDays } from '../lib/quotes.js'
 
-const props = defineProps({ id: String })
+// Ten istý editor slúži aj cenovej ponuke (quote): rovnaké položky a výpočet DPH,
+// iné dátumy (platnosť namiesto splatnosti) a akcie.
+const props = defineProps({ id: String, quote: Boolean })
+const isQuote = computed(() => props.quote)
+const base = computed(() => (isQuote.value ? '/ponuky' : '/faktury'))
 const router = useRouter()
 const route = useRoute()
 const toast = useToast()
@@ -47,10 +52,12 @@ const canWrite = computed(() => can('invoices.write'))
 const editable = computed(() => canWrite.value && (!inv.value?.status || inv.value.status === 'draft'))
 // neplatiteľ DPH: faktúra bez DPH (o režime rozhoduje backend podľa nastavení firmy)
 const nonVat = computed(() => !!inv.value?.nonVatPayer)
-const status = computed(() => (inv.value ? statusOf(inv.value) : null))
+const status = computed(() => (inv.value ? (isQuote.value ? quoteStatusOf(inv.value) : statusOf(inv.value)) : null))
+const qa = computed(() => quoteActions(inv.value))
 const isCredit = computed(() => inv.value?.kind === 'credit_note')
 const title = computed(() => {
   if (!inv.value) return ''
+  if (isQuote.value) return inv.value.number ? `Ponuka ${inv.value.number}` : inv.value.id ? 'Koncept ponuky' : 'Nová ponuka'
   const doc = isCredit.value ? 'Dobropis' : 'Faktúra'
   if (inv.value.number) return `${doc} ${inv.value.number}`
   if (isCredit.value) return 'Koncept dobropisu'
@@ -78,14 +85,30 @@ async function createCreditNote() {
 async function load() {
   try {
     if (props.id) {
-      const data = await api.invoice(session.companyId, props.id)
+      const data = await (isQuote.value ? api.quote : api.invoice)(session.companyId, props.id)
       inv.value = data
       lines.value = data.lines.map(withKey)
     } else {
       const today = toISODate(new Date())
       const due = new Date()
       due.setDate(due.getDate() + dueDaysFor(null, session.company))
-      inv.value = {
+      const valid = new Date()
+      valid.setDate(valid.getDate() + 30)
+      inv.value = isQuote.value
+        ? {
+            status: 'draft',
+            customer: { name: '', street: '', city: '', zip: '', country: 'SK', ico: '', dic: '', icdph: '', email: '' },
+            issueDate: today,
+            validUntil: toISODate(valid),
+            priceMode: 'net',
+            reverseCharge: false,
+            supplyKind: '',
+            nonVatPayer: !session.company?.vatPayer,
+            contactId: 0,
+            note: '',
+            summary: { rates: [], base: '0', vat: '0', total: '0' },
+          }
+        : {
         kind: 'invoice',
         status: 'draft',
         customer: { name: '', street: '', city: '', zip: '', country: 'SK', ico: '', dic: '', icdph: '', email: '' },
@@ -99,7 +122,7 @@ async function load() {
         contactId: 0,
         note: '',
         summary: { rates: [], base: '0', vat: '0', total: '0' },
-      }
+          }
       lines.value = [blankLine()]
       if (route.query.kontakt) {
         const ct = await api.contact(session.companyId, route.query.kontakt).catch(() => null)
@@ -113,9 +136,10 @@ async function load() {
 onMounted(load)
 // prechod medzi dokladmi v tom istom editore (napr. faktúra → nový dobropis)
 watch(
-  () => props.id,
-  (id, prev) => {
-    if (id === prev || (!prev && id && inv.value && String(inv.value.id) === id)) return
+  () => [props.id, props.quote],
+  ([id, quote], [prev, prevQuote]) => {
+    // ponuka a faktúra môžu mať rovnaké ID — rozhoduje aj druh dokladu
+    if (quote === prevQuote && (id === prev || (!prev && id && inv.value && String(inv.value.id) === id))) return
     loadError.value = null
     dirty.value = false
     showErrors.value = false
@@ -141,7 +165,7 @@ function changed() {
 async function recalc() {
   const mine = ++seq
   try {
-    const out = await api.preview(session.companyId, payload())
+    const out = await (isQuote.value ? api.previewQuote : api.preview)(session.companyId, payload())
     if (mine !== seq) return // medzitým prišla novšia zmena
     inv.value.summary = out.summary
     inv.value.nonVatPayer = out.nonVatPayer
@@ -169,6 +193,13 @@ const dateModel = (key) =>
 const issueDate = dateModel('issueDate')
 const deliveryDate = dateModel('deliveryDate')
 const dueDate = dateModel('dueDate')
+const validUntil = dateModel('validUntil')
+const validFor = computed(() => quoteValidDays(inv.value?.issueDate, inv.value?.validUntil))
+function setValidDays(n) {
+  const d = fromISODate(inv.value.issueDate)
+  d.setDate(d.getDate() + n)
+  validUntil.value = d
+}
 const dueDays = computed(() => {
   const a = fromISODate(inv.value?.issueDate)
   const b = fromISODate(inv.value?.dueDate)
@@ -208,7 +239,7 @@ const lineCols = computed(() => [
   },
   {
     field: 'vatRate', headerName: 'DPH', width: 74, type: 'rightAligned', hide: nonVat.value,
-    cellEditor: 'agSelectCellEditor', cellEditorParams: () => ({ values: ratesOn(inv.value?.deliveryDate) }),
+    cellEditor: 'agSelectCellEditor', cellEditorParams: () => ({ values: ratesOn(isQuote.value ? inv.value?.issueDate : inv.value?.deliveryDate) }),
     valueFormatter: (p) => `${p.value} %`,
     valueParser: (p) => Number(p.newValue),
   },
@@ -270,14 +301,14 @@ async function save({ quiet = false } = {}) {
   gridApi.value?.stopEditing()
   busy.value = true
   try {
-    const saved = await api.saveInvoice(session.companyId, payload())
+    const saved = await (isQuote.value ? api.saveQuote : api.saveInvoice)(session.companyId, payload())
     const wasNew = !inv.value.id
     inv.value = saved
     lines.value = saved.lines.length ? saved.lines.map(withKey) : [blankLine()]
     dirty.value = false
     errors.value = {}
     if (!quiet) toast.add({ severity: 'success', summary: 'Koncept uložený', life: 2500 })
-    if (wasNew) router.replace(`/faktury/${saved.id}`)
+    if (wasNew) router.replace(`${base.value}/${saved.id}`)
     return saved
   } catch (e) {
     applyError(e)
@@ -289,8 +320,10 @@ async function save({ quiet = false } = {}) {
 
 function issue() {
   confirm.require({
-    header: 'Vystaviť faktúru',
-    message: 'Faktúra dostane číslo z radu a už sa nebude dať upravovať. Opraviť ju bude možné iba dobropisom.',
+    header: isQuote.value ? 'Vystaviť ponuku' : 'Vystaviť faktúru',
+    message: isQuote.value
+      ? 'Ponuka dostane číslo z radu ponúk a už sa nebude dať upravovať. Novú verziu vytvoríte kópiou.'
+      : 'Faktúra dostane číslo z radu a už sa nebude dať upravovať. Opraviť ju bude možné iba dobropisom.',
     acceptProps: { label: 'Vystaviť' },
     rejectProps: { label: 'Zrušiť', severity: 'secondary', outlined: true },
     accept: async () => {
@@ -298,7 +331,9 @@ function issue() {
       if (!saved) return
       busy.value = true
       try {
-        inv.value = await api.issue(session.companyId, saved.id)
+        inv.value = isQuote.value
+          ? await api.quoteAction(session.companyId, saved.id, 'issue')
+          : await api.issue(session.companyId, saved.id)
         showErrors.value = false
         toast.add({ severity: 'success', summary: `Vystavená ${inv.value.number}`, life: 3000 })
       } catch (e) {
@@ -339,6 +374,53 @@ function cancelInvoice() {
   })
 }
 
+// ---- akcie ponuky ----
+async function quoteStep(action, summary) {
+  busy.value = true
+  try {
+    inv.value = await api.quoteAction(session.companyId, inv.value.id, action)
+    toast.add({ severity: 'success', summary, life: 2500 })
+  } catch (e) {
+    applyError(e)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function copyQuote() {
+  busy.value = true
+  try {
+    const c = await api.quoteAction(session.companyId, inv.value.id, 'copy')
+    toast.add({ severity: 'info', summary: 'Nová verzia ponuky', detail: 'Kópia je koncept s dnešným dátumom.', life: 4000 })
+    router.push(`/ponuky/${c.id}`)
+  } catch (e) {
+    applyError(e)
+  } finally {
+    busy.value = false
+  }
+}
+
+function invoiceQuote() {
+  confirm.require({
+    header: 'Vytvoriť faktúru z ponuky',
+    message: `Vznikne koncept faktúry s odberateľom a položkami ponuky ${inv.value.number} a dnešným dátumom. Pred vystavením ho môžete upraviť.`,
+    acceptProps: { label: 'Vytvoriť faktúru' },
+    rejectProps: { label: 'Zrušiť', severity: 'secondary', outlined: true },
+    accept: async () => {
+      busy.value = true
+      try {
+        const created = await api.quoteAction(session.companyId, inv.value.id, 'invoice')
+        toast.add({ severity: 'success', summary: 'Koncept faktúry vytvorený', life: 3000 })
+        router.push(`/faktury/${created.id}`)
+      } catch (e) {
+        applyError(e)
+      } finally {
+        busy.value = false
+      }
+    },
+  })
+}
+
 function onKey(e) {
   if ((e.ctrlKey || e.metaKey) && e.key === 's') {
     e.preventDefault()
@@ -369,6 +451,7 @@ function searchContacts(e) {
 function applyContact(ct) {
   inv.value.customer = customerFromContact(ct)
   inv.value.contactId = ct.id
+  if (isQuote.value) return changed()
   const d = fromISODate(inv.value.issueDate)
   d.setDate(d.getDate() + dueDaysFor(ct, session.company))
   inv.value.dueDate = toISODate(d)
@@ -412,12 +495,12 @@ const customerFields = reactive([
 <template>
   <div v-if="loadError" class="state">
     <p>{{ loadError }}</p>
-    <RouterLink to="/faktury">Späť na zoznam</RouterLink>
+    <RouterLink :to="base">Späť na zoznam</RouterLink>
   </div>
 
   <div v-else-if="inv" class="editor" :class="{ locked: !editable }">
     <header class="bar">
-      <RouterLink to="/faktury" class="back" aria-label="Späť na zoznam faktúr"><i class="pi pi-arrow-left" /></RouterLink>
+      <RouterLink :to="base" class="back" :aria-label="isQuote ? 'Späť na zoznam ponúk' : 'Späť na zoznam faktúr'"><i class="pi pi-arrow-left" /></RouterLink>
       <h1>{{ title }}</h1>
       <span v-if="inv.id" class="tag" :data-tone="status.tone"><span class="tag-text">{{ status.label }}</span></span>
       <span v-if="dirty && editable" class="unsaved">neuložené zmeny</span>
@@ -429,13 +512,20 @@ const customerFields = reactive([
         severity="secondary"
         text
         size="small"
-        @click="router.push(`/faktury/${inv.id}/tlac`)"
+        @click="router.push(`${base}/${inv.id}/tlac`)"
       />
       <template v-if="editable">
         <Button label="Uložiť koncept" severity="secondary" outlined size="small" :loading="busy" @click="save()" v-tooltip.bottom="'Ctrl+S'" />
         <Button label="Vystaviť" icon="pi pi-check" size="small" :disabled="busy" @click="issue" />
       </template>
-      <template v-else-if="canWrite && (inv.status === 'issued' || inv.status === 'paid')">
+      <template v-else-if="isQuote && canWrite">
+        <Button v-if="qa.copy" label="Kópia" icon="pi pi-copy" severity="secondary" text size="small" :disabled="busy"
+          v-tooltip.bottom="'Nová verzia ponuky ako koncept'" @click="copyQuote" />
+        <Button v-if="qa.reject" label="Odmietnutá" severity="secondary" text size="small" :disabled="busy" @click="quoteStep('reject', 'Ponuka označená ako odmietnutá')" />
+        <Button v-if="qa.accept" label="Prijatá" icon="pi pi-thumbs-up" severity="secondary" outlined size="small" :disabled="busy" @click="quoteStep('accept', 'Ponuka označená ako prijatá')" />
+        <Button v-if="qa.invoice" label="Vytvoriť faktúru" icon="pi pi-file-export" size="small" :disabled="busy" @click="invoiceQuote" />
+      </template>
+      <template v-else-if="!isQuote && canWrite && (inv.status === 'issued' || inv.status === 'paid')">
         <Button
           v-if="!isCredit"
           label="Dobropis"
@@ -541,7 +631,21 @@ const customerFields = reactive([
 
         <fieldset class="block">
           <legend>Doklad</legend>
-          <div class="fields dates">
+          <div v-if="isQuote" class="fields dates">
+            <label>
+              <span>Dátum ponuky</span>
+              <DatePicker v-model="issueDate" :disabled="!editable" date-format="d. m. yy" show-icon icon-display="input" size="small" :invalid="!!fieldError('issueDate')" />
+            </label>
+            <label>
+              <span>Platná do</span>
+              <DatePicker v-model="validUntil" :disabled="!editable" date-format="d. m. yy" show-icon icon-display="input" size="small" :invalid="!!fieldError('validUntil')" />
+              <small v-if="fieldError('validUntil')" class="err">{{ fieldError('validUntil') }}</small>
+            </label>
+            <div v-if="editable" class="due-quick" role="group" aria-label="Platnosť v dňoch">
+              <button v-for="n in [14, 30, 60]" :key="n" type="button" :class="{ on: validFor === n }" @click="setValidDays(n)">{{ n }} dní</button>
+            </div>
+          </div>
+          <div v-else class="fields dates">
             <label>
               <span>Dátum vystavenia</span>
               <DatePicker v-model="issueDate" :disabled="!editable" date-format="d. m. yy" show-icon icon-display="input" size="small" :invalid="!!fieldError('issueDate')" />
@@ -560,7 +664,7 @@ const customerFields = reactive([
               <button v-for="n in [7, 14, 30]" :key="n" type="button" :class="{ on: dueDays === n }" @click="setDueDays(n)">{{ n }} dní</button>
             </div>
           </div>
-          <div class="fields pay-row">
+          <div v-if="!isQuote" class="fields pay-row">
             <label>
               <span>Spôsob úhrady</span>
               <Select
@@ -636,7 +740,7 @@ const customerFields = reactive([
         </fieldset>
 
         <fieldset class="block">
-          <legend>Poznámka na faktúre</legend>
+          <legend>Poznámka na {{ isQuote ? 'ponuke' : 'faktúre' }}</legend>
           <Textarea :model-value="inv.note" :disabled="!editable" rows="2" auto-resize class="note" @update:model-value="upd(inv, 'note')($event)" />
         </fieldset>
       </div>
@@ -670,12 +774,21 @@ const customerFields = reactive([
           </tfoot>
         </table>
         <div class="payable">
-          <span>{{ isCredit ? 'Suma dobropisu' : 'K úhrade' }}</span>
+          <span>{{ isQuote ? 'Cena spolu' : isCredit ? 'Suma dobropisu' : 'K úhrade' }}</span>
           <strong class="num">{{ formatMoney(inv.summary.total, inv.currency) }}</strong>
         </div>
         <p v-if="nonVat" class="note-rc">Nie som platiteľ DPH. Faktúra je bez DPH.</p>
         <p v-if="inv.reverseCharge && !nonVat" class="note-rc">Prenesenie daňovej povinnosti — DPH odvedie odberateľ.</p>
-        <dl v-if="inv.number" class="pay-info">
+        <dl v-if="isQuote && inv.id" class="pay-info">
+          <dt>Platná do</dt>
+          <dd :class="{ expired: inv.expired }">{{ formatDate(inv.validUntil) }}{{ inv.expired ? ' (uplynula)' : '' }}</dd>
+          <template v-if="inv.invoiceId">
+            <dt>Faktúra</dt>
+            <dd><RouterLink :to="`/faktury/${inv.invoiceId}`">{{ inv.invoiceNumber || 'koncept' }}</RouterLink></dd>
+          </template>
+        </dl>
+        <p v-if="isQuote" class="note-rc">Ponuka nie je daňový doklad, nezapočíta sa do DPH.</p>
+        <dl v-else-if="inv.number" class="pay-info">
           <dt>Variabilný symbol</dt>
           <dd>{{ inv.variableSymbol }}</dd>
           <template v-if="session.company?.iban">
@@ -1050,6 +1163,12 @@ legend {
   margin: 0;
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+.pay-info dd.expired {
+  color: var(--tone-overdue);
+}
+.pay-info a {
+  color: var(--blue);
 }
 
 @media (max-width: 1100px) {

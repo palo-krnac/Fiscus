@@ -175,3 +175,10 @@ kbd {
     width: auto !important;
   }
 }
+
+/* AG Grid: neviditeľný (prekryvný) vodorovný posuvník leží cez spodok posledného
+   riadku a zachytával kliky — bunka sa neotvorila na úpravu. Myš ho nepotrebuje,
+   posúva sa kolieskom, touchpadom alebo prstom. */
+.ag-body-horizontal-scroll.ag-scrollbar-invisible:not(.ag-scrollbar-scrolling) {
+  pointer-events: none;
+}

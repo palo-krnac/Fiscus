@@ -20,6 +20,7 @@ import (
 const (
 	CashInFormatKey  = "cash_in"
 	CashOutFormatKey = "cash_out"
+	QuoteFormatKey   = "quote"
 )
 
 // ExtraFormats sú predvolené formáty radov mimo vydaných faktúr.
@@ -27,6 +28,7 @@ var ExtraFormats = map[string]string{
 	PurchaseFormatKey: DefaultPurchaseFormat,
 	CashInFormatKey:   "PPD{RRRR}{NNNN}",
 	CashOutFormatKey:  "VPD{RRRR}{NNNN}",
+	QuoteFormatKey:    "CP{RRRR}{NNNN}",
 }
 
 // CashBook je pokladničná kniha za rok so zostatkom.

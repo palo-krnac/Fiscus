@@ -21,6 +21,7 @@ type Category string
 
 const (
 	CatInvoices  Category = "invoices"  // vydané faktúry a dobropisy
+	CatQuotes    Category = "quotes"    // cenové ponuky
 	CatPurchases Category = "purchases" // prijaté faktúry
 	CatContacts  Category = "contacts"  // adresár
 	CatSettings  Category = "settings"  // nastavenia a číselníky firmy
@@ -39,6 +40,7 @@ var Categories = []struct {
 	Label string   `json:"label"`
 }{
 	{CatInvoices, "Vydané faktúry"},
+	{CatQuotes, "Cenové ponuky"},
 	{CatPurchases, "Prijaté faktúry"},
 	{CatContacts, "Adresár"},
 	{CatSettings, "Nastavenia"},

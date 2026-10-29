@@ -169,6 +169,14 @@ export const api = {
       ? request('PUT', `/api/companies/${cid}/purchases/${p.id}`, p)
       : request('POST', `/api/companies/${cid}/purchases`, p),
   previewPurchase: (cid, p) => request('POST', `/api/companies/${cid}/purchases/preview`, p),
+  quotes: (cid, year) => request('GET', `/api/companies/${cid}/quotes` + (year ? `?year=${year}` : '')),
+  quote: (cid, id) => request('GET', `/api/companies/${cid}/quotes/${id}`),
+  saveQuote: (cid, q) =>
+    q.id
+      ? request('PUT', `/api/companies/${cid}/quotes/${q.id}`, q)
+      : request('POST', `/api/companies/${cid}/quotes`, q),
+  previewQuote: (cid, q) => request('POST', `/api/companies/${cid}/quotes/preview`, q),
+  quoteAction: (cid, id, action) => request('POST', `/api/companies/${cid}/quotes/${id}/${action}`),
   payPurchase: (cid, id) => request('POST', `/api/companies/${cid}/purchases/${id}/pay`),
   unpayPurchase: (cid, id) => request('POST', `/api/companies/${cid}/purchases/${id}/unpay`),
   deletePurchase: (cid, id) => request('DELETE', `/api/companies/${cid}/purchases/${id}`),

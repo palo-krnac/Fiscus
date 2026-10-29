@@ -18,6 +18,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	m "github.com/palo-krnac/fiscus/backend/internal/money"
 	"github.com/palo-krnac/fiscus/backend/internal/purchase"
+	"github.com/palo-krnac/fiscus/backend/internal/quote"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 	"github.com/palo-krnac/fiscus/backend/internal/vat"
 )
@@ -329,6 +330,60 @@ func Run(t *testing.T, newStore Factory) {
 		}
 		if err := s.SaveCashDocument(ctx, b.ID, &d1); !errors.Is(err, store.ErrNotFound) {
 			t.Fatal("úprava dokladu inej firmy")
+		}
+	})
+
+	t.Run("cenové ponuky", func(t *testing.T) {
+		s := newStore(t)
+		a, _ := s.CreateCompany(ctx, store.Company{Name: "Alfa"})
+		b, _ := s.CreateCompany(ctx, store.Company{Name: "Beta"})
+		q1 := quote.Quote{Status: quote.StatusDraft, Customer: invoice.Party{Name: "Odberateľ", Country: "SK", ICO: "35757442"},
+			IssueDate: invoice.MustDate("2026-10-01"), ValidUntil: invoice.MustDate("2026-10-31"), ContactID: 4,
+			Lines: []invoice.Line{{Description: "Montáž", Quantity: m.MustParse("2"), Unit: "hod", UnitPrice: m.MustParse("40"), Rate: 23}},
+			Note:  "poznámka", SupplyKind: invoice.SupplyServices}
+		if err := q1.Recalculate(); err != nil {
+			t.Fatal(err)
+		}
+		q2 := q1.Copy(invoice.MustDate("2026-10-20"), 30)
+		q3 := q1.Copy(invoice.MustDate("2025-12-01"), 30)
+		for _, q := range []*quote.Quote{&q1, &q2, &q3} {
+			if err := s.SaveQuote(ctx, a.ID, q); err != nil || q.ID == 0 || q.CompanyID != a.ID {
+				t.Fatalf("uloženie: %v", err)
+			}
+		}
+		got, err := s.GetQuote(ctx, a.ID, q1.ID)
+		if err != nil || !reflect.DeepEqual(got, q1) {
+			t.Fatalf("načítanie:\n got %+v\nwant %+v", got, q1)
+		}
+		if _, err := s.GetQuote(ctx, b.ID, q1.ID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("ponuka inej firmy")
+		}
+		list, _ := s.ListQuotes(ctx, a.ID, 2026)
+		if len(list) != 2 || list[0].ID != q2.ID {
+			t.Fatalf("zoznam: %+v", list)
+		}
+		if all, _ := s.ListQuotes(ctx, a.ID, 0); len(all) != 3 {
+			t.Fatal("všetky roky")
+		}
+		if other, _ := s.ListQuotes(ctx, b.ID, 0); len(other) != 0 {
+			t.Fatal("zoznam inej firmy")
+		}
+		if err := q1.Issue("CP20260001"); err != nil {
+			t.Fatal(err)
+		}
+		_ = q1.MarkInvoiced(12, "FA20260012")
+		if err := s.SaveQuote(ctx, a.ID, &q1); err != nil {
+			t.Fatal(err)
+		}
+		if g, _ := s.GetQuote(ctx, a.ID, q1.ID); g.Status != quote.StatusInvoiced || g.Number != "CP20260001" || g.InvoiceID != 12 {
+			t.Fatalf("zmena stavu: %+v", g)
+		}
+		got.Lines[0].Description = "zmenené mimo úložiska"
+		if g, _ := s.GetQuote(ctx, a.ID, q1.ID); g.Lines[0].Description != "Montáž" {
+			t.Fatal("úložisko zdieľa položky s volajúcim")
+		}
+		if err := s.SaveQuote(ctx, b.ID, &q1); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("úprava ponuky inej firmy")
 		}
 	})
 
