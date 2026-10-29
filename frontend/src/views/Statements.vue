@@ -63,6 +63,13 @@ const exportRows = computed(() =>
     ? [
         ...st.value.income.map((r) => ({ ...r, statement: 'Výkaz o príjmoch a výdavkoch' })),
         ...st.value.assets.map((r) => ({ ...r, statement: 'Výkaz o majetku a záväzkoch' })),
+        ...[
+          { code: '39', label: 'Príjmy', current: st.value.taxB.income },
+          { code: '40', label: 'Výdavky', current: st.value.taxB.expenses },
+          { code: '41', label: 'Základ dane', current: st.value.taxB.profit },
+          { code: '42', label: 'Strata', current: st.value.taxB.loss },
+        ].map((r) => ({ ...r, previous: '', statement: 'DP typ B, VI. oddiel' })),
+        ...st.value.taxB.table1a.map((r) => ({ ...r, code: `1a/${r.code}`, statement: 'DP typ B, tabuľka 1a (začiatok / koniec)' })),
       ]
     : [],
 )
@@ -145,6 +152,39 @@ const printIt = () => window.print()
           <Button label="Uložiť zadané riadky" icon="pi pi-check" size="small" :loading="busy" @click="save" />
         </div>
       </section>
+      <section class="sheet" aria-labelledby="dp-title">
+        <header class="sheet-head">
+          <h2 id="dp-title">Podklady pre daňové priznanie typu B</h2>
+          <span>VI. oddiel · zdaňovacie obdobie {{ year }} · v eurách s centami</span>
+        </header>
+        <table class="form">
+          <thead><tr><th class="code">r.</th><th>Údaj</th><th class="num">Suma</th><th /></tr></thead>
+          <tbody>
+            <tr><td class="code">T1</td><td>Tabuľka č. 1, r. 2 (živnosť) – stĺpec 1 Príjmy</td><td class="num">{{ formatAmount(st.taxB.income) }}</td><td /></tr>
+            <tr><td class="code">T1</td><td>Tabuľka č. 1, r. 2 (živnosť) – stĺpec 2 Výdavky</td><td class="num">{{ formatAmount(st.taxB.expenses) }}</td><td /></tr>
+            <tr><td class="code">39</td><td>Príjmy (tab. 1, stĺ. 1, r. 10)</td><td class="num">{{ formatAmount(st.taxB.income) }}</td><td /></tr>
+            <tr><td class="code">40</td><td>Výdavky (tab. 1, stĺ. 2, r. 10)</td><td class="num">{{ formatAmount(st.taxB.expenses) }}</td><td /></tr>
+            <tr class="sum"><td class="code">41</td><td>Základ dane (kladný rozdiel r. 39 a 40)</td><td class="num">{{ formatAmount(st.taxB.profit) }}</td><td /></tr>
+            <tr class="sum"><td class="code">42</td><td>Strata (záporný rozdiel r. 39 a 40)</td><td class="num">{{ formatAmount(st.taxB.loss) }}</td><td /></tr>
+          </tbody>
+        </table>
+        <h3>Tabuľka č. 1a – údaje z účtovníctva</h3>
+        <table class="form">
+          <thead><tr><th class="code">r.</th><th>Údaj</th><th class="num">Na začiatku</th><th class="num">Na konci</th></tr></thead>
+          <tbody>
+            <tr v-for="r in st.taxB.table1a" :key="r.code">
+              <td class="code">{{ r.code }}</td><td>{{ r.label }}</td>
+              <td class="num prev">{{ formatAmount(r.previous) }}</td><td class="num">{{ formatAmount(r.current) }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="muted">
+          Zaplatené poistné a príspevky v roku {{ year }} (stĺpec e4 denníka): {{ formatAmount(st.taxB.insurance) }} € — skontrolujte s potvrdeniami
+          poisťovní. Ak príjmy nepatria pod živnosť, presuňte ich v priznaní do správneho riadku tabuľky č. 1. Úpravy základu dane
+          (r. 43, 44) a odpočet straty sú na vás alebo na daňovom poradcovi. V r. 5 tabuľky 1a sú záväzky aj s úvermi.
+        </p>
+      </section>
+
       <p class="muted legal">Podľa opatrenia MF SR č. MF/27076/2007-74 v znení č. MF/15523/2014-74. Závierku podnikateľ – fyzická osoba ukladá do registra účtovných závierok v lehote na podanie daňového priznania.</p>
     </template>
   </div>
@@ -201,6 +241,10 @@ const printIt = () => window.print()
   justify-content: space-between;
   gap: 10px;
   flex-wrap: wrap;
+}
+.sheet h3 {
+  font-size: var(--fs-md);
+  margin: 14px 0 2px;
 }
 .sheet-head h2 {
   font-size: var(--fs-lg);
