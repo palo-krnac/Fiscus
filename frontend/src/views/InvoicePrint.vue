@@ -14,6 +14,10 @@ import CompanyLogo from '../components/CompanyLogo.vue'
 const props = defineProps({ id: String, quote: Boolean })
 const back = computed(() => `${props.quote ? '/ponuky' : '/faktury'}/${props.id}`)
 const print = () => window.print()
+// PDF vytvorí server (rovnaký súbor ide aj do prílohy e-mailu)
+const download = () => {
+  window.location.href = api.pdfURL(session.companyId, props.quote ? 'quotes' : 'invoices', props.id)
+}
 const router = useRouter()
 
 const inv = ref(null)
@@ -64,8 +68,8 @@ const ids = (p) =>
     <nav class="toolbar">
       <Button icon="pi pi-arrow-left" label="Späť" text size="small" @click="router.push(back)" />
       <div class="spacer" />
-      <span class="tip">V okne tlače zvoľte „Uložiť ako PDF“</span>
-      <Button icon="pi pi-print" label="Tlačiť / PDF" size="small" :disabled="!inv" @click="print" />
+      <Button icon="pi pi-download" label="Stiahnuť PDF" severity="secondary" outlined size="small" :disabled="!inv" @click="download" />
+      <Button icon="pi pi-print" label="Tlačiť" size="small" :disabled="!inv" @click="print" />
     </nav>
 
     <p v-if="error" class="error">{{ error }}</p>
@@ -249,10 +253,6 @@ const ids = (p) =>
 }
 .spacer {
   flex: 1;
-}
-.tip {
-  font-size: var(--fs-sm);
-  color: var(--ink-faint);
 }
 .error {
   text-align: center;
@@ -540,9 +540,6 @@ td:last-child {
 @media (max-width: 860px) {
   .print-root {
     overflow-x: auto;
-  }
-  .tip {
-    display: none;
   }
   .sheet {
     margin: 12px;

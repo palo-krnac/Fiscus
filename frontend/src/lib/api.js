@@ -190,6 +190,8 @@ export const api = {
   overdue: (cid) => request('GET', `/api/companies/${cid}/overdue`),
   items: (cid) => request('GET', `/api/companies/${cid}/items`),
   logoURL: (cid, v = 0) => `/api/companies/${cid}/logo?v=${v}`,
+  // PDF dokladu zo servera; kind: invoices | quotes | reminders
+  pdfURL: (cid, kind, id, inline = false) => `/api/companies/${cid}/${kind}/${id}/pdf${inline ? '?inline=1' : ''}`,
   uploadLogo: (cid, file) => request('PUT', `/api/companies/${cid}/logo`, file),
   deleteLogo: (cid) => request('DELETE', `/api/companies/${cid}/logo`),
   saveItem: (cid, it) =>

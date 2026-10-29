@@ -79,6 +79,7 @@ func (s *Server) Handler() http.Handler {
 
 	need("GET /api/companies/{cid}/invoices", auth.PermInvoicesRead, s.listInvoices)
 	need("GET /api/companies/{cid}/invoices/{id}", auth.PermInvoicesRead, s.getInvoice)
+	need("GET /api/companies/{cid}/invoices/{id}/pdf", auth.PermInvoicesRead, s.pdfHandler((*app.App).InvoicePDF, fail))
 	need("POST /api/companies/{cid}/invoices", auth.PermInvoicesWrite, s.saveInvoice)
 	need("POST /api/companies/{cid}/invoices/preview", auth.PermInvoicesWrite, s.preview)
 	need("PUT /api/companies/{cid}/invoices/{id}", auth.PermInvoicesWrite, s.saveInvoice)
@@ -90,6 +91,7 @@ func (s *Server) Handler() http.Handler {
 
 	need("GET /api/companies/{cid}/quotes", auth.PermInvoicesRead, s.listQuotes)
 	need("GET /api/companies/{cid}/quotes/{id}", auth.PermInvoicesRead, s.getQuote)
+	need("GET /api/companies/{cid}/quotes/{id}/pdf", auth.PermInvoicesRead, s.pdfHandler((*app.App).QuotePDF, failQuote))
 	need("POST /api/companies/{cid}/quotes", auth.PermInvoicesWrite, s.saveQuote)
 	need("POST /api/companies/{cid}/quotes/preview", auth.PermInvoicesWrite, s.previewQuote)
 	need("PUT /api/companies/{cid}/quotes/{id}", auth.PermInvoicesWrite, s.saveQuote)
@@ -112,6 +114,7 @@ func (s *Server) Handler() http.Handler {
 	need("GET /api/companies/{cid}/overdue", auth.PermInvoicesRead, s.overdue)
 	need("GET /api/companies/{cid}/reminders", auth.PermInvoicesRead, s.listReminders)
 	need("GET /api/companies/{cid}/reminders/{id}", auth.PermInvoicesRead, s.getReminder)
+	need("GET /api/companies/{cid}/reminders/{id}/pdf", auth.PermInvoicesRead, s.pdfHandler((*app.App).ReminderPDF, failReminder))
 	need("POST /api/companies/{cid}/reminders/preview", auth.PermInvoicesWrite, s.reminderRequest(false))
 	need("POST /api/companies/{cid}/reminders", auth.PermInvoicesWrite, s.reminderRequest(true))
 	need("DELETE /api/companies/{cid}/reminders/{id}", auth.PermInvoicesWrite, s.deleteReminder)

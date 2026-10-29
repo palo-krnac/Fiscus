@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { ApiError, query, request, setUnauthorizedHandler } from './api.js'
+import { ApiError, api, query, request, setUnauthorizedHandler } from './api.js'
 
 const respond = (status, body) =>
   vi.fn().mockResolvedValue({
@@ -71,5 +71,15 @@ describe('query', () => {
   it('vynechá prázdne hodnoty', () => {
     expect(query({ category: 'invoices', q: '', user: 0, from: undefined })).toBe('?category=invoices&user=0')
     expect(query({})).toBe('')
+  })
+})
+
+describe('pdfURL', () => {
+  it.each([
+    [[3, 'invoices', 7], '/api/companies/3/invoices/7/pdf'],
+    [[3, 'quotes', 2, true], '/api/companies/3/quotes/2/pdf?inline=1'],
+    [[1, 'reminders', 5], '/api/companies/1/reminders/5/pdf'],
+  ])('%j → %s', (args, want) => {
+    expect(api.pdfURL(...args)).toBe(want)
   })
 })
