@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/palo-krnac/fiscus/backend/internal/catalog"
 	"sort"
 	"sync"
 
@@ -40,6 +41,7 @@ type Store struct {
 	recurring map[int64]recurring.Template
 	reminders map[int64]reminder.Reminder
 	settings  map[string]string
+	items     map[int64]catalog.Item
 	users     map[int64]auth.User
 	members   map[memKey]auth.Role
 	sessions  map[string]auth.Session

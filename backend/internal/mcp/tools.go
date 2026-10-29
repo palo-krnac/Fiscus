@@ -390,6 +390,49 @@ func (s *Server) allTools() []Tool {
 			},
 		},
 		{
+			Name: "list_catalog_items", Title: "Cenník",
+			Description: "Položky cenníka firmy (služby a tovar): kód, názov, merná jednotka, cena bez DPH a s DPH, sadzba DPH. Použi ich pri návrhu faktúry, aby texty a ceny sedeli s cenníkom.",
+			Props:       map[string]any{"company_id": pCompany, "query": pQuery, "limit": pLimit},
+			Run: func(c *callCtx, args json.RawMessage) (any, error) {
+				var p struct {
+					CompanyID int64  `json:"company_id"`
+					Query     string `json:"query"`
+					Limit     int    `json:"limit"`
+				}
+				if err := parse(args, &p); err != nil {
+					return nil, err
+				}
+				cid, err := c.company(p.CompanyID, auth.PermInvoicesRead)
+				if err != nil {
+					return nil, err
+				}
+				list, err := a.Items(c.ctx, cid)
+				if err != nil {
+					return nil, err
+				}
+				type row struct {
+					ID         int64     `json:"id"`
+					Code       string    `json:"code,omitempty"`
+					Name       string    `json:"name"`
+					Unit       string    `json:"unit"`
+					PriceNet   money.Dec `json:"price_net"`
+					PriceGross money.Dec `json:"price_gross"`
+					VATRate    vat.Rate  `json:"vat_rate"`
+				}
+				out := []row{}
+				for _, it := range list {
+					if it.Archived || !store.Matches(p.Query, it.Code, it.Name, it.Note) {
+						continue
+					}
+					out = append(out, row{it.ID, it.Code, it.Name, it.Unit, it.Net, it.Gross, it.Rate})
+					if len(out) >= limit(p.Limit) {
+						break
+					}
+				}
+				return map[string]any{"items": out, "count": len(out)}, nil
+			},
+		},
+		{
 			Name: "list_purchases", Title: "Prijaté faktúry",
 			Description: "Prijaté faktúry (nákup). Stav: booked (neuhradená), paid, overdue.",
 			Props: map[string]any{"company_id": pCompany, "year": pYear, "query": pQuery, "limit": pLimit,

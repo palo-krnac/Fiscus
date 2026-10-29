@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
+	"github.com/palo-krnac/fiscus/backend/internal/catalog"
 	"strings"
 
 	"github.com/palo-krnac/fiscus/backend/internal/app"
@@ -87,6 +88,14 @@ func Seed(ctx context.Context, a *app.App) (store.Company, error) {
 			return c, err
 		}
 		contactIDs[i] = ct.ID
+	}
+
+	// cenník z tých istých položiek, ktoré sú na ukážkových faktúrach
+	for i, it := range items {
+		if _, err := a.SaveItem(ctx, c.ID, catalog.Item{Code: fmt.Sprintf("P%02d", i+1), Name: it.desc, Unit: it.unit,
+			Price: m.MustParse(it.price), Rate: it.rate}); err != nil {
+			return c, fmt.Errorf("demo cenník: %w", err)
+		}
 	}
 
 	today := a.Today()

@@ -11,6 +11,7 @@ import (
 	"errors"
 	"github.com/palo-krnac/fiscus/backend/internal/bank"
 	"github.com/palo-krnac/fiscus/backend/internal/cash"
+	"github.com/palo-krnac/fiscus/backend/internal/catalog"
 
 	"github.com/palo-krnac/fiscus/backend/internal/audit"
 	"github.com/palo-krnac/fiscus/backend/internal/auth"
@@ -117,6 +118,14 @@ type Store interface {
 	// SaveContact vloží (ID == 0) alebo prepíše kontakt. Nastaví ID.
 	SaveContact(ctx context.Context, companyID int64, c *Contact) error
 	DeleteContact(ctx context.Context, companyID, id int64) error
+
+	// ListItems vráti cenník firmy zoradený podľa názvu.
+	ListItems(ctx context.Context, companyID int64) ([]catalog.Item, error)
+	GetItem(ctx context.Context, companyID, id int64) (catalog.Item, error)
+	// SaveItem vloží (ID == 0) alebo prepíše položku. Rovnaký neprázdny kód
+	// v jednej firme → ErrDuplicate.
+	SaveItem(ctx context.Context, companyID int64, it *catalog.Item) error
+	DeleteItem(ctx context.Context, companyID, id int64) error
 
 	ListInvoices(ctx context.Context, companyID int64, f InvoiceFilter) ([]invoice.Invoice, error)
 	GetInvoice(ctx context.Context, companyID, id int64) (invoice.Invoice, error)

@@ -112,6 +112,11 @@ func (s *Server) Handler() http.Handler {
 	need("POST /api/companies/{cid}/reminders", auth.PermInvoicesWrite, s.reminderRequest(true))
 	need("DELETE /api/companies/{cid}/reminders/{id}", auth.PermInvoicesWrite, s.deleteReminder)
 
+	need("GET /api/companies/{cid}/items", auth.PermInvoicesRead, s.listItems)
+	need("POST /api/companies/{cid}/items", auth.PermInvoicesWrite, s.saveItem)
+	need("PUT /api/companies/{cid}/items/{id}", auth.PermInvoicesWrite, s.saveItem)
+	need("DELETE /api/companies/{cid}/items/{id}", auth.PermInvoicesWrite, s.deleteItem)
+
 	need("GET /api/companies/{cid}/purchases", auth.PermPurchasesRead, s.listPurchases)
 	need("GET /api/companies/{cid}/purchases/{id}", auth.PermPurchasesRead, s.getPurchase)
 	need("POST /api/companies/{cid}/purchases", auth.PermPurchasesWrite, s.savePurchase)

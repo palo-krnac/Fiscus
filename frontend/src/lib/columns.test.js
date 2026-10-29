@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { auditColumns, contactColumns, invoiceColumns, purchaseColumns, quoteColumns, recurringColumns, reminderColumns, overdueColumns, ecbColumns, vatPeriodColumns } from './columns.js'
+import { auditColumns, contactColumns, invoiceColumns, purchaseColumns, quoteColumns, recurringColumns, reminderColumns, overdueColumns, ecbColumns, vatPeriodColumns, itemColumns } from './columns.js'
 import { toCSV } from './export.js'
 
 const inv = {
@@ -32,7 +32,7 @@ describe('stĺpce exportov', () => {
     expect(col(2, 'Faktúra')).toBe('')
   })
   it('každý stĺpec má hlavičku a nespadne na prázdnom riadku', () => {
-    for (const cols of [invoiceColumns, purchaseColumns, contactColumns, quoteColumns, recurringColumns, reminderColumns, overdueColumns, ecbColumns, vatPeriodColumns, auditColumns(() => '')]) {
+    for (const cols of [invoiceColumns, purchaseColumns, contactColumns, quoteColumns, recurringColumns, reminderColumns, overdueColumns, ecbColumns, vatPeriodColumns, itemColumns, auditColumns(() => '')]) {
       for (const c of cols) {
         expect(c.header).toBeTruthy()
         expect(() => c.value({ summary: {}, customer: {}, supplier: {}, user: {}, time: '2026-10-29T10:00:00Z' })).not.toThrow()
