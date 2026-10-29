@@ -16,12 +16,14 @@ import { fiskusGridTheme, skGridLocale, gridRows } from '../lib/grid.js'
 import { matches, searchTerms } from '../lib/search.js'
 import { purchaseColumns } from '../lib/columns.js'
 import ExportButton from '../components/ExportButton.vue'
+import PaymentOrderDialog from '../components/PaymentOrderDialog.vue'
 import { useToast } from 'primevue/usetoast'
 import { setPurchaseDraft } from '../lib/drafts.js'
 import { isForeignCurrency, purchaseEUR } from '../lib/fx.js'
 
 const router = useRouter()
 const toast = useToast()
+const orderOpen = ref(false)
 
 // ---- doklad z PDF alebo fotky (Claude API) ----
 const aiReady = ref(false)
@@ -250,8 +252,8 @@ onBeforeUnmount(() => {
           v-tooltip.bottom="aiReady ? 'Prečítať PDF alebo fotku faktúry cez Claude (AI) — údaje skontrolujete pred uložením' : 'Čítanie dokladov zapne správca v časti Prístup pre AI'"
           @click="pdfInput.click()" />
       </template>
-      <Button v-if="can('purchases.write')" size="small" @click="router.push('/prijate/nova')">
-        <i class="pi pi-plus" /><span>Nová prijatá faktúra</span><kbd class="hint">N</kbd>
+      <Button v-if="can('purchases.write')" size="small" aria-label="Nová prijatá faktúra" @click="router.push('/prijate/nova')">
+        <i class="pi pi-plus" /><span class="new-label">Nová prijatá faktúra</span><kbd class="hint">N</kbd>
       </Button>
     </header>
 
@@ -280,6 +282,8 @@ onBeforeUnmount(() => {
         <InputIcon class="pi pi-search" />
         <InputText v-model="search" placeholder="Hľadať číslo, dodávateľa, IČO, predmet, sumu" size="small" aria-label="Hľadať" />
       </IconField>
+      <Button v-if="can('purchases.write')" icon="pi pi-building-columns" label="Platobný príkaz" class="order-btn" severity="secondary" outlined size="small"
+        v-tooltip.bottom="'Hromadný príkaz SEPA na neuhradené faktúry pre internet banking'" @click="orderOpen = true" />
       <ExportButton :name="`Prijaté faktúry ${year}`" :columns="purchaseColumns" :rows="() => gridRows(gridApi, visibleRows)" />
     </div>
 
@@ -302,6 +306,7 @@ onBeforeUnmount(() => {
         @row-clicked="(e) => !e.data._totals && router.push(`/prijate/${e.data.id}`)"
       />
     </div>
+    <PaymentOrderDialog v-model:visible="orderOpen" />
     <Dialog v-model:visible="inboxOpen" header="Schránka e-faktúr" modal :style="{ width: '46rem' }" :breakpoints="{ '760px': '96vw' }">
       <p v-if="!inbox.length" class="muted">Žiadne nové e-faktúry. Poštár ich doručí do schránky; Fiškus ich odtiaľ načíta.</p>
       <table v-else class="inbox">
@@ -492,6 +497,12 @@ onBeforeUnmount(() => {
   margin: 0;
 }
 @media (max-width: 760px) {
+  .new-label {
+    display: none;
+  }
+  .toolbar :deep(.order-btn .p-button-label) {
+    display: none;
+  }
   .head :deep(.ai-btn .p-button-label) {
     display: none;
   }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -403,6 +404,32 @@ func TestPurchasesAPI(t *testing.T) {
 	e.do("GET", base+"?year=2026", nil, 200, &rows)
 	if len(rows) != 1 || !rows[0].Overdue || rows[0].DaysOverdue != 14 {
 		t.Fatalf("%+v", rows)
+	}
+	// platobný príkaz: dodávateľ bez IBAN → problém; po doplnení XML
+	var cands []app.PaymentCandidate
+	e.do("GET", base+"/payment-order", nil, 200, &cands)
+	if len(cands) != 1 || cands[0].Problem == "" {
+		t.Fatalf("kandidáti: %+v", cands)
+	}
+	order := fmt.Sprintf(`{"ids":[%d],"date":"2026-10-30"}`, saved.ID)
+	e.do("POST", base+"/payment-order", order, 422, nil)
+	saved.SupplierIBAN = "SK3112000000198742637541"
+	if _, _, err := e.app.SavePurchase(context.Background(), e.cid, saved.Purchase); err != nil {
+		t.Fatal(err)
+	}
+	e.do("POST", base+"/payment-order", order, 422, nil) // firma nemá IBAN
+	e.do("PUT", fmt.Sprintf("/api/companies/%d", e.cid), `{"name":"Moja firma","vatPayer":true,"icdph":"SK2020372640","iban":"SK31 1200 0000 1987 4263 7541"}`, 200, nil)
+	req, _ := http.NewRequest("POST", e.srv.URL+base+"/payment-order", strings.NewReader(order))
+	req.Header.Set(CSRFHeader, "1")
+	res, err := e.client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	xmlBody, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != 200 || !strings.Contains(string(xmlBody), "<InstdAmt Ccy=\"EUR\">50.00</InstdAmt>") ||
+		!strings.Contains(res.Header.Get("Content-Disposition"), "prikaz-2026-10-30.xml") {
+		t.Fatalf("%d %s", res.StatusCode, xmlBody)
 	}
 	e.do("POST", fmt.Sprintf("%s/%d/pay", base, saved.ID), nil, 200, nil)
 	e.do("PUT", fmt.Sprintf("%s/%d", base, saved.ID), body, 409, nil)

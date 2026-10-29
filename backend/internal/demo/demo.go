@@ -187,22 +187,23 @@ func Seed(ctx context.Context, a *app.App) (store.Company, error) {
 	// prijaté faktúry (druh výdavku pre peňažný denník podľa predmetu)
 	suppliers := []struct {
 		name, ico, icdph, what string
-		base                   string
+		base, iban             string
 		rate                   vat.Rate
 		day                    int
 	}{
-		{"Čerpacia stanica Hron s.r.o.", ico("4855101"), icdph(2120455101), "Pohonné hmoty", "81.30", vat.Rate23, 3},
-		{"TeleNet Slovensko s.r.o.", ico("4855202"), icdph(2120455202), "Mobilné služby", "40.65", vat.Rate23, 8},
-		{"Elektro veľkoobchod BB s.r.o.", ico("4855303"), icdph(2120455303), "Elektroinštalačný materiál", "612.40", vat.Rate23, 12},
-		{"Prenájom priestorov Ján Malý", ico("4855404"), "", "Nájom kancelárie (neplatiteľ DPH)", "350.00", vat.Rate0, 20},
-		{"Energie Stred s.r.o.", ico("4855505"), icdph(2120455505), "Elektrina", "54.10", vat.Rate23, 33},
-		{"Kníhkupectvo pri fontáne s.r.o.", ico("4855606"), icdph(2120455606), "Odborná literatúra", "38.00", vat.Rate5, 45},
+		{"Čerpacia stanica Hron s.r.o.", ico("4855101"), icdph(2120455101), "Pohonné hmoty", "81.30", "", vat.Rate23, 3},
+		{"TeleNet Slovensko s.r.o.", ico("4855202"), icdph(2120455202), "Mobilné služby", "40.65", "SK66 0900 0000 0050 1234 5678", vat.Rate23, 8},
+		{"Elektro veľkoobchod BB s.r.o.", ico("4855303"), icdph(2120455303), "Elektroinštalačný materiál", "612.40", "SK29 1100 0000 0029 3048 1726", vat.Rate23, 12},
+		{"Prenájom priestorov Ján Malý", ico("4855404"), "", "Nájom kancelárie (neplatiteľ DPH)", "350.00", "SK21 0200 0000 0044 1029 8375", vat.Rate0, 20},
+		{"Energie Stred s.r.o.", ico("4855505"), icdph(2120455505), "Elektrina", "54.10", "SK35 7500 0000 0010 2938 4756", vat.Rate23, 33},
+		{"Kníhkupectvo pri fontáne s.r.o.", ico("4855606"), icdph(2120455606), "Odborná literatúra", "38.00", "SK76 5600 0000 0033 8475 6102", vat.Rate5, 45},
 	}
 	for i, sp := range suppliers {
 		received := today.AddDays(-sp.day)
 		pu := purchase.Purchase{
 			SupplierNumber: fmt.Sprintf("%d%05d", received.Year(), 1200+i*37),
 			Supplier:       invoice.Party{Name: sp.name, ICO: sp.ico, ICDPH: sp.icdph, Country: "SK"},
+			SupplierIBAN:   sp.iban,
 			IssueDate:      received.AddDays(-2),
 			ReceivedDate:   received,
 			DueDate:        received.AddDays(12),
