@@ -95,11 +95,16 @@ jobs:
       - name: Balíky
         run: |
           mkdir -p out
-          export FISKUS_VERSION=${VERSION#v}
-          for GOARCH in amd64 arm64; do
-            export GOARCH
+          v=${VERSION#v}
+          for arch in amd64 arm64; do
+            # konfigurácia s doplnenou verziou a architektúrou (nezávisí od rozbaľovania premenných v nfpm)
+            sed -e "s/__VERSION__/$v/g" -e "s/__ARCH__/$arch/g" packaging/linux/nfpm.yaml > nfpm-$arch.yaml
             for fmt in deb rpm; do
-              nfpm package --config packaging/linux/nfpm.yaml --packager $fmt --target out/
+              if ! nfpm package --config nfpm-$arch.yaml --packager $fmt --target out/ > nfpm.log 2>&1; then
+                cat nfpm.log
+                echo "::error title=nfpm $fmt $arch::$(tr '\n' ' ' < nfpm.log | cut -c1-500)"
+                exit 1
+              fi
             done
           done
           ls -la out
