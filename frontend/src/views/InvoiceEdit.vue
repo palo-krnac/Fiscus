@@ -30,7 +30,7 @@ import { contactFromCustomer, customerFromContact, dueDaysFor, filterContacts } 
 import { quoteActions, quoteStatusOf, validDays as quoteValidDays } from '../lib/quotes.js'
 import { firstOfNextMonth, intervals, placeholders, recurringStatusOf } from '../lib/recurring.js'
 import InputNumber from 'primevue/inputnumber'
-import { filterItems, lineFromItem } from '../lib/catalog.js'
+import { filterItems, itemFromLine, lineFromItem, sameNameItem } from '../lib/catalog.js'
 import { canCredit, canSettle, editorTitle, hasDeductions } from '../lib/advance.js'
 import SendMailDialog from '../components/SendMailDialog.vue'
 import { currencyOptions, isForeignCurrency, rateHint, rateText } from '../lib/fx.js'
@@ -410,6 +410,11 @@ const lineCols = computed(() => [
     valueFormatter: (p) => formatAmount(p.value), cellClass: 'ag-right-aligned-cell cell-amount',
   },
   {
+    colId: 'save', headerName: '', width: 40, editable: false, sortable: false, hide: !can('invoices.write'),
+    cellRenderer: () => '<i class="pi pi-bookmark" title="Uložiť položku do cenníka" aria-label="Uložiť položku do cenníka"></i>',
+    cellClass: 'cell-save',
+  },
+  {
     colId: 'del', headerName: '', width: 40, editable: false, sortable: false, hide: !editable.value,
     cellRenderer: () => '<i class="pi pi-times" title="Odstrániť položku" aria-label="Odstrániť položku"></i>',
     cellClass: 'cell-del',
@@ -435,7 +440,32 @@ function onLineChanged(e) {
   changed()
 }
 
+// uloženie riadku do cenníka (rovnaký názov sa druhýkrát neuloží)
+async function saveLineToCatalog(line) {
+  const item = itemFromLine(line, { priceMode: inv.value.priceMode, nonVat: nonVat.value })
+  if (!item.name) {
+    toast.add({ severity: 'warn', summary: 'Položka nemá popis', life: 3000 })
+    return
+  }
+  const same = sameNameItem(catalogItems.value, item.name)
+  if (same) {
+    toast.add({ severity: 'info', summary: 'Už je v cenníku', detail: same.code ? `${same.code} · ${same.name}` : same.name, life: 3000 })
+    return
+  }
+  try {
+    const saved = await api.saveItem(session.companyId, item)
+    catalogItems.value = [...catalogItems.value, saved]
+    toast.add({ severity: 'success', summary: 'Uložené do cenníka', detail: item.name, life: 2500 })
+  } catch (err) {
+    toast.add({ severity: 'error', summary: 'Do cenníka sa neuložilo', detail: err.fields?.[0]?.message ?? err.message, life: 5000 })
+  }
+}
+
 function onLineCell(e) {
+  if (e.colDef.colId === 'save') {
+    saveLineToCatalog(e.data)
+    return
+  }
   if (e.colDef.colId === 'del' && editable.value) {
     lines.value = lines.value.filter((_, i) => i !== e.rowIndex)
     if (!lines.value.length) lines.value = [blankLine()]
@@ -1591,6 +1621,14 @@ legend {
 }
 .lines :deep(.cell-del:hover) {
   color: var(--tone-overdue);
+}
+.lines :deep(.cell-save) {
+  color: var(--ink-faint);
+  cursor: pointer;
+  text-align: center;
+}
+.lines :deep(.cell-save:hover) {
+  color: var(--blue);
 }
 .add {
   margin-top: 4px;

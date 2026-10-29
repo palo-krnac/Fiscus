@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { filterItems, lineFromItem, importActions, importErrors, importLabel } from './catalog.js'
+import { filterItems, itemFromLine, lineFromItem, importActions, importErrors, importLabel, sameNameItem } from './catalog.js'
 
 const items = [
   { id: 1, code: 'PLC', name: 'Programovanie PLC', unit: 'hod', priceNet: '48.00', priceGross: '59.04', vatRate: 23 },
@@ -46,4 +46,25 @@ describe('importLabel', () => {
     [3, 'Importovať 3 položky'],
     [5, 'Importovať 5 položiek'],
   ])('%d', (n, want) => expect(importLabel(n)).toBe(want))
+})
+
+describe('uloženie riadku faktúry do cenníka', () => {
+  it.each([
+    ['Programovanie PLC', 'programovanie  plc', true],
+    [' Servisný výjazd ', 'Servisný výjazd', true],
+    ['Kábel', 'Kábel 5x2,5', false],
+    ['', '', false],
+  ])('%s / %s', (a, b, same) => {
+    expect(!!sameNameItem([{ name: a }], b)).toBe(same)
+  })
+  it('archivovaná položka sa nepočíta', () => {
+    expect(sameNameItem([{ name: 'X', archived: true }], 'x')).toBeNull()
+  })
+  it.each([
+    [{ description: ' Práca ', unit: 'hod', unitPrice: '45', vatRate: 23 }, {}, { name: 'Práca', unit: 'hod', price: '45', priceMode: 'net', vatRate: 23 }],
+    [{ description: 'Kniha', unit: '', unitPrice: '20', vatRate: 5 }, { priceMode: 'gross' }, { name: 'Kniha', unit: 'ks', price: '20', priceMode: 'gross', vatRate: 5 }],
+    [{ description: 'Služba', unit: 'ks', unitPrice: '10', vatRate: 23 }, { priceMode: 'gross', nonVat: true }, { name: 'Služba', unit: 'ks', price: '10', priceMode: 'net', vatRate: 0 }],
+  ])('položka z riadku %j', (line, opt, want) => {
+    expect(itemFromLine(line, opt)).toEqual(want)
+  })
 })
