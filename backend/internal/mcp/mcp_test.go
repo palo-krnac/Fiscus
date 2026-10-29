@@ -133,6 +133,7 @@ func TestInvoiceTools(t *testing.T) {
 	// bez company_id: jediná firma sa doplní
 	res := callTool(t, s, ctx, "create_invoice_draft", map[string]any{
 		"customer": map[string]any{"name": "Odberateľ s.r.o.", "ico": "31322832"},
+		"subject":  "Úprava e-shopu",
 		"lines":    []map[string]any{{"description": "Programovanie", "quantity": "10", "unit": "hod", "unit_price": "45.50", "vat_rate": 23}},
 	})
 	if res.IsError || res.Structured["summary"] == nil {
@@ -141,6 +142,9 @@ func TestInvoiceTools(t *testing.T) {
 	id := int64(res.Structured["id"].(float64))
 	if !strings.Contains(res.Content[0].Text, "559.65") {
 		t.Fatalf("súčet: %s", res.Content[0].Text)
+	}
+	if l := callTool(t, s, ctx, "list_invoices", map[string]any{}); !strings.Contains(l.Content[0].Text, "Úprava e-shopu") {
+		t.Fatalf("predmet v zozname: %s", l.Content[0].Text)
 	}
 	// neplatné údaje → chyba nástroja s poľami
 	bad := callTool(t, s, ctx, "create_invoice_draft", map[string]any{"customer": map[string]any{"name": "X"}, "lines": []map[string]any{{"description": "", "quantity": "1", "unit_price": "1", "vat_rate": 23}}})
@@ -176,7 +180,7 @@ func TestInvoiceTools(t *testing.T) {
 
 	// audit: každé volanie s kanálom mcp
 	entries, _, _ := s.App.Store.ListAudit(context.Background(), audit.Filter{Category: audit.CatAI})
-	if len(entries) != 9 {
+	if len(entries) != 10 {
 		t.Fatalf("audit volaní: %d", len(entries))
 	}
 	for _, e := range entries {

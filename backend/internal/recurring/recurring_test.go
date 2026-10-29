@@ -129,9 +129,13 @@ func TestExpandAndBuild(t *testing.T) {
 
 	tp := sample()
 	tp.DueDays = 10
+	tp.Subject, tp.Intro = "Paušál {mesiac}", "Za {obdobie} fakturujeme:"
 	inv := tp.Build(invoice.MustDate("2026-10-31"), invoice.MustDate("2026-11-02"))
 	if inv.Lines[0].Description != "Servisný paušál október 2026" || inv.Note != "Fakturujeme za október 2026." {
 		t.Fatalf("texty: %q %q", inv.Lines[0].Description, inv.Note)
+	}
+	if inv.Subject != "Paušál október" || inv.Intro != "Za október 2026 fakturujeme:" {
+		t.Fatalf("predmet a úvod: %q %q", inv.Subject, inv.Intro)
 	}
 	if inv.IssueDate.String() != "2026-11-02" || inv.DeliveryDate.String() != "2026-11-02" || inv.DueDate.String() != "2026-11-12" {
 		t.Fatalf("dátumy: %s %s %s", inv.IssueDate, inv.DeliveryDate, inv.DueDate)

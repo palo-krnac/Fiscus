@@ -83,6 +83,8 @@ type Template struct {
 	SupplyKind    invoice.SupplyKind    `json:"supplyKind"`
 	NonVATPayer   bool                  `json:"nonVatPayer"`
 	PaymentMethod invoice.PaymentMethod `json:"paymentMethod"`
+	Subject       string                `json:"subject"` // predmet faktúry (zástupné texty ako v poznámke)
+	Intro         string                `json:"intro"`   // text nad položkami
 	Note          string                `json:"note"`
 	Lines         []invoice.Line        `json:"lines"`
 	Summary       vat.Summary           `json:"summary"`
@@ -220,8 +222,10 @@ func (t *Template) Build(period, issue invoice.Date) invoice.Invoice {
 		IssueDate: issue, DeliveryDate: issue,
 		PriceMode: t.PriceMode, ReverseCharge: t.ReverseCharge, SupplyKind: t.SupplyKind,
 		NonVATPayer: t.NonVATPayer, PaymentMethod: t.PaymentMethod,
-		Note:  t.Expand(t.Note, period),
-		Lines: make([]invoice.Line, len(t.Lines)),
+		Note:    t.Expand(t.Note, period),
+		Subject: t.Expand(t.Subject, period),
+		Intro:   t.Expand(t.Intro, period),
+		Lines:   make([]invoice.Line, len(t.Lines)),
 	}
 	for i, l := range t.Lines {
 		l.Description = t.Expand(l.Description, period)

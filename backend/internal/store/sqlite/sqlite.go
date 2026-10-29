@@ -95,9 +95,12 @@ var schemaV23 string
 //go:embed schema_v24.sql
 var schemaV24 string
 
+//go:embed schema_v25.sql
+var schemaV25 string
+
 // migrations[i] prevedie schému z verzie i na i+1. Existujúce migrácie sa
 // nikdy nemenia — zmena schémy je vždy nová migrácia na konci.
-var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4, schemaV5, schemaV6, schemaV7, schemaV8, schemaV9, schemaV10, schemaV11, schemaV12, schemaV13, schemaV14, schemaV15, schemaV16, schemaV17, schemaV18, schemaV19, schemaV20, schemaV21, schemaV22, schemaV23, schemaV24}
+var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4, schemaV5, schemaV6, schemaV7, schemaV8, schemaV9, schemaV10, schemaV11, schemaV12, schemaV13, schemaV14, schemaV15, schemaV16, schemaV17, schemaV18, schemaV19, schemaV20, schemaV21, schemaV22, schemaV23, schemaV24, schemaV25}
 
 // Store je SQLite úložisko.
 type Store struct{ db *sql.DB }
@@ -356,7 +359,7 @@ const invoiceCols = `id, company_id, kind, status, number, variable_symbol,
 	customer_name, customer_street, customer_city, customer_zip, customer_country,
 	customer_ico, customer_dic, customer_icdph, customer_email,
 	issue_date, delivery_date, due_date, paid_date,
-	currency, price_mode, reverse_charge, note, summary_json, contact_id, non_vat_payer, payment_method, correction_json, supply_kind, advance_json, fx_json, payments_json`
+	currency, price_mode, reverse_charge, note, summary_json, contact_id, non_vat_payer, payment_method, correction_json, supply_kind, advance_json, fx_json, payments_json, subject, intro`
 
 func scanInvoice(r interface{ Scan(...any) error }) (invoice.Invoice, error) {
 	var inv invoice.Invoice
@@ -365,7 +368,7 @@ func scanInvoice(r interface{ Scan(...any) error }) (invoice.Invoice, error) {
 	err := r.Scan(&inv.ID, &inv.CompanyID, &inv.Kind, &inv.Status, &inv.Number, &inv.VariableSymbol,
 		&c.Name, &c.Street, &c.City, &c.Zip, &c.Country, &c.ICO, &c.DIC, &c.ICDPH, &c.Email,
 		&issue, &delivery, &due, &paid,
-		&inv.Currency, &inv.PriceMode, &inv.ReverseCharge, &inv.Note, &summary, &inv.ContactID, &inv.NonVATPayer, &inv.PaymentMethod, &correction, &inv.SupplyKind, &advance, &fxJSON, &payments)
+		&inv.Currency, &inv.PriceMode, &inv.ReverseCharge, &inv.Note, &summary, &inv.ContactID, &inv.NonVATPayer, &inv.PaymentMethod, &correction, &inv.SupplyKind, &advance, &fxJSON, &payments, &inv.Subject, &inv.Intro)
 	if err != nil {
 		return inv, err
 	}
@@ -464,7 +467,7 @@ func (s *Store) ListInvoices(ctx context.Context, companyID int64, f store.Invoi
 			rows.Close()
 			return nil, err
 		}
-		if !store.Matches(f.Search, inv.Number, inv.Customer.Name, inv.Customer.ICO) {
+		if !store.Matches(f.Search, inv.Number, inv.Customer.Name, inv.Customer.ICO, inv.Subject) {
 			continue
 		}
 		out = append(out, inv)
@@ -541,15 +544,15 @@ func (s *Store) SaveInvoice(ctx context.Context, companyID int64, inv *invoice.I
 		c.Name, c.Street, c.City, c.Zip, c.Country, c.ICO, c.DIC, c.ICDPH, c.Email,
 		inv.IssueDate.String(), inv.DeliveryDate.String(), inv.DueDate.String(), inv.PaidDate.String(),
 		inv.Currency, string(inv.PriceMode), inv.ReverseCharge, inv.Note, string(summary), inv.ContactID, inv.NonVATPayer, string(inv.PaymentMethod), correction,
-		string(inv.SupplyKind), advance, fxJSON, payments}
+		string(inv.SupplyKind), advance, fxJSON, payments, inv.Subject, inv.Intro}
 
 	if inv.ID == 0 {
 		res, err := tx.ExecContext(ctx, `INSERT INTO invoices (company_id, kind, status, number, variable_symbol,
 			customer_name, customer_street, customer_city, customer_zip, customer_country,
 			customer_ico, customer_dic, customer_icdph, customer_email,
 			issue_date, delivery_date, due_date, paid_date,
-			currency, price_mode, reverse_charge, note, summary_json, contact_id, non_vat_payer, payment_method, correction_json, supply_kind, advance_json, fx_json, payments_json)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			currency, price_mode, reverse_charge, note, summary_json, contact_id, non_vat_payer, payment_method, correction_json, supply_kind, advance_json, fx_json, payments_json, subject, intro)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			append([]any{companyID}, vals...)...)
 		if err != nil {
 			return err
@@ -563,7 +566,7 @@ func (s *Store) SaveInvoice(ctx context.Context, companyID int64, inv *invoice.I
 			customer_ico = ?, customer_dic = ?, customer_icdph = ?, customer_email = ?,
 			issue_date = ?, delivery_date = ?, due_date = ?, paid_date = ?,
 			currency = ?, price_mode = ?, reverse_charge = ?, note = ?, summary_json = ?,
-			contact_id = ?, non_vat_payer = ?, payment_method = ?, correction_json = ?, supply_kind = ?, advance_json = ?, fx_json = ?, payments_json = ?
+			contact_id = ?, non_vat_payer = ?, payment_method = ?, correction_json = ?, supply_kind = ?, advance_json = ?, fx_json = ?, payments_json = ?, subject = ?, intro = ?
 			WHERE id = ? AND company_id = ?`,
 			append(vals, inv.ID, companyID)...)
 		if err != nil {

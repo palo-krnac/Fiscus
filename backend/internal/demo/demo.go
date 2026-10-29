@@ -76,6 +76,18 @@ var items = []item{
 	{"Frekvenčný menič 4 kW", "ks", "2", "412.50", vat.Rate23},
 }
 
+// subjects sú predmety ukážkových faktúr; prázdny = faktúra bez predmetu.
+var subjects = []string{
+	"Modernizácia riadenia baliacej linky",
+	"Servisný zásah – porucha frekvenčného meniča",
+	"",
+	"Rozšírenie rozvádzača RM1 v hale B",
+	"Revízia elektroinštalácie skladu",
+	"Úprava vizualizácie dispečingu",
+	"",
+	"Oprava osvetlenia výrobnej haly",
+}
+
 // Seed vytvorí firmu a 40 faktúr v rôznych stavoch.
 func Seed(ctx context.Context, a *app.App) (store.Company, error) {
 	c, err := a.CreateCompany(ctx, store.Company{
@@ -116,6 +128,7 @@ func Seed(ctx context.Context, a *app.App) (store.Company, error) {
 		inv := invoice.Invoice{
 			Customer:     invoice.Party{Name: cu.name, City: cu.city, Country: "SK", ICO: cu.ico, DIC: cu.dic(), ICDPH: cu.icdph},
 			ContactID:    contactIDs[ci],
+			Subject:      subjects[i%len(subjects)],
 			IssueDate:    issue,
 			DeliveryDate: issue,
 			DueDate:      issue.AddDays(14),
@@ -337,7 +350,7 @@ func seedRecurring(ctx context.Context, a *app.App, c store.Company, contactIDs 
 	}
 	plan := []recurring.Template{
 		{Name: "Servisný paušál – údržba PLC", Active: true, Interval: recurring.Monthly, NextDate: today, AutoIssue: true,
-			Customer: party(0), ContactID: contactIDs[0], Note: "Paušál za servis a vzdialenú podporu za {obdobie}.",
+			Customer: party(0), ContactID: contactIDs[0], Subject: "Servis PLC – {obdobie}", Note: "Paušál za servis a vzdialenú podporu za {obdobie}.",
 			Lines: line("Servisný paušál {mesiac} {rok}", "mes", "180")},
 		{Name: "Prenájom meracej techniky", Active: true, Interval: recurring.Quarterly, NextDate: today.AddDays(20),
 			Customer: party(3), ContactID: contactIDs[3], DueDays: 30,
@@ -362,15 +375,15 @@ func seedQuotes(ctx context.Context, a *app.App, c store.Company, contactIDs []i
 	plan := []struct {
 		ci, day, valid int
 		lines          []int
-		note           string
+		subject, note  string
 		then           []action
 	}{
-		{2, 40, 30, []int{0, 3}, "", []action{a.IssueQuote, a.AcceptQuote}}, // vyfakturuje sa nižšie
-		{4, 35, 14, []int{1}, "", []action{a.IssueQuote, a.RejectQuote}},
-		{1, 25, 14, []int{2, 5}, "", []action{a.IssueQuote}}, // po platnosti
-		{6, 9, 30, []int{0, 1, 4}, "Cena platí pri objednávke do 30 dní. Termín realizácie do 3 týždňov od objednávky.", []action{a.IssueQuote}},
-		{3, 5, 30, []int{3}, "", []action{a.IssueQuote, a.AcceptQuote}},
-		{0, 0, 30, []int{2, 4}, "", nil}, // koncept
+		{2, 40, 30, []int{0, 3}, "Nový rozvádzač a program linky", "", []action{a.IssueQuote, a.AcceptQuote}}, // vyfakturuje sa nižšie
+		{4, 35, 14, []int{1}, "Servisné výjazdy", "", []action{a.IssueQuote, a.RejectQuote}},
+		{1, 25, 14, []int{2, 5}, "Úprava HMI podľa normy", "", []action{a.IssueQuote}}, // po platnosti
+		{6, 9, 30, []int{0, 1, 4}, "Automatizácia čerpacej stanice", "Cena platí pri objednávke do 30 dní. Termín realizácie do 3 týždňov od objednávky.", []action{a.IssueQuote}},
+		{3, 5, 30, []int{3}, "", "", []action{a.IssueQuote, a.AcceptQuote}},
+		{0, 0, 30, []int{2, 4}, "Kabeláž novej linky", "", nil}, // koncept
 	}
 	var first int64
 	for _, p := range plan {
@@ -378,7 +391,10 @@ func seedQuotes(ctx context.Context, a *app.App, c store.Company, contactIDs []i
 		day := today.AddDays(-p.day)
 		q := quote.Quote{
 			Customer:  invoice.Party{Name: cu.name, City: cu.city, Country: "SK", ICO: cu.ico, DIC: cu.dic(), ICDPH: cu.icdph},
-			ContactID: contactIDs[p.ci], IssueDate: day, ValidUntil: day.AddDays(p.valid), Note: p.note,
+			ContactID: contactIDs[p.ci], IssueDate: day, ValidUntil: day.AddDays(p.valid), Note: p.note, Subject: p.subject,
+		}
+		if p.note != "" {
+			q.Intro = "Na základe obhliadky na mieste vám ponúkame:"
 		}
 		for _, li := range p.lines {
 			it := items[li%len(items)]

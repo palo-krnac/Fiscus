@@ -132,6 +132,8 @@ func TestWriteInvoice(t *testing.T) {
 		invoice.Line{Description: "Montáž", Quantity: m.MustParse("1"), Unit: "ks", UnitPrice: m.MustParse("3200"), Rate: vat.Rate23, Reverse: invoice.RCConstruction},
 		invoice.Line{Description: "Oceľ", Quantity: m.MustParse("2.4"), Unit: "t", UnitPrice: m.MustParse("2300"), Rate: vat.Rate23, Reverse: invoice.RCMetals, Commodity: "7308 90"})
 	czk := issued(line("Programovanie", "40", "hod", "1200", vat.Rate23))
+	texts := issued(line("Servis", "1", "ks", "100", vat.Rate23))
+	texts.Subject, texts.Intro, texts.Note = "Servis október", "Podľa zmluvy č. 7", "Ďakujeme"
 	czk.Customer = invoice.Party{Name: "Bohemia Control s.r.o.", City: "Brno", Country: "CZ", ICDPH: "CZ27654321"}
 	czk.ReverseCharge, czk.SupplyKind, czk.Currency, czk.FXRate = true, invoice.SupplyServices, "CZK", m.MustParse("25")
 	_ = czk.Recalculate()
@@ -156,6 +158,11 @@ func TestWriteInvoice(t *testing.T) {
 		{"tuzemské prenesenie pri položkách", rc, "S/23.00 AE/0.00", "9605.60", func(t *testing.T, d doc) {
 			if d.Lines[2].HS != "7308" || len(d.Notes) == 0 || !strings.Contains(strings.Join(d.Notes, " "), "§ 69 ods. 12 písm. g), j)") {
 				t.Errorf("KN kód / text: %+v %v", d.Lines[2], d.Notes)
+			}
+		}},
+		{"predmet a texty v jednej poznámke (PEPPOL-EN16931-R002)", texts, "S/23.00", "123.00", func(t *testing.T, d doc) {
+			if len(d.Notes) != 1 || d.Notes[0] != "Servis október\nPodľa zmluvy č. 7\nĎakujeme" {
+				t.Errorf("poznámka: %q", d.Notes)
 			}
 		}},
 		{"služba do EÚ v CZK", czk, "AE/0.00", "48000.00", func(t *testing.T, d doc) {

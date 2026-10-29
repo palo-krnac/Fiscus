@@ -20,6 +20,7 @@ func issuedSample(t *testing.T) Invoice {
 
 func TestNewCreditNote(t *testing.T) {
 	orig := issuedSample(t)
+	orig.Subject = "Dodávka svietidiel"
 	cn, err := NewCreditNote(orig, MustDate("2026-10-29"))
 	if err != nil {
 		t.Fatal(err)
@@ -29,6 +30,9 @@ func TestNewCreditNote(t *testing.T) {
 	}
 	if cn.Lines[0].Quantity.String() != "-8.00" || cn.Summary.Total.String() != "-448.93" {
 		t.Fatalf("položky %s, spolu %s", cn.Lines[0].Quantity, cn.Summary.Total)
+	}
+	if cn.Subject != orig.Subject {
+		t.Fatalf("predmet sa má prevziať: %q", cn.Subject)
 	}
 	if cn.Customer != orig.Customer {
 		t.Fatal("odberateľ sa má prevziať")

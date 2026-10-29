@@ -255,7 +255,7 @@ func matches(inv invoice.Invoice, f store.InvoiceFilter) bool {
 	if f.Status != "" && inv.Status != f.Status {
 		return false
 	}
-	return store.Matches(f.Search, inv.Number, inv.Customer.Name, inv.Customer.ICO)
+	return store.Matches(f.Search, inv.Number, inv.Customer.Name, inv.Customer.ICO, inv.Subject)
 }
 
 func (s *Store) ListInvoices(_ context.Context, companyID int64, f store.InvoiceFilter) ([]invoice.Invoice, error) {

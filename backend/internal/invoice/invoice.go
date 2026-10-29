@@ -123,7 +123,11 @@ type Invoice struct {
 	ContactID   int64 `json:"contactId"` // odkaz do adresára (0 = zadané ručne)
 	// PaymentMethod je spôsob úhrady (číselník PaymentMethods).
 	PaymentMethod PaymentMethod `json:"paymentMethod"`
-	Note          string        `json:"note"`
+	// Subject je krátky predmet (za čo je faktúra) — v zoznamoch aj na tlači.
+	// Intro je text nad položkami, Note text pod položkami.
+	Subject string `json:"subject"`
+	Intro   string `json:"intro"`
+	Note    string `json:"note"`
 	// Correction sú údaje dobropisu (opravnej faktúry); nil pri bežnej faktúre.
 	Correction *Correction `json:"correction,omitempty"`
 	// Advance sú väzby záloh (zálohová faktúra, doklad k platbe, vyúčtovanie).
@@ -202,6 +206,9 @@ func (inv *Invoice) Recalculate() error {
 	return nil
 }
 
+// SubjectMax je najväčšia dĺžka predmetu dokladu (zmestí sa do zoznamu).
+const SubjectMax = 120
+
 // FieldError je chyba konkrétneho poľa — frontend ju zobrazí pri poli.
 type FieldError struct {
 	Field   string `json:"field"`
@@ -244,6 +251,9 @@ func (inv *Invoice) Validate() error {
 	}
 	if len(inv.Lines) == 0 {
 		add("lines", "Faktúra musí mať aspoň jednu položku")
+	}
+	if n := len([]rune(inv.Subject)); n > SubjectMax {
+		add("subject", fmt.Sprintf("Predmet môže mať najviac %d znakov (teraz %d) — dlhší text patrí nad položky", SubjectMax, n))
 	}
 	for i, l := range inv.Lines {
 		if strings.TrimSpace(l.Description) == "" {
