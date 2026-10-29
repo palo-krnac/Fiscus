@@ -369,6 +369,15 @@ const customerFields = reactive([
       <span v-if="inv.id" class="tag" :data-tone="status.tone"><span class="tag-text">{{ status.label }}</span></span>
       <span v-if="dirty && editable" class="unsaved">neuložené zmeny</span>
       <div class="spacer" />
+      <Button
+        v-if="inv.id"
+        icon="pi pi-print"
+        label="Tlač / PDF"
+        severity="secondary"
+        text
+        size="small"
+        @click="router.push(`/faktury/${inv.id}/tlac`)"
+      />
       <template v-if="editable">
         <Button label="Uložiť koncept" severity="secondary" outlined size="small" :loading="busy" @click="save()" v-tooltip.bottom="'Ctrl+S'" />
         <Button label="Vystaviť" icon="pi pi-check" size="small" :disabled="busy" @click="issue" />

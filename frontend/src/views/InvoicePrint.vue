@@ -1,0 +1,493 @@
+<script setup>
+// Faktúra na tlač / uloženie do PDF (A4). PDF vytvorí prehliadač cez „Tlačiť → Uložiť ako PDF“.
+import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import Button from 'primevue/button'
+import { api } from '../lib/api.js'
+import { session } from '../lib/session.js'
+import { formatAmount, formatDate, formatMoney, formatQuantity } from '../lib/format.js'
+import { payBySquare, qrSvg } from '../lib/payqr.js'
+
+const props = defineProps({ id: String })
+const print = () => window.print()
+const router = useRouter()
+
+const inv = ref(null)
+const error = ref(null)
+const qr = ref('')
+
+const company = computed(() => session.company ?? {})
+const nonVat = computed(() => !!inv.value?.nonVatPayer)
+const docTitle = computed(() => {
+  switch (inv.value?.kind) {
+    case 'credit_note': return 'Dobropis'
+    case 'proforma': return 'Zálohová faktúra'
+  }
+  return nonVat.value ? 'Faktúra' : 'Faktúra – daňový doklad'
+})
+
+onMounted(async () => {
+  try {
+    inv.value = await api.invoice(session.companyId, props.id)
+    document.title = inv.value.number ? `Faktúra ${inv.value.number}` : 'Koncept faktúry'
+    const code = payBySquare(inv.value, company.value)
+    if (code) qr.value = await qrSvg(code)
+  } catch (e) {
+    error.value = e.message
+  }
+})
+
+const addressLines = (p) => [p.street, [p.zip, p.city].filter(Boolean).join(' ')].filter(Boolean)
+const ids = (p) =>
+  [
+    p.ico && ['IČO', p.ico],
+    p.dic && ['DIČ', p.dic],
+    p.icdph && ['IČ DPH', p.icdph],
+  ].filter(Boolean)
+</script>
+
+<template>
+  <div class="print-root">
+    <nav class="toolbar">
+      <Button icon="pi pi-arrow-left" label="Späť" text size="small" @click="router.push(`/faktury/${id}`)" />
+      <div class="spacer" />
+      <span class="tip">V okne tlače zvoľte „Uložiť ako PDF“</span>
+      <Button icon="pi pi-print" label="Tlačiť / PDF" size="small" :disabled="!inv" @click="print" />
+    </nav>
+
+    <p v-if="error" class="error">{{ error }}</p>
+
+    <article v-else-if="inv" class="sheet" :class="{ draft: inv.status === 'draft', cancelled: inv.status === 'cancelled' }">
+      <div v-if="inv.status === 'draft'" class="stamp">Koncept</div>
+      <div v-else-if="inv.status === 'cancelled'" class="stamp">Stornovaná</div>
+
+      <header class="head">
+        <div>
+          <p class="kind">{{ docTitle }}</p>
+          <h1 class="number">{{ inv.number || 'Koncept' }}</h1>
+        </div>
+        <dl class="dates">
+          <div><dt>Dátum vystavenia</dt><dd>{{ formatDate(inv.issueDate) }}</dd></div>
+          <div><dt>Dátum dodania</dt><dd>{{ formatDate(inv.deliveryDate) }}</dd></div>
+          <div class="due"><dt>Dátum splatnosti</dt><dd>{{ formatDate(inv.dueDate) }}</dd></div>
+        </dl>
+      </header>
+
+      <section class="parties">
+        <div class="party">
+          <h2>Dodávateľ</h2>
+          <p class="name">{{ company.name }}</p>
+          <p v-for="l in addressLines(company)" :key="l">{{ l }}</p>
+          <dl class="ids">
+            <template v-for="[k, v] in ids(company)" :key="k"><dt>{{ k }}</dt><dd>{{ v }}</dd></template>
+          </dl>
+          <p v-if="company.email || company.phone" class="contact">{{ [company.email, company.phone].filter(Boolean).join(', ') }}</p>
+        </div>
+        <div class="party">
+          <h2>Odberateľ</h2>
+          <p class="name">{{ inv.customer.name }}</p>
+          <p v-for="l in addressLines(inv.customer)" :key="l">{{ l }}</p>
+          <p v-if="inv.customer.country && inv.customer.country !== 'SK'">{{ inv.customer.country }}</p>
+          <dl class="ids">
+            <template v-for="[k, v] in ids(inv.customer)" :key="k"><dt>{{ k }}</dt><dd>{{ v }}</dd></template>
+          </dl>
+        </div>
+      </section>
+
+      <section class="payment">
+        <div><span>Spôsob úhrady</span><strong>Prevodom na účet</strong></div>
+        <div><span>IBAN</span><strong>{{ company.iban || '—' }}</strong></div>
+        <div><span>Variabilný symbol</span><strong>{{ inv.variableSymbol || '—' }}</strong></div>
+      </section>
+
+      <table class="lines">
+        <thead>
+          <tr>
+            <th class="desc">Popis</th>
+            <th class="num">Množstvo</th>
+            <th>MJ</th>
+            <th class="num">Cena za MJ{{ nonVat ? '' : inv.priceMode === 'gross' ? ' s DPH' : ' bez DPH' }}</th>
+            <th v-if="!nonVat" class="num">DPH</th>
+            <th class="num">{{ nonVat ? 'Spolu' : inv.priceMode === 'gross' ? 'Spolu s DPH' : 'Základ' }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="(l, i) in inv.lines" :key="i">
+            <td class="desc">{{ l.description }}</td>
+            <td class="num">{{ formatQuantity(l.quantity) }}</td>
+            <td>{{ l.unit }}</td>
+            <td class="num">{{ formatAmount(l.unitPrice) }}</td>
+            <td v-if="!nonVat" class="num">{{ inv.reverseCharge ? '—' : `${l.vatRate} %` }}</td>
+            <td class="num">{{ formatAmount(l.amount) }}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <section class="bottom">
+        <div class="qr-block">
+          <template v-if="qr">
+            <div class="qr" v-html="qr" />
+            <p>Zaplaťte mobilom<br /><strong>PAY by square</strong></p>
+          </template>
+        </div>
+
+        <div class="totals">
+          <table v-if="!nonVat" class="recap">
+            <thead>
+              <tr><th>Sadzba DPH</th><th class="num">Základ</th><th class="num">DPH</th><th class="num">Spolu</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="r in inv.summary.rates" :key="r.rate">
+                <td>{{ r.rate }} %</td>
+                <td class="num">{{ formatAmount(r.base) }}</td>
+                <td class="num">{{ formatAmount(r.vat) }}</td>
+                <td class="num">{{ formatAmount(r.total) }}</td>
+              </tr>
+            </tbody>
+            <tfoot>
+              <tr>
+                <td>Spolu</td>
+                <td class="num">{{ formatAmount(inv.summary.base) }}</td>
+                <td class="num">{{ formatAmount(inv.summary.vat) }}</td>
+                <td class="num">{{ formatAmount(inv.summary.total) }}</td>
+              </tr>
+            </tfoot>
+          </table>
+          <div class="payable">
+            <span>K úhrade</span>
+            <strong>{{ formatMoney(inv.summary.total, inv.currency) }}</strong>
+          </div>
+        </div>
+      </section>
+
+      <footer class="notes">
+        <p v-if="nonVat">Dodávateľ nie je platiteľ DPH.</p>
+        <p v-if="inv.reverseCharge && !nonVat">Prenesenie daňovej povinnosti podľa § 69 ods. 12 zákona o DPH. Daň odvedie odberateľ.</p>
+        <p v-if="inv.note" class="user-note">{{ inv.note }}</p>
+      </footer>
+    </article>
+  </div>
+</template>
+
+<style scoped>
+.print-root {
+  min-height: 100%;
+  background: #e9ecf0;
+  padding: 0 0 40px;
+}
+.toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  background: var(--sheet);
+  border-bottom: 1px solid var(--rule);
+}
+.spacer {
+  flex: 1;
+}
+.tip {
+  font-size: var(--fs-sm);
+  color: var(--ink-faint);
+}
+.error {
+  text-align: center;
+  color: var(--tone-overdue);
+  padding: 40px;
+}
+
+/* A4 hárok: 210 × 297 mm */
+.sheet {
+  position: relative;
+  width: 210mm;
+  min-height: 297mm;
+  margin: 24px auto 0;
+  padding: 16mm 16mm 14mm;
+  background: #fff;
+  color: #1d2633;
+  font-size: 9.5pt;
+  line-height: 1.38;
+  box-shadow: 0 1px 3px rgba(18, 24, 32, 0.12), 0 8px 28px rgba(18, 24, 32, 0.08);
+  overflow: hidden;
+}
+
+.stamp {
+  position: absolute;
+  top: 92mm;
+  left: 50%;
+  transform: translateX(-50%) rotate(-18deg);
+  font-size: 54pt;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: rgba(176, 58, 38, 0.13);
+  border: 5px solid rgba(176, 58, 38, 0.13);
+  padding: 2mm 8mm;
+  pointer-events: none;
+}
+
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 10mm;
+  padding-bottom: 5mm;
+  border-bottom: 2.5pt solid #1f3a5c;
+}
+.kind {
+  margin: 0;
+  font-size: 10pt;
+  color: #4e5866;
+}
+.number {
+  margin: 1mm 0 0;
+  font-size: 24pt;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+.dates {
+  display: flex;
+  gap: 7mm;
+  margin: 0;
+}
+.dates div {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.dates dt {
+  font-size: 8pt;
+  color: #4e5866;
+}
+.dates dd {
+  margin: 0;
+  font-size: 11pt;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.dates .due dd {
+  color: #1f3a5c;
+}
+
+.parties {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10mm;
+  margin: 7mm 0 6mm;
+}
+.party h2 {
+  margin: 0 0 1.5mm;
+  font-size: 8pt;
+  font-weight: 600;
+  color: #4e5866;
+}
+.party p {
+  margin: 0;
+}
+.party .name {
+  font-size: 11.5pt;
+  font-weight: 700;
+  margin-bottom: 0.5mm;
+}
+.ids {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0 4mm;
+  margin: 2mm 0 0;
+}
+.ids dt {
+  color: #4e5866;
+}
+.ids dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.contact {
+  margin-top: 2mm !important;
+  color: #4e5866;
+}
+
+.payment {
+  display: grid;
+  grid-template-columns: auto 1.6fr 1fr;
+  border-top: 0.75pt solid #c5ccd6;
+  border-bottom: 0.75pt solid #c5ccd6;
+  margin-bottom: 6mm;
+}
+.payment div {
+  display: flex;
+  flex-direction: column;
+  padding: 2mm 6mm 2mm 0;
+}
+.payment div + div {
+  padding-left: 6mm;
+  border-left: 0.75pt solid #dce1e8;
+}
+.payment span {
+  font-size: 8pt;
+  color: #4e5866;
+}
+.payment strong {
+  font-variant-numeric: tabular-nums;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+th {
+  font-size: 8pt;
+  font-weight: 600;
+  color: #4e5866;
+  text-align: left;
+  padding: 1.5mm 2mm;
+  border-bottom: 0.75pt solid #1d2633;
+}
+td {
+  padding: 1.8mm 2mm;
+  border-bottom: 0.5pt solid #dce1e8;
+  vertical-align: top;
+}
+th:first-child,
+td:first-child {
+  padding-left: 0;
+}
+th:last-child,
+td:last-child {
+  padding-right: 0;
+}
+.num {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.lines .desc {
+  width: 46%;
+}
+.lines td:last-child {
+  font-weight: 600;
+}
+
+.bottom {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10mm;
+  align-items: start;
+  margin-top: 7mm;
+  break-inside: avoid;
+}
+.qr-block {
+  display: flex;
+  align-items: center;
+  gap: 4mm;
+}
+.qr {
+  width: 30mm;
+  height: 30mm;
+}
+.qr :deep(svg) {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.qr-block p {
+  margin: 0;
+  font-size: 8.5pt;
+  color: #4e5866;
+}
+.qr-block strong {
+  color: #1d2633;
+}
+.totals {
+  min-width: 92mm;
+}
+.recap td,
+.recap th {
+  padding-top: 1.2mm;
+  padding-bottom: 1.2mm;
+}
+.recap tfoot td {
+  font-weight: 600;
+  border-bottom: 0;
+  border-top: 0.75pt solid #1d2633;
+}
+.payable {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-top: 4mm;
+}
+.payable span {
+  font-size: 10pt;
+  color: #4e5866;
+}
+.payable strong {
+  font-size: 18pt;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  border-bottom: 3pt double #1d2633;
+  line-height: 1.15;
+}
+
+.notes {
+  margin-top: 8mm;
+  color: #4e5866;
+}
+.notes p {
+  margin: 0 0 1.5mm;
+}
+.user-note {
+  color: #1d2633;
+  white-space: pre-line;
+}
+
+@media (max-width: 860px) {
+  .print-root {
+    overflow-x: auto;
+  }
+  .tip {
+    display: none;
+  }
+  .sheet {
+    margin: 12px;
+  }
+}
+
+@media print {
+  .print-root {
+    background: none;
+    padding: 0;
+  }
+  .toolbar {
+    display: none;
+  }
+  .sheet {
+    width: auto;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    box-shadow: none;
+  }
+}
+</style>
+
+<style>
+@page {
+  size: A4;
+  margin: 14mm 16mm;
+}
+@media print {
+  html,
+  body,
+  #app {
+    height: auto !important;
+    background: #fff !important;
+  }
+  .p-toast {
+    display: none !important;
+  }
+}
+</style>

@@ -4,6 +4,7 @@ import InvoiceEdit from './views/InvoiceEdit.vue'
 import Placeholder from './views/Placeholder.vue'
 import Contacts from './views/Contacts.vue'
 import Settings from './views/Settings.vue'
+import InvoicePrint from './views/InvoicePrint.vue'
 
 // Moduly z etapového plánu — zatiaľ prázdne stránky s popisom.
 export const modules = [
@@ -64,6 +65,7 @@ export const router = createRouter({
     { path: '/faktury', component: InvoiceList, meta: { title: 'Vydané faktúry' } },
     { path: '/faktury/nova', component: InvoiceEdit, meta: { title: 'Nová faktúra' } },
     { path: '/faktury/:id(\\d+)', component: InvoiceEdit, props: true, meta: { title: 'Faktúra' } },
+    { path: '/faktury/:id(\\d+)/tlac', component: InvoicePrint, props: true, meta: { title: 'Faktúra', bare: true } },
     { path: '/adresar', component: Contacts, meta: { title: 'Adresár' } },
     { path: '/adresar/:id(\\d+|novy)', component: Contacts, props: true, meta: { title: 'Adresár' } },
     { path: '/nastavenia', component: Settings, meta: { title: 'Nastavenia' } },
