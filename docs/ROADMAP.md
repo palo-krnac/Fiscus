@@ -28,7 +28,8 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [ ] AI vyťaženie prijatých faktúr z PDF (AI iba navrhuje, účtuje pevne naprogramovaný automat)
 - [x] Banka: import výpisov camt.053, automatické párovanie podľa VS a sumy, návrhy, ručné párovanie, nepárované pohyby
 - [ ] Banka: CSV / GPC výpisy, čiastočné úhrady a preplatky, viac účtov, platobné príkazy (pain.001), napojenie na banku cez API
-- [ ] Pokladňa
+- [x] Pokladňa: príjmové a výdavkové doklady (PPD/VPD), kontrola záporného zostatku, úhrada faktúr v hotovosti, storno, tlač so sumou slovom
+- [ ] Pokladňa: DPH na pokladničných dokladoch (B.3), viac pokladní, cudzia mena, ERP / e-kasa (D.1)
 - [x] **Priznanie k DPH (DPHv25) a kontrolný výkaz (KVDPHv25)**: výpočet z dokladov, XML pre eDane, mesačne aj štvrťročne
 - [x] Súhrnný výkaz (SVDPHv20): tovar do EÚ (kód 0), služby do EÚ (kód 2); r. 13–15 pre dodanie do EÚ a vývoz; nadobudnutie tovaru z EÚ (r. 05–08) a služby zo zahraničia (r. 09–10)
 - [ ] A.2 a tuzemské prenesenie pri dodaní (§ 69 ods. 12), trojstranný obchod (kód 1), call-off stock, dovoz s DPH na colnici (r. 22–23)

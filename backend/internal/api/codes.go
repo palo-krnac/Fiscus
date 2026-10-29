@@ -26,7 +26,10 @@ func (s *Server) codes(w http.ResponseWriter, _ *http.Request) {
 }
 
 func defaultFormats() map[string]string {
-	out := map[string]string{app.PurchaseFormatKey: app.DefaultPurchaseFormat}
+	out := map[string]string{}
+	for k, v := range app.ExtraFormats {
+		out[k] = v
+	}
 	for k, v := range invoice.DefaultFormats {
 		out[string(k)] = v
 	}

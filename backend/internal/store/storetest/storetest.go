@@ -14,6 +14,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/audit"
 	"github.com/palo-krnac/fiscus/backend/internal/auth"
 	"github.com/palo-krnac/fiscus/backend/internal/bank"
+	"github.com/palo-krnac/fiscus/backend/internal/cash"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	m "github.com/palo-krnac/fiscus/backend/internal/money"
 	"github.com/palo-krnac/fiscus/backend/internal/purchase"
@@ -288,6 +289,46 @@ func Run(t *testing.T, newStore Factory) {
 		}
 		if got.ContactID != 42 || !got.NonVATPayer || got.PaymentMethod != invoice.PayCash || got.SupplyKind != invoice.SupplyServices {
 			t.Fatalf("načítané: contact=%d nonVat=%v", got.ContactID, got.NonVATPayer)
+		}
+	})
+
+	t.Run("pokladňa", func(t *testing.T) {
+		s := newStore(t)
+		a, _ := s.CreateCompany(ctx, store.Company{Name: "Alfa"})
+		b, _ := s.CreateCompany(ctx, store.Company{Name: "Beta"})
+		d1 := cash.Document{Number: "PPD20260001", Kind: cash.In, Date: invoice.MustDate("2026-10-01"), Amount: m.MustParse("500"),
+			Partner: "Majiteľ", Purpose: "Vklad do pokladne", Note: "poznámka"}
+		d2 := cash.Document{Number: "VPD20260001", Kind: cash.Out, Date: invoice.MustDate("2026-10-05"), Amount: m.MustParse("12.30"),
+			Purpose: "Úhrada PF20260001", LinkKind: "purchase", LinkID: 9, LinkNumber: "PF20260001"}
+		d3 := cash.Document{Number: "PPD20250001", Kind: cash.In, Date: invoice.MustDate("2025-12-31"), Amount: m.MustParse("1"), Purpose: "x"}
+		for _, d := range []*cash.Document{&d1, &d2, &d3} {
+			if err := s.SaveCashDocument(ctx, a.ID, d); err != nil || d.ID == 0 || d.CompanyID != a.ID {
+				t.Fatalf("uloženie: %v", err)
+			}
+		}
+		got, err := s.GetCashDocument(ctx, a.ID, d2.ID)
+		if err != nil || !reflect.DeepEqual(got, d2) {
+			t.Fatalf("načítanie:\n got %+v\nwant %+v", got, d2)
+		}
+		if _, err := s.GetCashDocument(ctx, b.ID, d2.ID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("doklad inej firmy")
+		}
+		list, _ := s.ListCashDocuments(ctx, a.ID, 2026)
+		if len(list) != 2 || list[0].ID != d2.ID {
+			t.Fatalf("zoznam: %+v", list)
+		}
+		if all, _ := s.ListCashDocuments(ctx, a.ID, 0); len(all) != 3 {
+			t.Fatal("všetky roky")
+		}
+		d1.Cancelled = true
+		if err := s.SaveCashDocument(ctx, a.ID, &d1); err != nil {
+			t.Fatal(err)
+		}
+		if g, _ := s.GetCashDocument(ctx, a.ID, d1.ID); !g.Cancelled {
+			t.Fatal("storno sa neuložilo")
+		}
+		if err := s.SaveCashDocument(ctx, b.ID, &d1); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("úprava dokladu inej firmy")
 		}
 	})
 

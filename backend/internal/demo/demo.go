@@ -9,6 +9,7 @@ import (
 
 	"github.com/palo-krnac/fiscus/backend/internal/app"
 	"github.com/palo-krnac/fiscus/backend/internal/auth"
+	"github.com/palo-krnac/fiscus/backend/internal/cash"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	m "github.com/palo-krnac/fiscus/backend/internal/money"
 	"github.com/palo-krnac/fiscus/backend/internal/purchase"
@@ -181,6 +182,16 @@ func Seed(ctx context.Context, a *app.App) (store.Company, error) {
 			if _, err := a.MarkPurchasePaid(ctx, c.ID, saved.ID, received.AddDays(5)); err != nil {
 				return c, err
 			}
+		}
+	}
+	for _, d := range []cash.Document{
+		{Kind: cash.In, Date: today.AddDays(-25), Amount: m.MustParse("500.00"), Partner: "Majiteľ", Purpose: "Vklad hotovosti do pokladne"},
+		{Kind: cash.Out, Date: today.AddDays(-18), Amount: m.MustParse("23.40"), Partner: "Papiernictvo Centrum", Purpose: "Kancelárske potreby"},
+		{Kind: cash.In, Date: today.AddDays(-12), Amount: m.MustParse("85.00"), Partner: "Ján Novák", Purpose: "Drobná oprava – hotovosť"},
+		{Kind: cash.Out, Date: today.AddDays(-4), Amount: m.MustParse("12.90"), Partner: "Slovenská pošta", Purpose: "Poštovné"},
+	} {
+		if _, err := a.CreateCash(ctx, c.ID, d); err != nil {
+			return c, fmt.Errorf("demo pokladňa: %w", err)
 		}
 	}
 	if err := seedBank(ctx, a, c); err != nil {

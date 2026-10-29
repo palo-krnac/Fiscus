@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"github.com/palo-krnac/fiscus/backend/internal/bank"
+	"github.com/palo-krnac/fiscus/backend/internal/cash"
 
 	"github.com/palo-krnac/fiscus/backend/internal/audit"
 	"github.com/palo-krnac/fiscus/backend/internal/auth"
@@ -133,6 +134,12 @@ type Store interface {
 	GetBankTransaction(ctx context.Context, companyID, id int64) (bank.Transaction, error)
 	// UpdateBankTransaction uloží stav, spárovanie a poznámku pohybu.
 	UpdateBankTransaction(ctx context.Context, companyID int64, t bank.Transaction) error
+
+	// ListCashDocuments vráti pokladničné doklady (year 0 = všetky), najnovšie prvé.
+	ListCashDocuments(ctx context.Context, companyID int64, year int) ([]cash.Document, error)
+	GetCashDocument(ctx context.Context, companyID, id int64) (cash.Document, error)
+	// SaveCashDocument vloží (ID == 0) alebo prepíše doklad. Nastaví ID.
+	SaveCashDocument(ctx context.Context, companyID int64, d *cash.Document) error
 
 	// ---- používatelia a prístupy ----
 	CreateUser(ctx context.Context, u auth.User) (auth.User, error) // ErrDuplicate pri rovnakom e-maile

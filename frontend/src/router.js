@@ -13,6 +13,8 @@ import Companies from './views/Companies.vue'
 import VatReturn from './views/VatReturn.vue'
 import Bank from './views/Bank.vue'
 import AiAccess from './views/AiAccess.vue'
+import Cash from './views/Cash.vue'
+import CashPrint from './views/CashPrint.vue'
 
 // Moduly z etapového plánu — zatiaľ prázdne stránky s popisom.
 export const modules = [
@@ -32,7 +34,7 @@ export const modules = [
     group: 'Peniaze',
     items: [
       { path: '/banka', label: 'Banka', icon: 'pi-building-columns', ready: true, perm: 'bank.read' },
-      { path: '/pokladna', label: 'Pokladňa', icon: 'pi-wallet', stage: 1, perm: 'purchases.read' },
+      { path: '/pokladna', label: 'Pokladňa', icon: 'pi-wallet', ready: true, perm: 'cash.read' },
     ],
   },
   {
@@ -92,6 +94,8 @@ export const router = createRouter({
     { path: '/nastavenia', component: Settings, meta: { title: 'Nastavenia', perm: 'settings.write' } },
     { path: '/pouzivatelia', component: Users, meta: { title: 'Používatelia', perm: 'users.manage' } },
     { path: '/ai', component: AiAccess, meta: { title: 'Prístup pre AI', noCompany: true } },
+    { path: '/pokladna', component: Cash, meta: { title: 'Pokladňa', perm: 'cash.read' } },
+    { path: '/pokladna/:id(\\d+)/tlac', component: CashPrint, props: true, meta: { title: 'Pokladničný doklad', bare: true, perm: 'cash.read' } },
     { path: '/banka', component: Bank, meta: { title: 'Banka', perm: 'bank.read' } },
     { path: '/dph', component: VatReturn, props: { tab: 'dph' }, meta: { title: 'Priznanie k DPH', perm: 'vat.read' } },
     { path: '/kontrolny-vykaz', component: VatReturn, props: { tab: 'kv' }, meta: { title: 'Kontrolný výkaz', perm: 'vat.read' } },

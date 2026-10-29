@@ -98,6 +98,13 @@ func (s *Server) Handler() http.Handler {
 
 	need("GET /api/companies/{cid}/audit", auth.PermAuditRead, s.companyAudit)
 
+	need("GET /api/companies/{cid}/cash", auth.PermCashRead, s.cashBook)
+	need("GET /api/companies/{cid}/cash/candidates", auth.PermCashRead, s.cashCandidates)
+	need("GET /api/companies/{cid}/cash/{id}", auth.PermCashRead, s.getCash)
+	need("POST /api/companies/{cid}/cash", auth.PermCashWrite, s.createCash)
+	need("PUT /api/companies/{cid}/cash/{id}", auth.PermCashWrite, s.updateCash)
+	need("POST /api/companies/{cid}/cash/{id}/cancel", auth.PermCashWrite, s.cancelCash)
+
 	need("GET /api/companies/{cid}/bank", auth.PermBankRead, s.listBank)
 	need("POST /api/companies/{cid}/bank/import", auth.PermBankWrite, s.importBank)
 	need("GET /api/companies/{cid}/bank/{id}/suggestions", auth.PermBankRead, s.bankSuggestions)
