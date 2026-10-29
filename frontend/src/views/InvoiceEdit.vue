@@ -15,7 +15,8 @@ import { codes, ratesOn, supplyKinds, isForeign, supplyHint, domesticRCOptions, 
 import Checkbox from 'primevue/checkbox'
 import AutoComplete from 'primevue/autocomplete'
 import IcoInput from '../components/IcoInput.vue'
-import { fillFromRegistry } from '../lib/registry.js'
+import VatIdInput from '../components/VatIdInput.vue'
+import { fillFromRegistry, fillFromVIES } from '../lib/registry.js'
 import { saveBlob } from '../lib/export.js'
 import { sentText } from '../lib/einvoice.js'
 import { api, ApiError } from '../lib/api.js'
@@ -938,6 +939,13 @@ const customerFields = reactive([
                 :auto="!c.name"
                 @update:model-value="upd(inv.customer, 'ico')($event)"
                 @found="(r) => { inv.customer = fillFromRegistry(inv.customer, r); changed() }"
+              />
+              <VatIdInput
+                v-else-if="f.key === 'icdph' && editable"
+                :model-value="c.icdph"
+                :invalid="!!fieldError('customer.icdph')"
+                @update:model-value="upd(inv.customer, 'icdph')($event)"
+                @found="(r) => { inv.customer = fillFromVIES(inv.customer, r); changed() }"
               />
               <InputText
                 v-else

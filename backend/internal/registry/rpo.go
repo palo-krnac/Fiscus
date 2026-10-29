@@ -41,7 +41,8 @@ type Company struct {
 	Country     string `json:"country"` // ISO kód
 	Established string `json:"established,omitempty"`
 	Terminated  string `json:"terminated,omitempty"` // dátum zániku, ak firma zanikla
-	DIC         string `json:"dic,omitempty"`        // iba z registra účtovných závierok
+	DIC         string `json:"dic,omitempty"`        // z registra účtovných závierok
+	ICDPH       string `json:"icdph,omitempty"`      // ak VIES potvrdí SK+DIČ (platiteľ DPH)
 	Source      string `json:"source"`               // napr. „Obchodný register“
 }
 

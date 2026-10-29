@@ -447,3 +447,32 @@ func TestDesktopLauncher(t *testing.T) {
 		srv.Close()
 	}
 }
+
+type fakeVIES map[string]registry.VATCheck
+
+func (f fakeVIES) Check(_ context.Context, id string) (registry.VATCheck, error) {
+	if _, _, err := registry.SplitVATID(id); err != nil {
+		return registry.VATCheck{}, err
+	}
+	if c, ok := f[id]; ok {
+		return c, nil
+	}
+	return registry.VATCheck{}, registry.ErrUnavailable
+}
+
+func TestVIESAPI(t *testing.T) {
+	e := setup(t, edition.Desktop)
+	e.do("GET", "/api/vies/CZ27654321", nil, 501, nil)
+	caps, _ := edition.For(edition.Desktop)
+	a := app.New(memstore.New(), caps)
+	srv := httptest.NewServer((&Server{App: a, VAT: fakeVIES{"CZ27654321": {VATID: "CZ27654321", Valid: true, Name: "Bohemia Control s.r.o.", City: "Brno"}}}).Handler())
+	t.Cleanup(srv.Close)
+	e2 := &env{t: t, srv: srv, client: http.DefaultClient}
+	var c registry.VATCheck
+	e2.do("GET", "/api/vies/CZ27654321", nil, 200, &c)
+	if !c.Valid || c.City != "Brno" {
+		t.Fatalf("%+v", c)
+	}
+	e2.do("GET", "/api/vies/123", nil, 400, nil)
+	e2.do("GET", "/api/vies/DE999999999", nil, 503, nil)
+}

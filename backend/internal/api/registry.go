@@ -29,3 +29,21 @@ func (s *Server) lookupICO(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusServiceUnavailable, registry.ErrUnavailable.Error(), nil)
 	}
 }
+
+// checkVAT overí IČ DPH vo VIES (platiteľ DPH v EÚ, názov a adresa).
+func (s *Server) checkVAT(w http.ResponseWriter, r *http.Request) {
+	if s.VAT == nil {
+		writeErr(w, http.StatusNotImplemented, "Overenie IČ DPH vo VIES je vypnuté", nil)
+		return
+	}
+	c, err := s.VAT.Check(r.Context(), r.PathValue("vatid"))
+	switch {
+	case err == nil:
+		writeJSON(w, http.StatusOK, c)
+	case errors.Is(err, registry.ErrBadVATID):
+		writeErr(w, http.StatusBadRequest, err.Error(), []invoice.FieldError{{Field: "icdph", Message: err.Error()}})
+	default:
+		log.Printf("VIES: %v", err)
+		writeErr(w, http.StatusServiceUnavailable, "Systém VIES neodpovedá (alebo daňový úrad štátu je nedostupný) — skúste neskôr", nil)
+	}
+}
