@@ -83,6 +83,16 @@ Vývoj s okamžitým obnovovaním: `make dev-api` v jednom termináli a `make de
 
 Pri zadaní IČO (adresár, faktúra, nastavenia) sa názov a adresa doplnia z verejného [Registra právnických osôb](https://api.statistics.sk/rpo/v1) Štatistického úradu SR (dáta pod licenciou CC BY 4.0). Do registra sa posiela iba IČO. Výsledky sa 12 hodín držia v pamäti. Bez internetu program funguje ďalej, len sa údaje nedoplnia. Vypnutie: `-rpo-url ""`.
 
+## Legislatíva
+
+Zákonné hodnoty, ktoré sa menia so zákonom, nie sú natvrdo v kóde. Sú v **Nastaveniach → Legislatíva** a platia pre všetky firmy:
+- obdobia sadzieb DPH,
+- základná úroková sadzba ECB,
+- prirážky úroku z omeškania pre podnikateľov a spotrebiteľov,
+- paušálna náhrada za faktúru.
+
+Nová inštalácia sa predvyplní hodnotami z programu (`vat.DefaultPeriods`, `reminder/ecb.go`). Keď nová verzia programu prinesie nový riadok, napríklad novú sadzbu ECB, pri štarte sa doplní sám. Riadky, ktoré používateľ upravil alebo zmazal, ostanú tak, ako ich nechal. Meniť ich môže iba správca a každá zmena je v audite.
+
 ## Zálohy
 
 Zálohy sa robia automaticky pri štarte, každých 24 hodín a pri ukončení programu. Postup:

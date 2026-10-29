@@ -39,6 +39,7 @@ type Store struct {
 	quotes    map[int64]quote.Quote
 	recurring map[int64]recurring.Template
 	reminders map[int64]reminder.Reminder
+	settings  map[string]string
 	users     map[int64]auth.User
 	members   map[memKey]auth.Role
 	sessions  map[string]auth.Session

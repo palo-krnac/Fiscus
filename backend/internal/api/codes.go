@@ -15,7 +15,7 @@ import (
 // codes vráti systémové číselníky (rovnaké pre všetky firmy).
 func (s *Server) codes(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"vatPeriods":      vat.Periods,
+		"vatPeriods":      vat.Periods(),
 		"paymentMethods":  invoice.PaymentMethods,
 		"defaultUnits":    store.DefaultUnits,
 		"defaultFormats":  defaultFormats(),

@@ -25,9 +25,24 @@ const (
 // MaxLevel je najvyšší stupeň upomienky (posledná pred vymáhaním).
 const MaxLevel = 3
 
-// FlatFee je paušálna náhrada nákladov spojených s uplatnením pohľadávky
-// (§ 369c Obchodného zákonníka) — iba medzi podnikateľmi, za každú faktúru.
-var FlatFee = money.FromInt(40)
+// Law sú zákonné parametre upomienok (predvolené v DefaultLaw, platné
+// v Nastaveniach → Legislatíva).
+type Law struct {
+	ECB ECBTable
+	// BusinessMargin a ConsumerMargin sú prirážky k sadzbe ECB v p. b.:
+	// podnikatelia § 369 ObZ a NV č. 21/2013 Z. z. (9), spotrebitelia
+	// § 517 OZ a NV č. 87/1995 Z. z. (5).
+	BusinessMargin money.Dec
+	ConsumerMargin money.Dec
+	// FlatFee je paušálna náhrada nákladov spojených s uplatnením pohľadávky
+	// (§ 369c ObZ) — iba medzi podnikateľmi, za každú faktúru.
+	FlatFee money.Dec
+}
+
+// DefaultLaw vráti predvolené zákonné parametre.
+func DefaultLaw() Law {
+	return Law{ECB: BuiltinECB(), BusinessMargin: money.FromInt(9), ConsumerMargin: money.FromInt(5), FlatFee: money.FromInt(40)}
+}
 
 // Item je jedna faktúra na upomienke.
 type Item struct {
@@ -57,8 +72,12 @@ type Reminder struct {
 	Interest   InterestMode  `json:"interestMode"`
 	CustomRate money.Dec     `json:"customRate"`
 	ChargeFee  bool          `json:"chargeFee"`
-	Note       string        `json:"note"`
-	Items      []Item        `json:"items"`
+	// Margin je prirážka k sadzbe ECB (p. b.) a FeeEach paušálna náhrada za
+	// faktúru platné v deň upomienky — tlač ich uvedie aj po zmene legislatívy.
+	Margin  money.Dec `json:"margin"`
+	FeeEach money.Dec `json:"feeEach"`
+	Note    string    `json:"note"`
+	Items   []Item    `json:"items"`
 
 	Principal     money.Dec `json:"principal"`
 	InterestTotal money.Dec `json:"interestTotal"`
@@ -74,6 +93,8 @@ type Options struct {
 	CustomRate money.Dec    `json:"customRate"`
 	ChargeFee  bool         `json:"chargeFee"`
 	Note       string       `json:"note"`
+	// Law sú zákonné parametre (nil = predvolené).
+	Law *Law `json:"-"`
 }
 
 // IsBusiness rozhodne, či ide o obchodnoprávny vzťah (odberateľ s IČO).
@@ -81,17 +102,14 @@ type Options struct {
 func IsBusiness(p invoice.Party) bool { return strings.TrimSpace(p.ICO) != "" }
 
 // StatutoryRate vráti zákonnú sadzbu úroku z omeškania (% p. a.) pre omeškanie,
-// ktoré začalo dňom firstDay. Sadzba sa nemení počas celého omeškania.
-//   - podnikatelia: základná sadzba ECB k prvému dňu omeškania + 9 p. b.
-//     (§ 369 ObZ, nariadenie vlády č. 21/2013 Z. z., § 1),
-//   - spotrebitelia: základná sadzba ECB k prvému dňu omeškania + 5 p. b.
-//     (nariadenie vlády č. 87/1995 Z. z., § 3).
-func StatutoryRate(firstDay invoice.Date, business bool) money.Dec {
-	add := money.FromInt(5)
+// ktoré začalo dňom firstDay: sadzba ECB k prvému dňu omeškania + prirážka
+// (podnikateľ / spotrebiteľ). Sadzba sa nemení počas celého omeškania.
+func (l Law) StatutoryRate(firstDay invoice.Date, business bool) money.Dec {
+	add := l.ConsumerMargin
 	if business {
-		add = money.FromInt(9)
+		add = l.BusinessMargin
 	}
-	return ECBRate(firstDay).Add(add)
+	return l.ECB.On(firstDay).Add(add)
 }
 
 // Interest vypočíta úrok z omeškania zo sumy za dni od from do to (vrátane)
@@ -181,7 +199,20 @@ func Build(invs []invoice.Invoice, level int, o Options) (Reminder, error) {
 		Business: IsBusiness(first.Customer), Interest: o.Interest, CustomRate: o.CustomRate,
 		Note: strings.TrimSpace(o.Note), Items: []Item{},
 	}
+	law := DefaultLaw()
+	if o.Law != nil {
+		law = *o.Law
+	}
 	r.ChargeFee = o.ChargeFee && r.Business
+	if o.Interest == InterestStatutory {
+		r.Margin = law.ConsumerMargin
+		if r.Business {
+			r.Margin = law.BusinessMargin
+		}
+	}
+	if r.ChargeFee {
+		r.FeeEach = law.FlatFee
+	}
 	if o.Interest != InterestCustom {
 		r.CustomRate = money.Zero
 	}
@@ -201,13 +232,13 @@ func Build(invs []invoice.Invoice, level int, o Options) (Reminder, error) {
 		firstDay := inv.DueDate.AddDays(1)
 		switch o.Interest {
 		case InterestStatutory:
-			it.Rate = StatutoryRate(firstDay, r.Business)
+			it.Rate = law.StatutoryRate(firstDay, r.Business)
 		case InterestCustom:
 			it.Rate = o.CustomRate
 		}
 		it.Interest = Interest(it.Amount, it.Rate, firstDay, o.Date)
 		if r.ChargeFee {
-			it.Fee = FlatFee
+			it.Fee = law.FlatFee
 		}
 		r.Items = append(r.Items, it)
 		r.Principal = r.Principal.Add(it.Amount)

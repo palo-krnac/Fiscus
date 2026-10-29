@@ -164,6 +164,11 @@ type Store interface {
 	SaveReminder(ctx context.Context, companyID int64, r *reminder.Reminder) error
 	DeleteReminder(ctx context.Context, companyID, id int64) error
 
+	// Nastavenia programu spoločné pre všetky firmy (napr. legislatíva), hodnota
+	// je JSON. GetSetting vráti ErrNotFound, ak kľúč ešte nie je uložený.
+	GetSetting(ctx context.Context, key string) (string, error)
+	SetSetting(ctx context.Context, key, value string) error
+
 	// ---- používatelia a prístupy ----
 	CreateUser(ctx context.Context, u auth.User) (auth.User, error) // ErrDuplicate pri rovnakom e-maile
 	GetUser(ctx context.Context, id int64) (auth.User, error)

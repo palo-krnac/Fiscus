@@ -494,6 +494,24 @@ func Run(t *testing.T, newStore Factory) {
 		}
 	})
 
+	t.Run("nastavenia programu", func(t *testing.T) {
+		s := newStore(t)
+		if _, err := s.GetSetting(ctx, "legal"); !errors.Is(err, store.ErrNotFound) {
+			t.Fatalf("chýbajúce nastavenie: %v", err)
+		}
+		for _, v := range []string{`{"a":1}`, `{"a":2,"text":"č"}`} {
+			if err := s.SetSetting(ctx, "legal", v); err != nil {
+				t.Fatal(err)
+			}
+			if got, err := s.GetSetting(ctx, "legal"); err != nil || got != v {
+				t.Fatalf("načítanie: %q %v", got, err)
+			}
+		}
+		if _, err := s.GetSetting(ctx, "iny"); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("iný kľúč")
+		}
+	})
+
 	t.Run("API kľúče", func(t *testing.T) {
 		s := newStore(t)
 		k1 := auth.APIKey{UserID: 7, Name: "Claude", Prefix: "fk_ab12", Hash: "h1", ReadOnly: true, CreatedAt: 1000}

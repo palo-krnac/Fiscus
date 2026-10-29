@@ -11,13 +11,14 @@ describe('upomienky', () => {
     expect(introText({ level: 3, payBy: '2026-11-05' })).toMatch(/súdnou cestou/)
   })
   it.each([
-    [{ interestMode: 'statutory', business: true, interestTotal: '4.55', fees: '40.00' }, ['§ 369 Obchodného', '§ 369c', 'plynie až do zaplatenia']],
-    [{ interestMode: 'statutory', business: false, interestTotal: '1.00', fees: '0.00' }, ['§ 517 Občianskeho', 'plynie']],
+    [{ interestMode: 'statutory', business: true, margin: '9.00', feeEach: '40.00', interestTotal: '4.55', fees: '40.00' },
+      ['§ 369 Obchodného', 'o 9 percentuálnych', '§ 369c', '(40,00 € za každú', 'plynie až do zaplatenia']],
+    [{ interestMode: 'statutory', business: false, margin: '5.50', interestTotal: '1.00', fees: '0.00' }, ['§ 517 Občianskeho', 'o 5,5 percentuálnych', 'plynie']],
     [{ interestMode: 'custom', customRate: '12.50', interestTotal: '3.00', fees: '0' }, ['12,50 % ročne', 'plynie']],
     [{ interestMode: 'none', interestTotal: '0.00', fees: '0.00' }, []],
   ])('právne poznámky %o', (r, parts) => {
     const notes = legalNotes(r).join(' ')
-    expect(legalNotes(r).length).toBe(parts.length)
+    if (!parts.length) expect(legalNotes(r)).toEqual([])
     for (const p of parts) expect(notes).toContain(p)
   })
 })

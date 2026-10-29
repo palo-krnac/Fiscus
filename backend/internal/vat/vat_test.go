@@ -130,13 +130,55 @@ func TestRatesOn(t *testing.T) {
 }
 
 func TestPeriodsAreContinuous(t *testing.T) {
-	for i := 1; i < len(Periods); i++ {
-		prev, cur := Periods[i-1], Periods[i]
+	ps := DefaultPeriods
+	for i := 1; i < len(ps); i++ {
+		prev, cur := ps[i-1], ps[i]
 		if prev.To == "" || prev.To >= cur.From {
 			t.Fatalf("obdobia %d a %d sa prekrývajú alebo predchádzajúce nie je ukončené", i-1, i)
 		}
 	}
-	if Periods[len(Periods)-1].To != "" {
+	if ps[len(ps)-1].To != "" {
 		t.Fatal("posledné obdobie má platiť doteraz")
+	}
+}
+
+func TestValidatePeriods(t *testing.T) {
+	cases := []struct {
+		name string
+		ps   []Period
+		ok   bool
+	}{
+		{"predvolené", DefaultPeriods, true},
+		{"prázdne", nil, false},
+		{"prekryv", []Period{{From: "2023-01-01", To: "2025-01-31", Rates: []Rate{20, 0}}, {From: "2025-01-01", Rates: []Rate{23, 0}}}, false},
+		{"otvorené v strede", []Period{{From: "2023-01-01", Rates: []Rate{20}}, {From: "2025-01-01", Rates: []Rate{23}}}, false},
+		{"koniec pred začiatkom", []Period{{From: "2025-01-01", To: "2024-01-01", Rates: []Rate{23}}}, false},
+		{"bez sadzieb", []Period{{From: "2025-01-01"}}, false},
+		{"dvakrát sadzba", []Period{{From: "2025-01-01", Rates: []Rate{23, 23}}}, false},
+		{"sadzba mimo", []Period{{From: "2025-01-01", Rates: []Rate{120}}}, false},
+		{"zlý dátum", []Period{{From: "2025-13-01", Rates: []Rate{23}}}, false},
+		{"nová sadzba", append(append([]Period{}, DefaultPeriods[0], Period{From: "2025-01-01", To: "2026-12-31", Rates: []Rate{23, 19, 5, 0}}),
+			Period{From: "2027-01-01", Rates: []Rate{21, 19, 5, 0}}), true},
+	}
+	for _, c := range cases {
+		if err := ValidatePeriods(c.ps); (err == nil) != c.ok {
+			t.Errorf("%s: %v", c.name, err)
+		}
+	}
+}
+
+func TestSetPeriods(t *testing.T) {
+	defer SetPeriods(DefaultPeriods)
+	ps := []Period{
+		{From: "2025-01-01", To: "2026-12-31", Rates: []Rate{23, 19, 5, 0}},
+		{From: "2027-01-01", Rates: []Rate{21, 19, 5, 0}},
+	}
+	SetPeriods(ps)
+	ps[1].Rates[0] = 99 // kópia, nie zdieľané pole
+	if !Rate(21).ValidOn("2027-03-01") || Rate(23).ValidOn("2027-03-01") || !Rate(23).ValidOn("2026-12-31") || !Rate(21).Known() {
+		t.Fatal("nový číselník")
+	}
+	if Rate(20).Known() {
+		t.Fatal("starý číselník ostal platný")
 	}
 }

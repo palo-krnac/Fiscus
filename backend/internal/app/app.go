@@ -17,6 +17,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/auth"
 	"github.com/palo-krnac/fiscus/backend/internal/edition"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
+	"github.com/palo-krnac/fiscus/backend/internal/legal"
 	"github.com/palo-krnac/fiscus/backend/internal/license"
 	"github.com/palo-krnac/fiscus/backend/internal/party"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
@@ -41,6 +42,7 @@ type App struct {
 	BackupsOff string
 	lic        atomic.Pointer[license.License]
 	recurMu    sync.Mutex // jeden beh pravidelnej fakturácie naraz
+	legal      atomic.Pointer[legal.Params]
 }
 
 // New vytvorí službu.

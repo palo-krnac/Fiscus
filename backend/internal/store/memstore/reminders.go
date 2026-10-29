@@ -66,3 +66,23 @@ func (s *Store) DeleteReminder(_ context.Context, companyID, id int64) error {
 	delete(s.reminders, id)
 	return nil
 }
+
+func (s *Store) GetSetting(_ context.Context, key string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	v, ok := s.settings[key]
+	if !ok {
+		return "", store.ErrNotFound
+	}
+	return v, nil
+}
+
+func (s *Store) SetSetting(_ context.Context, key, value string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.settings == nil {
+		s.settings = map[string]string{}
+	}
+	s.settings[key] = value
+	return nil
+}
