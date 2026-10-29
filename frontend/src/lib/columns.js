@@ -168,3 +168,16 @@ export const apiKeyColumns = [
   date('Naposledy použitý', (r) => unixDate(r.lastUsedAt)),
   t('Stav', (r) => (r.revoked ? 'zrušený' : 'aktívny'), 10),
 ]
+
+export const cashColumns = [
+  t('Číslo', (r) => r.number, 14),
+  date('Dátum', (r) => r.date),
+  t('Druh', (r) => (r.kind === 'in' ? 'príjem' : 'výdavok'), 9),
+  money('Príjem', (r) => (r.kind === 'in' ? r.amount : '')),
+  money('Výdavok', (r) => (r.kind === 'out' ? r.amount : '')),
+  t('Partner', (r) => r.partner, 24),
+  t('Účel', (r) => r.purpose, 36),
+  t('Doklad', (r) => r.linkNumber, 14),
+  t('Stav', (r) => (r.cancelled ? 'stornovaný' : ''), 10),
+  t('Poznámka', (r) => r.note, 24),
+]

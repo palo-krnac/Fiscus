@@ -88,6 +88,12 @@ export const api = {
   audit: (cid, filter) => request('GET', (cid ? `/api/companies/${cid}/audit` : '/api/audit') + query(filter)),
   verifyAudit: () => request('GET', '/api/audit/verify'),
 
+  cashBook: (cid, year) => request('GET', `/api/companies/${cid}/cash` + query({ year })),
+  cash: (cid, id) => request('GET', `/api/companies/${cid}/cash/${id}`),
+  cashCandidates: (cid, kind) => request('GET', `/api/companies/${cid}/cash/candidates` + query({ kind })),
+  createCash: (cid, d) => request('POST', `/api/companies/${cid}/cash`, d),
+  updateCash: (cid, id, d) => request('PUT', `/api/companies/${cid}/cash/${id}`, d),
+  cancelCash: (cid, id) => request('POST', `/api/companies/${cid}/cash/${id}/cancel`),
   bank: (cid, { year, status } = {}) => request('GET', `/api/companies/${cid}/bank` + query({ year, status })),
   importBank: (cid, file) => request('POST', `/api/companies/${cid}/bank/import` + query({ name: file.name }), file),
   bankSuggestions: (cid, id) => request('GET', `/api/companies/${cid}/bank/${id}/suggestions`),

@@ -397,6 +397,28 @@ func (s *Server) allTools() []Tool {
 			},
 		},
 		{
+			Name: "cash_book", Title: "Pokladňa",
+			Description: "Pokladničná kniha za rok: príjmové a výdavkové doklady, počiatočný a aktuálny zostatok.",
+			Props:       map[string]any{"company_id": pCompany, "year": pYear},
+			Run: func(c *callCtx, args json.RawMessage) (any, error) {
+				var p struct {
+					CompanyID int64 `json:"company_id"`
+					Year      int   `json:"year"`
+				}
+				if err := parse(args, &p); err != nil {
+					return nil, err
+				}
+				cid, err := c.company(p.CompanyID, auth.PermCashRead)
+				if err != nil {
+					return nil, err
+				}
+				if p.Year == 0 {
+					p.Year = a.Today().Year()
+				}
+				return a.CashBook(c.ctx, cid, p.Year)
+			},
+		},
+		{
 			Name: "vat_return", Title: "Priznanie k DPH",
 			Description: "Priznanie k DPH, kontrolný a súhrnný výkaz za obdobie (mesiac 2026-10 alebo štvrťrok 2026-Q3) vrátane dokladov na kontrolu.",
 			Props:       map[string]any{"company_id": pCompany, "period": map[string]any{"type": "string", "description": "2026-10 alebo 2026-Q3"}},
