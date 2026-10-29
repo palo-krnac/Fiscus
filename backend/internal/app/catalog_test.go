@@ -64,3 +64,42 @@ func TestCatalogPermissions(t *testing.T) {
 		t.Fatalf("cudzia firma: %v", err)
 	}
 }
+
+func TestImportItems(t *testing.T) {
+	a, c := newApp(t, edition.Desktop)
+	if _, err := a.SaveItem(ctx, c.ID, catalog.Item{Code: "PLC1", Name: "Starý názov", Price: m.MustParse("40"), Rate: 23}); err != nil {
+		t.Fatal(err)
+	}
+	csv := []byte("Kód;Názov;MJ;Cena bez DPH;DPH (%)\nPLC1;Programovanie PLC;hod;48;23\n;Kniha;ks;19,90;5\nX;;ks;1;23\n")
+	pv, err := a.ImportItems(ctx, c.ID, csv, false)
+	if err != nil || pv.Done || pv.Created != 1 || pv.Updated != 1 || pv.Skipped != 1 {
+		t.Fatalf("náhľad: %+v %v", pv, err)
+	}
+	if list, _ := a.Items(ctx, c.ID); len(list) != 1 || list[0].Name != "Starý názov" {
+		t.Fatal("náhľad niečo zmenil")
+	}
+	res, err := a.ImportItems(ctx, c.ID, csv, true)
+	if err != nil || !res.Done {
+		t.Fatalf("import: %+v %v", res, err)
+	}
+	list, _ := a.Items(ctx, c.ID)
+	if len(list) != 2 {
+		t.Fatalf("cenník: %+v", list)
+	}
+	byName := map[string]ItemRow{}
+	for _, it := range list {
+		byName[it.Name] = it
+	}
+	if byName["Programovanie PLC"].Code != "PLC1" || byName["Programovanie PLC"].Price.String() != "48.00" || byName["Kniha"].Rate != 5 {
+		t.Fatalf("položky: %+v", byName)
+	}
+	// opakovaný import nič nové nepridá
+	if again, _ := a.ImportItems(ctx, c.ID, csv, true); again.Created != 0 || again.Updated != 2 {
+		t.Fatalf("opakovane: %+v", again)
+	}
+	for _, bad := range [][]byte{nil, []byte("Kód;Cena\n1;2\n"), {0xD0, 0xCF, 0x11, 0xE0}} {
+		if _, err := a.ImportItems(ctx, c.ID, bad, false); !fieldErr(err, "file") {
+			t.Errorf("chybný súbor %q: %v", bad, err)
+		}
+	}
+}
