@@ -7,6 +7,7 @@ import { intervalLabel, recurringStatusOf } from './recurring.js'
 import { levelShort } from './reminders.js'
 import { kindLabel } from './advance.js'
 import { docKindLabel, emailStatus } from './emails.js'
+import { eurSummary, isForeignCurrency, sourceLabel } from './fx.js'
 
 const t = (header, value, width) => ({ header, value, width })
 const money = (header, value) => ({ header, value, type: 'money', width: 14 })
@@ -32,6 +33,10 @@ export const invoiceColumns = [
   money('DPH', (r) => r.summary?.vat),
   money('Spolu', (r) => r.summary?.total),
   t('Mena', (r) => r.currency || 'EUR', 6),
+  { header: 'Kurz', value: (r) => (isForeignCurrency(r.currency) ? r.fxRate : ''), type: 'number', width: 10 },
+  money('Základ €', (r) => eurSummary(r)?.base),
+  money('DPH €', (r) => eurSummary(r)?.vat),
+  money('Spolu €', (r) => eurSummary(r)?.total),
   t('Prenesenie DPH', (r) => yes(r.reverseCharge), 8),
   t('Stav', (r) => statusOf(r).label, 18),
   t('Poznámka', (r) => r.note, 30),
@@ -205,6 +210,10 @@ export const quoteColumns = [
   money('DPH', (r) => r.summary?.vat),
   money('Spolu', (r) => r.summary?.total),
   t('Mena', (r) => r.currency || 'EUR', 6),
+  { header: 'Kurz', value: (r) => (isForeignCurrency(r.currency) ? r.fxRate : ''), type: 'number', width: 10 },
+  money('Základ €', (r) => eurSummary(r)?.base),
+  money('DPH €', (r) => eurSummary(r)?.vat),
+  money('Spolu €', (r) => eurSummary(r)?.total),
   t('Stav', (r) => quoteStatusOf(r).label, 16),
   t('Faktúra', (r) => (r.invoiceId ? r.invoiceNumber || 'koncept' : ''), 14),
   t('Poznámka', (r) => r.note, 30),
@@ -287,4 +296,11 @@ export const emailColumns = [
   t('Poslal', (r) => r.user, 18),
   t('Stav', (r) => emailStatus(r).label, 12),
   t('Chyba', (r) => r.error, 40),
+]
+
+export const rateColumns = [
+  date('Dátum', (r) => r.date),
+  t('Mena', (r) => r.currency, 6),
+  { header: 'Kurz (za 1 EUR)', value: (r) => r.rate, type: 'number', width: 14 },
+  t('Zdroj', (r) => sourceLabel(r.source), 8),
 ]

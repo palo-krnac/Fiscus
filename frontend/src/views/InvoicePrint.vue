@@ -11,6 +11,7 @@ import { payBySquare, qrSvg } from '../lib/payqr.js'
 import { countryName, paymentLabel, vatExemptionNote } from '../lib/codes.js'
 import CompanyLogo from '../components/CompanyLogo.vue'
 import SendMailDialog from '../components/SendMailDialog.vue'
+import { rateText } from '../lib/fx.js'
 
 const props = defineProps({ id: String, quote: Boolean })
 const back = computed(() => `${props.quote ? '/ponuky' : '/faktury'}/${props.id}`)
@@ -223,6 +224,31 @@ const ids = (p) =>
           <div class="payable">
             <span>{{ quote ? 'Cena spolu' : inv.kind === 'credit_note' ? 'Suma dobropisu' : receipt ? 'Prijatá platba' : 'K úhrade' }}</span>
             <strong>{{ formatMoney(inv.summary.total, inv.currency) }}</strong>
+          </div>
+          <div v-if="inv.local && !quote" class="local">
+            <p class="rate">Kurz: {{ rateText(inv) }}</p>
+            <table v-if="!nonVat" class="recap">
+              <thead>
+                <tr><th>V eurách</th><th class="num">Základ</th><th class="num">DPH</th><th class="num">Spolu</th></tr>
+              </thead>
+              <tbody>
+                <tr v-for="r in inv.local.rates" :key="r.rate">
+                  <td>{{ r.rate }} %</td>
+                  <td class="num">{{ formatAmount(r.base) }}</td>
+                  <td class="num">{{ formatAmount(r.vat) }}</td>
+                  <td class="num">{{ formatAmount(r.total) }}</td>
+                </tr>
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td>Spolu €</td>
+                  <td class="num">{{ formatAmount(inv.local.base) }}</td>
+                  <td class="num">{{ formatAmount(inv.local.vat) }}</td>
+                  <td class="num">{{ formatAmount(inv.local.total) }}</td>
+                </tr>
+              </tfoot>
+            </table>
+            <p v-else class="rate">Spolu v eurách: {{ formatMoney(inv.local.total) }}</p>
           </div>
         </div>
       </section>
@@ -529,6 +555,14 @@ td:last-child {
   line-height: 1.15;
 }
 
+.local {
+  margin-top: 5mm;
+}
+.local .rate {
+  margin: 0 0 1.5mm;
+  font-size: 8.5pt;
+  color: #4e5866;
+}
 .notes {
   margin-top: 8mm;
   color: #4e5866;

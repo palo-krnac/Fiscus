@@ -109,3 +109,20 @@ func TestDisplay(t *testing.T) {
 		}
 	}
 }
+
+func TestDivCents(t *testing.T) {
+	tests := []struct{ a, b, want string }{
+		{"251.23", "25.123", "10.00"},
+		{"100", "25.123", "3.98"}, // 3.98042…
+		{"0.1238", "1", "0.12"},
+		{"12.345", "1", "12.35"}, // polovica od nuly
+		{"-12.345", "1", "-12.35"},
+		{"1", "3", "0.33"},
+		{"0.0049", "0.98", "0.01"}, // 0.005 → hore (jediné zaokrúhlenie)
+	}
+	for _, tt := range tests {
+		if got := MustParse(tt.a).DivCents(MustParse(tt.b)); got.String() != MustParse(tt.want).String() {
+			t.Errorf("%s / %s = %s, chcem %s", tt.a, tt.b, got, tt.want)
+		}
+	}
+}

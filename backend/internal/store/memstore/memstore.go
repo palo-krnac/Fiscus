@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/palo-krnac/fiscus/backend/internal/catalog"
+	"github.com/palo-krnac/fiscus/backend/internal/fx"
 	"sort"
 	"sync"
 
@@ -44,6 +45,7 @@ type Store struct {
 	items     map[int64]catalog.Item
 	logos     map[int64]store.Logo
 	emails    []store.Email
+	rates     map[fxKey]fx.Rate
 	users     map[int64]auth.User
 	members   map[memKey]auth.Role
 	sessions  map[string]auth.Session

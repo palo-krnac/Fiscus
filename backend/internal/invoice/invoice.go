@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/palo-krnac/fiscus/backend/internal/fx"
 	"github.com/palo-krnac/fiscus/backend/internal/money"
 	"github.com/palo-krnac/fiscus/backend/internal/party"
 	"github.com/palo-krnac/fiscus/backend/internal/vat"
@@ -118,6 +119,42 @@ type Invoice struct {
 	Advance *Advance    `json:"advance,omitempty"`
 	Lines   []Line      `json:"lines"`
 	Summary vat.Summary `json:"summary"`
+
+	// Cudzia mena: FXRate je kurz ECB (jednotiek meny za 1 EUR) vyhlásený
+	// v deň FXDate; FXManual = kurz zadal používateľ (inak ho dopĺňa program).
+	// Local sú sumy v eurách pre DPH a priznanie (iba pri cudzej mene).
+	FXRate   money.Dec    `json:"fxRate"`
+	FXDate   Date         `json:"fxDate"`
+	FXManual bool         `json:"fxManual"`
+	Local    *vat.Summary `json:"local,omitempty"`
+}
+
+// Foreign vráti true pre doklad v cudzej mene.
+func (inv *Invoice) Foreign() bool { return inv.Currency != "" && inv.Currency != "EUR" }
+
+// TaxSummary vráti sumy v eurách pre DPH (pri cudzej mene prepočítané
+// kurzom); false, ak doklad v cudzej mene ešte nemá kurz.
+func (inv *Invoice) TaxSummary() (vat.Summary, bool) {
+	if !inv.Foreign() {
+		return inv.Summary, true
+	}
+	if inv.Local == nil {
+		return vat.Summary{}, false
+	}
+	return *inv.Local, true
+}
+
+// ToEUR prepočíta rekapituláciu kurzom (jednotiek meny za 1 EUR): základ
+// a daň každej sadzby sa zaokrúhlia na centy (§ 26 ods. 3), spolu je ich súčet.
+func ToEUR(s vat.Summary, rate money.Dec) vat.Summary {
+	out := vat.Summary{Rates: make([]vat.RateSummary, len(s.Rates))}
+	for i, r := range s.Rates {
+		base, tax := r.Base.DivCents(rate), r.VAT.DivCents(rate)
+		out.Rates[i] = vat.RateSummary{Rate: r.Rate, Base: base, VAT: tax, Total: base.Add(tax)}
+		out.Base, out.VAT = out.Base.Add(base), out.VAT.Add(tax)
+	}
+	out.Total = out.Base.Add(out.VAT)
+	return out
 }
 
 // Recalculate prepočíta sumy položiek a rekapituláciu DPH.
@@ -143,6 +180,13 @@ func (inv *Invoice) Recalculate() error {
 	}
 	inv.Summary = s
 	inv.applyDeductions()
+	inv.Local = nil
+	if inv.Foreign() && inv.FXRate.Sign() > 0 {
+		local := ToEUR(inv.Summary, inv.FXRate)
+		inv.Local = &local
+	} else if !inv.Foreign() {
+		inv.FXRate, inv.FXDate, inv.FXManual = money.Zero, Date{}, false
+	}
 	return nil
 }
 
@@ -203,6 +247,14 @@ func (inv *Invoice) Validate() error {
 	}
 	if inv.PaymentMethod != "" && !inv.PaymentMethod.Valid() {
 		add("paymentMethod", "Neznámy spôsob úhrady")
+	}
+	if inv.Foreign() {
+		switch {
+		case !fx.Known(inv.Currency):
+			add("currency", "Neznáma mena")
+		case inv.FXRate.Sign() <= 0:
+			add("fxRate", "Chýba kurz ECB k dátumu dodania — aktualizujte kurzy alebo zadajte kurz ručne")
+		}
 	}
 	if inv.IssueDate.IsZero() {
 		add("issueDate", "Zadajte dátum vystavenia")

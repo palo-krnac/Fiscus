@@ -8,6 +8,7 @@ export const codes = reactive({
   paymentMethods: [],
   defaultUnits: [],
   defaultFormats: {},
+  currencies: [],
 })
 
 export async function loadCodes() {

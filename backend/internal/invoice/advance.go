@@ -50,13 +50,13 @@ var (
 	// ErrForeignAdvance — pri zahraničí a prenesení daňovej povinnosti sa
 	// záloha zatiaľ vyúčtuje ručne (pri dodaní tovaru do EÚ záloha nezakladá
 	// daňovú povinnosť, celé plnenie sa vykazuje pri dodaní).
-	ErrForeignAdvance = errors.New("zálohu zahraničnému odberateľovi alebo s prenesením daňovej povinnosti zatiaľ vyúčtujte ručne")
+	ErrForeignAdvance = errors.New("zálohu zahraničnému odberateľovi, v cudzej mene alebo s prenesením daňovej povinnosti zatiaľ vyúčtujte ručne")
 )
 
 // NeedsReceipt vráti true, ak sa k úhrade zálohovej faktúry vyhotovuje daňový
 // doklad k prijatej platbe: platiteľ DPH, tuzemský odberateľ, bez prenesenia.
 func (inv *Invoice) NeedsReceipt() bool {
-	return inv.Kind == KindProforma && !inv.NonVATPayer && !inv.ReverseCharge && !party.Foreign(inv.Customer.Country)
+	return inv.Kind == KindProforma && !inv.NonVATPayer && !inv.ReverseCharge && !party.Foreign(inv.Customer.Country) && !inv.Foreign()
 }
 
 // NewAdvanceReceipt vyhotoví daňový doklad k prijatej platbe za uhradenú
@@ -114,7 +114,7 @@ func NewFinalInvoice(proforma Invoice, receipt *Invoice, issue Date, dueDays int
 	if proforma.Advance != nil && proforma.Advance.FinalID != 0 {
 		return Invoice{}, ErrAlreadySettled
 	}
-	if proforma.ReverseCharge || party.Foreign(proforma.Customer.Country) {
+	if proforma.ReverseCharge || party.Foreign(proforma.Customer.Country) || proforma.Foreign() {
 		return Invoice{}, ErrForeignAdvance
 	}
 	d := Deduction{Number: proforma.Number, Date: proforma.PaidDate}

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/palo-krnac/fiscus/backend/internal/fx"
 	"net/http"
 
 	"github.com/palo-krnac/fiscus/backend/internal/app"
@@ -22,6 +23,7 @@ func (s *Server) codes(w http.ResponseWriter, _ *http.Request) {
 		"roles":           auth.Roles,
 		"auditCategories": audit.Categories,
 		"vatRows":         vatreturn.Rows,
+		"currencies":      fx.Currencies,
 	})
 }
 

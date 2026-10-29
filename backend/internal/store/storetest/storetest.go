@@ -16,6 +16,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/auth"
 	"github.com/palo-krnac/fiscus/backend/internal/bank"
 	"github.com/palo-krnac/fiscus/backend/internal/cash"
+	"github.com/palo-krnac/fiscus/backend/internal/fx"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	m "github.com/palo-krnac/fiscus/backend/internal/money"
 	"github.com/palo-krnac/fiscus/backend/internal/purchase"
@@ -573,6 +574,76 @@ func Run(t *testing.T, newStore Factory) {
 		}
 		if _, err := s.GetItem(ctx, a.ID, items[0].ID); !errors.Is(err, store.ErrNotFound) {
 			t.Fatal("po zmazaní")
+		}
+	})
+
+	t.Run("kurzy mien", func(t *testing.T) {
+		s := newStore(t)
+		r := func(cur, date, rate, src string) fx.Rate {
+			return fx.Rate{Currency: cur, Date: date, Rate: m.MustParse(rate), Source: src}
+		}
+		if _, err := s.RateBefore(ctx, "CZK", "2026-10-24"); !errors.Is(err, store.ErrNotFound) {
+			t.Fatalf("bez kurzov: %v", err)
+		}
+		err := s.SaveRates(ctx, []fx.Rate{
+			r("CZK", "2026-10-23", "25.123", fx.SourceECB), r("CZK", "2026-10-22", "25.2", fx.SourceECB),
+			r("USD", "2026-10-23", "1.0823", fx.SourceECB), r("CZK", "2025-12-31", "24.9", fx.SourceECB),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		// ručný kurz prepíše ECB, ECB neprepíše ručný
+		if err := s.SaveRates(ctx, []fx.Rate{r("CZK", "2026-10-22", "25.3", fx.SourceManual)}); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.SaveRates(ctx, []fx.Rate{r("CZK", "2026-10-22", "25.2", fx.SourceECB), r("CZK", "2026-10-23", "25.124", fx.SourceECB)}); err != nil {
+			t.Fatal(err)
+		}
+		tests := []struct{ cur, point, date, rate string }{
+			{"CZK", "2026-10-24", "2026-10-23", "25.124"},
+			{"CZK", "2026-10-23", "2026-10-22", "25.30"},
+			{"CZK", "2026-01-05", "2025-12-31", "24.90"},
+			{"USD", "2026-10-26", "2026-10-23", "1.0823"},
+		}
+		for _, tt := range tests {
+			got, err := s.RateBefore(ctx, tt.cur, tt.point)
+			if err != nil || got.Date != tt.date || got.Rate.String() != m.MustParse(tt.rate).String() {
+				t.Errorf("RateBefore(%s, %s) = %+v %v", tt.cur, tt.point, got, err)
+			}
+		}
+		if got, _ := s.RateBefore(ctx, "CZK", "2026-10-23"); got.Source != fx.SourceManual {
+			t.Errorf("zdroj: %+v", got)
+		}
+		list, _ := s.ListRates(ctx, fx.Filter{})
+		if len(list) != 4 || list[0].Currency != "CZK" || list[0].Date != "2026-10-23" || list[3].Date != "2025-12-31" {
+			t.Fatalf("zoznam: %+v", list)
+		}
+		if list, _ := s.ListRates(ctx, fx.Filter{Currency: "CZK", Year: 2026}); len(list) != 2 {
+			t.Fatalf("filter: %+v", list)
+		}
+		if err := s.DeleteRate(ctx, "CZK", "2026-10-22"); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.DeleteRate(ctx, "CZK", "2026-10-22"); !errors.Is(err, store.ErrNotFound) {
+			t.Fatalf("druhé zmazanie: %v", err)
+		}
+	})
+
+	t.Run("faktúra v cudzej mene", func(t *testing.T) {
+		s := newStore(t)
+		c, _ := s.CreateCompany(ctx, store.Company{Name: "Alfa"})
+		inv := draft("Odberateľ", "2026-10-01")
+		inv.Currency, inv.FXRate, inv.FXDate, inv.FXManual = "CZK", m.MustParse("25.123"), invoice.MustDate("2026-09-30"), true
+		if err := inv.Recalculate(); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.SaveInvoice(ctx, c.ID, inv); err != nil {
+			t.Fatal(err)
+		}
+		got, err := s.GetInvoice(ctx, c.ID, inv.ID)
+		if err != nil || got.FXRate != inv.FXRate || got.FXDate != inv.FXDate || !got.FXManual || got.Local == nil ||
+			!reflect.DeepEqual(*got.Local, *inv.Local) {
+			t.Fatalf("načítanie: %+v %v", got, err)
 		}
 	})
 

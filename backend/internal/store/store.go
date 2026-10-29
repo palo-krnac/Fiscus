@@ -12,6 +12,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/bank"
 	"github.com/palo-krnac/fiscus/backend/internal/cash"
 	"github.com/palo-krnac/fiscus/backend/internal/catalog"
+	"github.com/palo-krnac/fiscus/backend/internal/fx"
 	"time"
 
 	"github.com/palo-krnac/fiscus/backend/internal/audit"
@@ -157,6 +158,15 @@ type Store interface {
 	// v jednej firme → ErrDuplicate.
 	SaveItem(ctx context.Context, companyID int64, it *catalog.Item) error
 	DeleteItem(ctx context.Context, companyID, id int64) error
+
+	// Kurzy mien sú spoločné pre všetky firmy. SaveRates vloží alebo prepíše
+	// kurzy; kurz z ECB neprepíše ručne zadaný. RateBefore vráti posledný kurz
+	// meny vyhlásený pred dňom taxPoint (ErrNotFound, ak nie je). ListRates
+	// vráti najnovšie prvé.
+	SaveRates(ctx context.Context, rates []fx.Rate) error
+	RateBefore(ctx context.Context, currency, taxPoint string) (fx.Rate, error)
+	ListRates(ctx context.Context, f fx.Filter) ([]fx.Rate, error)
+	DeleteRate(ctx context.Context, currency, date string) error
 
 	// AddEmail zapíše odoslaný e-mail (nastaví ID). ListEmails vráti
 	// najnovšie prvé.

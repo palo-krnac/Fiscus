@@ -29,6 +29,7 @@ import InputNumber from 'primevue/inputnumber'
 import { filterItems, lineFromItem } from '../lib/catalog.js'
 import { canCredit, canSettle, editorTitle, hasDeductions } from '../lib/advance.js'
 import SendMailDialog from '../components/SendMailDialog.vue'
+import { currencyOptions, isForeignCurrency, rateHint, rateText } from '../lib/fx.js'
 
 // Ten istý editor slúži aj cenovej ponuke (quote) a šablóne pravidelnej faktúry
 // (recurring): rovnaké položky a výpočet DPH, iné dátumy a akcie.
@@ -212,6 +213,13 @@ async function recalc() {
     if (mine !== seq) return // medzitým prišla novšia zmena
     inv.value.summary = out.summary
     inv.value.nonVatPayer = out.nonVatPayer
+    if (!isQuote.value && !isRecurring.value) {
+      // kurz ECB a sumy v eurách určuje server
+      inv.value.fxRate = out.fxRate
+      inv.value.fxDate = out.fxDate
+      inv.value.fxManual = out.fxManual
+      inv.value.local = out.local
+    }
     out.lines.forEach((l, i) => {
       if (lines.value[i]) lines.value[i].amount = l.amount
     })
@@ -584,6 +592,22 @@ const upd = (obj, key) => (v) => {
   obj[key] = v
   changed()
 }
+// ---- mena a kurz ----
+const currencies = computed(() => currencyOptions(codes.currencies))
+const foreign = computed(() => isForeignCurrency(inv.value?.currency))
+const fxNumber = computed(() => (Number(inv.value?.fxRate) || null))
+function setCurrency(v) {
+  Object.assign(inv.value, { currency: v, fxRate: '0', fxManual: false, local: null })
+  changed()
+}
+function setRate(v) {
+  Object.assign(inv.value, { fxRate: v ? String(v) : '0', fxManual: !!v })
+  changed()
+}
+function resetRate() {
+  Object.assign(inv.value, { fxRate: '0', fxManual: false })
+  changed()
+}
 // ---- adresár ----
 const contacts = shallowRef([])
 const suggestions = ref([])
@@ -899,6 +923,42 @@ const customerFields = reactive([
               <button v-for="n in [7, 14, 30]" :key="n" type="button" :class="{ on: dueDays === n }" @click="setDueDays(n)">{{ n }} dní</button>
             </div>
           </div>
+          <div v-if="!isRecurring" class="fields pay-row fx-row">
+            <label>
+              <span>Mena</span>
+              <Select
+                :model-value="inv.currency || 'EUR'"
+                :options="currencies"
+                option-label="label"
+                option-value="code"
+                filter
+                :disabled="!editable"
+                size="small"
+                class="currency"
+                @update:model-value="setCurrency"
+              />
+              <small v-if="fieldError('currency')" class="err">{{ fieldError('currency') }}</small>
+            </label>
+            <label v-if="foreign && !isQuote" class="fx">
+              <span>Kurz: 1 EUR = … {{ inv.currency }}</span>
+              <InputNumber
+                :model-value="fxNumber"
+                :min-fraction-digits="0"
+                :max-fraction-digits="4"
+                :use-grouping="false"
+                locale="sk-SK"
+                :disabled="!editable"
+                size="small"
+                :invalid="!!fieldError('fxRate')"
+                @update:model-value="setRate"
+              />
+              <small v-if="fieldError('fxRate')" class="err">{{ fieldError('fxRate') }}</small>
+              <small v-else class="hint">
+                {{ rateHint(inv) }}
+                <button v-if="inv.fxManual && editable" type="button" class="link" @click="resetRate">podľa ECB</button>
+              </small>
+            </label>
+          </div>
           <div v-if="!isQuote && !isRecurring" class="fields pay-row">
             <label>
               <span>Spôsob úhrady</span>
@@ -1064,6 +1124,19 @@ const customerFields = reactive([
         <div class="payable">
           <span>{{ isQuote ? 'Cena spolu' : isRecurring ? 'Suma faktúry' : isCredit ? 'Suma dobropisu' : isReceipt ? 'Prijatá platba' : isProforma ? 'Záloha na úhradu' : 'K úhrade' }}</span>
           <strong class="num">{{ formatMoney(inv.summary.total, inv.currency) }}</strong>
+        </div>
+        <div v-if="inv.local && !isQuote" class="local">
+          <p class="rate-line">{{ rateText(inv) }}</p>
+          <dl>
+            <template v-if="!nonVat">
+              <dt>Základ v EUR</dt>
+              <dd>{{ formatMoney(inv.local.base) }}</dd>
+              <dt>DPH v EUR</dt>
+              <dd>{{ formatMoney(inv.local.vat) }}</dd>
+            </template>
+            <dt>Spolu v EUR</dt>
+            <dd>{{ formatMoney(inv.local.total) }}</dd>
+          </dl>
         </div>
         <p v-if="nonVat" class="note-rc">Nie som platiteľ DPH. Faktúra je bez DPH.</p>
         <p v-if="inv.reverseCharge && !nonVat" class="note-rc">Prenesenie daňovej povinnosti — DPH odvedie odberateľ.</p>
@@ -1368,9 +1441,48 @@ legend {
   color: var(--tone-overdue);
   font-size: var(--fs-sm);
 }
+.local {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--rule);
+  font-size: var(--fs-sm);
+}
+.local .rate-line {
+  margin: 0 0 4px;
+  color: var(--ink-soft);
+}
+.local dl {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 12px;
+  margin: 0;
+}
+.local dt {
+  color: var(--ink-soft);
+}
+.local dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.fx .hint {
+  color: var(--ink-faint);
+  font-size: var(--fs-xs);
+}
+.fx .link {
+  font: inherit;
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--blue);
+  cursor: pointer;
+}
 .pay-row {
   margin-top: 10px;
   grid-template-columns: minmax(0, 240px);
+}
+.pay-row.fx-row {
+  grid-template-columns: repeat(2, minmax(0, 240px));
 }
 .locked :deep(.p-select.p-disabled) {
   background: transparent;

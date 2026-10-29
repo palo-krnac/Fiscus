@@ -21,7 +21,7 @@ func TestSeed(t *testing.T) {
 	list, _ := a.Store.ListInvoices(context.Background(), c.ID, store.InvoiceFilter{})
 	// + koncept z ponuky, dnešná pravidelná faktúra, 2 zálohové faktúry,
 	// doklad k prijatej platbe a koncept vyúčtovania
-	if len(list) != 48 {
+	if len(list) != 49 {
 		t.Fatalf("%d faktúr", len(list))
 	}
 	rec, _ := a.Recurring(context.Background(), c.ID)

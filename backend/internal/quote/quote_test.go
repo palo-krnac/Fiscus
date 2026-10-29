@@ -56,6 +56,8 @@ func TestValidate(t *testing.T) {
 		msg   string
 	}{
 		{"platná", func(*Quote) {}, "", ""},
+		{"v korunách bez kurzu", func(q *Quote) { q.Currency = "CZK" }, "", ""},
+		{"neznáma mena", func(q *Quote) { q.Currency = "XYZ" }, "currency", "Neznáma mena"},
 		{"bez odberateľa", func(q *Quote) { q.Customer.Name = " " }, "customer.name", "Zadajte odberateľa"},
 		{"bez položiek", func(q *Quote) { q.Lines = nil }, "lines", "Ponuka musí mať aspoň jednu položku"},
 		{"bez platnosti", func(q *Quote) { q.ValidUntil = invoice.Date{} }, "validUntil", "Zadajte, dokedy ponuka platí"},

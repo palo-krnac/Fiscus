@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"github.com/palo-krnac/fiscus/backend/internal/catalog"
 	"strings"
+	"time"
 
 	"github.com/palo-krnac/fiscus/backend/internal/app"
 	"github.com/palo-krnac/fiscus/backend/internal/auth"
 	"github.com/palo-krnac/fiscus/backend/internal/cash"
+	"github.com/palo-krnac/fiscus/backend/internal/fx"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	m "github.com/palo-krnac/fiscus/backend/internal/money"
 	"github.com/palo-krnac/fiscus/backend/internal/purchase"
@@ -215,6 +217,9 @@ func Seed(ctx context.Context, a *app.App) (store.Company, error) {
 	if err := seedAdvances(ctx, a, c, contactIDs); err != nil {
 		return c, fmt.Errorf("demo zálohy: %w", err)
 	}
+	if err := seedForeign(ctx, a, c); err != nil {
+		return c, fmt.Errorf("demo cudzia mena: %w", err)
+	}
 	if err := seedRecurring(ctx, a, c, contactIDs); err != nil {
 		return c, fmt.Errorf("demo pravidelná fakturácia: %w", err)
 	}
@@ -259,6 +264,41 @@ func seedAdvances(ctx context.Context, a *app.App, c store.Company, contactIDs [
 		return err
 	}
 	_, err = mk(6, "Záloha na materiál – kabeláž a prístroje", "850", 2)
+	return err
+}
+
+// seedForeign pripraví kurzy ECB za posledných 120 dní (demo beží bez
+// internetu) a faktúru v korunách českému odberateľovi.
+func seedForeign(ctx context.Context, a *app.App, c store.Company) error {
+	today := a.Today()
+	var rates []fx.Rate
+	for i := 120; i >= 1; i-- {
+		d := today.AddDays(-i)
+		if wd := time.Date(d.Year(), time.Month(d.Month()), d.Day(), 0, 0, 0, 0, time.UTC).Weekday(); wd == time.Saturday || wd == time.Sunday {
+			continue
+		}
+		// mierne kolísanie okolo 25,1 Kč a 1,08 $
+		czk := m.MustParse(fmt.Sprintf("25.%03d", 80+(i*37)%90))
+		usd := m.MustParse(fmt.Sprintf("1.%04d", 750+(i*53)%160))
+		rates = append(rates,
+			fx.Rate{Currency: "CZK", Date: d.String(), Rate: czk, Source: fx.SourceECB},
+			fx.Rate{Currency: "USD", Date: d.String(), Rate: usd, Source: fx.SourceECB})
+	}
+	if err := a.Store.SaveRates(ctx, rates); err != nil {
+		return err
+	}
+	issue := today.AddDays(-4)
+	d, err := a.SaveDraft(ctx, c.ID, invoice.Invoice{
+		Customer: invoice.Party{Name: "Bohemia Control s.r.o.", Street: "Purkyňova 99", City: "Brno", Zip: "612 00", Country: "CZ", ICDPH: "CZ27654321"},
+		Currency: "CZK", SupplyKind: invoice.SupplyServices, ReverseCharge: true,
+		IssueDate: issue, DeliveryDate: issue, DueDate: issue.AddDays(14),
+		Lines: []invoice.Line{{Description: "Programovanie riadiaceho systému linky – október", Unit: "hod", Quantity: m.MustParse("40"),
+			UnitPrice: m.MustParse("1200"), Rate: vat.Rate23}},
+	})
+	if err != nil {
+		return err
+	}
+	_, err = a.Issue(ctx, c.ID, d.ID)
 	return err
 }
 

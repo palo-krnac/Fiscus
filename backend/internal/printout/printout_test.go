@@ -198,3 +198,24 @@ func TestLogoAndFileName(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestForeignCurrencyPrint(t *testing.T) {
+	inv := sample(func(i *invoice.Invoice) {
+		i.Currency, i.FXRate, i.FXDate = "CZK", money.MustParse("25.123"), invoice.MustDate("2026-09-30")
+	})
+	got, _ := text(t)(invoiceSheet(inv, supplier))
+	for _, w := range []string{"Kurz: 1 EUR = 25,123 CZK (ECB 30. 9. 2026)", "V eurách", "Spolu €", amount(inv.Local.Total),
+		"1 708,44 CZK"} {
+		if !strings.Contains(got, w) {
+			t.Errorf("chýba %q", w)
+		}
+	}
+	inv.FXManual = true
+	if got, _ := text(t)(invoiceSheet(inv, supplier)); !strings.Contains(got, "(dohodnutý)") {
+		t.Error("ručný kurz")
+	}
+	eur, _ := text(t)(invoiceSheet(sample(nil), supplier))
+	if strings.Contains(eur, "Kurz:") {
+		t.Error("kurz pri eurách")
+	}
+}

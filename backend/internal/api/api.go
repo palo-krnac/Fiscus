@@ -69,6 +69,10 @@ func (s *Server) Handler() http.Handler {
 	open("GET /api/legal", s.getLegal)
 	open("PUT /api/legal", s.setLegal)
 	open("POST /api/legal/reset", s.resetLegal)
+	open("GET /api/rates", s.listRates)
+	open("PUT /api/rates", s.setRate)
+	open("POST /api/rates/update", s.updateRates)
+	open("DELETE /api/rates/{currency}/{date}", s.deleteRate)
 
 	open("GET /api/companies", s.listCompanies)
 	open("POST /api/companies", s.createCompany)
