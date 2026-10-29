@@ -35,7 +35,8 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] Banka: import výpisov camt.053, automatické párovanie podľa VS a sumy, návrhy, ručné párovanie, nepárované pohyby
 - [ ] Banka: CSV / GPC výpisy, čiastočné úhrady a preplatky, viac účtov, platobné príkazy (pain.001), napojenie na banku cez API
 - [x] Pokladňa: príjmové a výdavkové doklady (PPD/VPD), kontrola záporného zostatku, úhrada faktúr v hotovosti, storno, tlač so sumou slovom
-- [ ] Pokladňa: DPH na pokladničných dokladoch (B.3), viac pokladní, cudzia mena, ERP / e-kasa (D.1)
+- [x] Pokladňa: DPH na pokladničných dokladoch — blok ako zjednodušená faktúra (odpočet, KV B.3.1/B.3.2 podľa limitu 3 000 €), tržba z e-kasy (daň na výstupe, KV D.1), rozpis v peňažnom denníku
+- [ ] Pokladňa: časť B.3 v XML kontrolného výkazu (overiť voči XSD KVDPHv25), viac pokladní, cudzia mena, načítanie uzávierky e-kasy
 - [x] **Priznanie k DPH (DPHv25) a kontrolný výkaz (KVDPHv25)**: výpočet z dokladov, XML pre eDane, mesačne aj štvrťročne
 - [x] Súhrnný výkaz (SVDPHv20): tovar do EÚ (kód 0), služby do EÚ (kód 2); r. 13–15 pre dodanie do EÚ a vývoz; nadobudnutie tovaru z EÚ (r. 05–08) a služby zo zahraničia (r. 09–10)
 - [x] A.2 a tuzemské prenesenie pri dodaní (§ 69 ods. 12) pri položkách: druhy a) až j), kód colného sadzobníka, hranica 5 000 €, XML
