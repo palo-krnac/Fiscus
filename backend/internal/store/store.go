@@ -128,6 +128,32 @@ type Email struct {
 	Error     string    `json:"error"` // prázdne = odoslané
 }
 
+// EInvoice je záznam e-faktúry odoslanej cez digitálneho poštára alebo
+// prijatej z jeho schránky (prijatá aj s obsahom XML, aby sa dala načítať znova).
+type EInvoice struct {
+	ID        int64     `json:"id"`
+	CompanyID int64     `json:"companyId"`
+	Direction string    `json:"direction"` // out | in
+	DocID     int64     `json:"docId"`     // vydaná faktúra (out) alebo prijatá faktúra po zaevidovaní (in)
+	DocNumber string    `json:"docNumber"` // číslo faktúry
+	Partner   string    `json:"partner"`   // odberateľ / dodávateľ
+	PeppolID  string    `json:"peppolId"`  // 0245:DIČ protistrany
+	File      string    `json:"file"`
+	MessageID string    `json:"messageId"` // identifikátor u poštára (súbor v priečinku)
+	Status    string    `json:"status"`
+	Error     string    `json:"error"`
+	Created   time.Time `json:"created"`
+	User      string    `json:"user"`
+	Data      []byte    `json:"-"` // XML (iba prijaté)
+}
+
+// EInvoiceFilter obmedzuje zoznam e-faktúr.
+type EInvoiceFilter struct {
+	Direction string // "" = obe
+	DocID     int64  // 0 = všetky
+	MessageID string // "" = všetky
+}
+
 // EmailFilter obmedzuje zoznam e-mailov.
 type EmailFilter struct {
 	Year    int    // 0 = všetky
@@ -172,6 +198,12 @@ type Store interface {
 	// najnovšie prvé.
 	AddEmail(ctx context.Context, companyID int64, e *Email) error
 	ListEmails(ctx context.Context, companyID int64, f EmailFilter) ([]Email, error)
+	// AddEInvoice zapíše odoslanú alebo prijatú e-faktúru (nastaví ID).
+	// ListEInvoices vráti záznamy bez obsahu XML, najnovšie prvé;
+	// GetEInvoice vráti záznam aj s obsahom.
+	AddEInvoice(ctx context.Context, companyID int64, e *EInvoice) error
+	ListEInvoices(ctx context.Context, companyID int64, f EInvoiceFilter) ([]EInvoice, error)
+	GetEInvoice(ctx context.Context, companyID, id int64) (EInvoice, error)
 
 	// Logo firmy na dokladoch. GetLogo a DeleteLogo vrátia ErrNotFound, ak logo nie je.
 	GetLogo(ctx context.Context, companyID int64) (Logo, error)

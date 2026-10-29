@@ -17,6 +17,7 @@ import AutoComplete from 'primevue/autocomplete'
 import IcoInput from '../components/IcoInput.vue'
 import { fillFromRegistry } from '../lib/registry.js'
 import { saveBlob } from '../lib/export.js'
+import { sentText } from '../lib/einvoice.js'
 import { api, ApiError } from '../lib/api.js'
 import { session, can } from '../lib/session.js'
 import {
@@ -52,6 +53,39 @@ const canEInvoice = computed(() => {
   return !!v?.id && !isQuote.value && !isRecurring.value && (v.kind === 'invoice' || v.kind === 'credit_note') && (v.status === 'issued' || v.status === 'paid')
 })
 const busyUBL = ref(false)
+// digitálny poštár: pripojenie firmy a záznamy odoslania tejto faktúry
+const einvMode = ref('')
+const einvLog = ref([])
+// (watch až po mount — inv je deklarované nižšie)
+onMounted(() =>
+  watch(
+    () => canEInvoice.value && inv.value?.id,
+    async (id) => {
+      if (!id) return
+      try {
+        einvMode.value = (await api.einvoiceSettings(session.companyId)).mode
+        einvLog.value = await api.einvoices(session.companyId, { direction: 'out', docId: id })
+      } catch {
+        einvMode.value = ''
+      }
+    },
+    { immediate: true },
+  ),
+)
+const einvStatus = computed(() => sentText(einvLog.value))
+async function sendEInvoice() {
+  busyUBL.value = true
+  try {
+    const e = await api.sendEInvoice(session.companyId, inv.value.id)
+    toast.add({ severity: 'success', summary: 'E-faktúra odoslaná', detail: `${inv.value.customer.name} (${e.peppolId}) — ${e.status}`, life: 5000 })
+  } catch (e) {
+    const detail = e.fields?.length ? e.fields.map((f) => f.message).join(' · ') : e.message
+    toast.add({ severity: 'error', summary: 'E-faktúra sa neodoslala', detail, life: 10000 })
+  } finally {
+    busyUBL.value = false
+    einvLog.value = await api.einvoices(session.companyId, { direction: 'out', docId: inv.value.id }).catch(() => einvLog.value)
+  }
+}
 async function downloadEInvoice() {
   busyUBL.value = true
   try {
@@ -770,7 +804,9 @@ const customerFields = reactive([
         @click="router.push(`${base}/${inv.id}/tlac`)"
       />
       <Button v-if="canMail" icon="pi pi-envelope" label="E-mail" severity="secondary" text size="small" @click="mailOpen = true" />
-      <Button v-if="canEInvoice" icon="pi pi-file-export" label="E-faktúra" severity="secondary" text size="small" :loading="busyUBL"
+      <Button v-if="canEInvoice && einvMode" icon="pi pi-send" label="E-faktúra" aria-label="Odoslať e-faktúru" severity="secondary" text size="small" :loading="busyUBL"
+        v-tooltip.bottom="'Odoslať odberateľovi cez digitálneho poštára (Peppol)'" @click="sendEInvoice" />
+      <Button v-if="canEInvoice" icon="pi pi-file-export" :label="einvMode ? undefined : 'E-faktúra'" aria-label="Stiahnuť e-faktúru XML" severity="secondary" text size="small" :loading="busyUBL && !einvMode"
         v-tooltip.bottom="'Stiahnuť e-faktúru XML (UBL, Peppol BIS 3.0) — od 1. 1. 2027 povinná medzi platiteľmi DPH'" @click="downloadEInvoice" />
       <template v-if="editable && !isRecurring">
         <Button label="Uložiť koncept" severity="secondary" outlined size="small" :loading="busy" @click="save()" v-tooltip.bottom="'Ctrl+S'" />
@@ -806,6 +842,7 @@ const customerFields = reactive([
 
     <div class="body">
       <div class="form">
+        <p v-if="einvStatus" class="advance-note einv-status"><i class="pi pi-send" /> <span>{{ einvStatus }}</span></p>
         <p v-if="isProforma" class="advance-note">
           <i class="pi pi-info-circle" />
           <span v-if="inv.status !== 'paid'">Zálohová faktúra nie je daňový doklad. Po úhrade vznikne daňový doklad k prijatej platbe a zálohu potom vyúčtujete.</span>
@@ -1318,6 +1355,9 @@ const customerFields = reactive([
   padding: 10px 16px;
   background: var(--paper);
   border-bottom: 1px solid var(--rule);
+}
+.bar :deep(.p-button-label) {
+  white-space: nowrap;
 }
 .bar h1 {
   font-size: var(--fs-xl);

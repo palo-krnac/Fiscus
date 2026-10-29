@@ -680,6 +680,40 @@ func Run(t *testing.T, newStore Factory) {
 		}
 	})
 
+	t.Run("e-faktúry", func(t *testing.T) {
+		s := newStore(t)
+		a, _ := s.CreateCompany(ctx, store.Company{Name: "Alfa"})
+		b, _ := s.CreateCompany(ctx, store.Company{Name: "Beta"})
+		at := time.Date(2026, 10, 29, 14, 0, 0, 0, time.UTC)
+		out := store.EInvoice{Direction: "out", DocID: 7, DocNumber: "FA1", Partner: "Odberateľ", PeppolID: "0245:2020372640",
+			File: "Faktura-FA1.xml", MessageID: "Faktura-FA1.xml", Status: "odoslané", Created: at, User: "Palo"}
+		in := store.EInvoice{Direction: "in", DocNumber: "D-9", Partner: "Dodávateľ", MessageID: "d9.xml", Created: at.Add(time.Minute), Data: []byte("<Invoice/>")}
+		for _, e := range []*store.EInvoice{&out, &in} {
+			if err := s.AddEInvoice(ctx, a.ID, e); err != nil || e.ID == 0 || e.CompanyID != a.ID {
+				t.Fatalf("AddEInvoice: %v %+v", err, e)
+			}
+		}
+		list, _ := s.ListEInvoices(ctx, a.ID, store.EInvoiceFilter{})
+		if len(list) != 2 || list[0].ID != in.ID || list[0].Data != nil || !list[1].Created.Equal(at) || list[1].PeppolID != "0245:2020372640" {
+			t.Fatalf("zoznam: %+v", list)
+		}
+		for f, want := range map[store.EInvoiceFilter]int{{Direction: "out"}: 1, {DocID: 7}: 1, {MessageID: "d9.xml"}: 1, {Direction: "in", DocID: 7}: 0} {
+			if l, _ := s.ListEInvoices(ctx, a.ID, f); len(l) != want {
+				t.Errorf("filter %+v: %d", f, len(l))
+			}
+		}
+		got, err := s.GetEInvoice(ctx, a.ID, in.ID)
+		if err != nil || string(got.Data) != "<Invoice/>" || got.Partner != "Dodávateľ" {
+			t.Fatalf("GetEInvoice: %+v %v", got, err)
+		}
+		if l, _ := s.ListEInvoices(ctx, b.ID, store.EInvoiceFilter{}); len(l) != 0 {
+			t.Fatal("firma B vidí e-faktúry firmy A")
+		}
+		if _, err := s.GetEInvoice(ctx, b.ID, in.ID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("firma B načítala e-faktúru firmy A")
+		}
+	})
+
 	t.Run("odoslané e-maily", func(t *testing.T) {
 		s := newStore(t)
 		a, _ := s.CreateCompany(ctx, store.Company{Name: "Alfa"})

@@ -57,7 +57,8 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [ ] Spustiť predaj: overenie domény v Paddle, ostrý kľúč, doplnené právne texty, hosting webu a `fiskus-shop`
 - [ ] Ostrý licenčný kľúč (`fiskus-license keygen`) namiesto vývojového
 - [x] E-faktúra UBL 2.1 (EN 16931, Peppol BIS Billing 3.0): vytvorenie z vystavenej faktúry a dobropisu (adresa 0245:DIČ), načítanie prijatej e-faktúry ako nákladu
-- [ ] E-faktúra: napojenie na digitálneho poštára (Peppol access point) — odoslanie, príjem a hlásenie finančnej správe; vyúčtovanie zálohy ako e-faktúra; povinné od 1. 1. 2027
+- [x] E-faktúra: všeobecné napojenie na digitálneho poštára — priečinky (synchronizácia aplikáciou poskytovateľa) alebo HTTP API adaptéra; odoslanie, schránka prijatých, zoznam odoslaných a prevzatých
+- [ ] E-faktúra: adaptér pre konkrétneho poskytovateľa (po výbere), vyúčtovanie zálohy ako e-faktúra, overenie validátorom Peppol a SK TDD
 
 ## Používatelia, práva a audit (pre účtovné kancelárie a poskytovateľov služieb)
 - [x] Používatelia a prihlasovanie v serverovom režime (heslo PBKDF2, relácia v HttpOnly cookie, limit pokusov, ochrana CSRF)

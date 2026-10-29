@@ -46,6 +46,13 @@ Nástroje:
 - čítanie: `list_companies`, `company_overview`, `list_invoices`, `get_invoice`, `list_purchases`, `list_contacts`, `list_bank_transactions`, `vat_return`
 - zmeny: `create_invoice_draft`, `issue_invoice`, `mark_invoice_paid`, `create_contact`
 
+## E-faktúra (od 1. 1. 2027)
+
+Vystavená faktúra a dobropis sa dajú stiahnuť ako e-faktúra UBL 2.1 (EN 16931, Peppol BIS Billing 3.0). Adresa v sieti Peppol je `0245:DIČ`. Prijatá e-faktúra sa načíta ako koncept prijatej faktúry. Pripojenie k digitálnemu poštárovi sa nastavuje v časti **Nastavenia → E-faktúry**:
+
+- **Priečinky**: Fiškus ukladá odosielané e-faktúry do jedného priečinka a číta prijaté z druhého (prevzaté presunie do `prevzate`). Priečinky synchronizuje aplikácia poskytovateľa.
+- **API poskytovateľa**: jednoduchá zmluva pre adaptér (`POST /documents`, `GET /inbox`, `GET /inbox/{id}`, `POST /inbox/{id}/ack`, token `Bearer`) — pozri `internal/postman/http.go`.
+
 ## Architektúra
 
 ```

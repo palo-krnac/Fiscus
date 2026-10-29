@@ -410,15 +410,18 @@ func TestDesktopLauncher(t *testing.T) {
 		{"z príkazového riadka", nil, 404},
 	}
 	for _, tt := range tests {
-		s := &Server{App: a, MCP: mcp.New(a, "test")}
+		s := &Server{App: a, MCP: mcp.New(a, "test"), Version: "v0.2.0"}
 		if tt.launcher != nil {
 			s.Desktop = tt.launcher
 		}
 		srv := httptest.NewServer(s.Handler())
 		e := &env{t: t, srv: srv, client: srv.Client()}
-		var c struct{ Launcher bool }
+		var c struct {
+			Launcher bool
+			Version  string
+		}
 		e.do("GET", "/api/capabilities", nil, 200, &c)
-		if c.Launcher != (tt.launcher != nil) {
+		if c.Launcher != (tt.launcher != nil) || c.Version != "v0.2.0" {
 			t.Errorf("%s: launcher %v", tt.name, c.Launcher)
 		}
 		if tt.launcher != nil {

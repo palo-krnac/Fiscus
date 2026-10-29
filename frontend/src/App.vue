@@ -27,9 +27,10 @@ const menu = computed(() =>
 const allowed = computed(() => (route.meta.superAdmin ? isSuperAdmin() : can(route.meta.perm)))
 // bez firmy sa dá otvoriť iba založenie firmy
 const showView = computed(() => session.ready && allowed.value && (session.companyId || route.meta.noCompany))
+// verzia programu (v0.1.0 → „verzia 0.1.0“; vývojová zostava „dev“)
 const edition = computed(() => {
-  if (session.caps.mode !== 'server') return 'Desktop · zadarmo'
-  return session.caps.plan === 'multi' ? 'Server · viac firiem' : 'Server · jedna firma zadarmo'
+  const v = String(session.caps.version ?? '').replace(/^v/, '')
+  return v ? `verzia ${v}` : ''
 })
 // desktop z inštalátora: okno sa ozýva (po zatvorení posledného sa program
 // sám ukončí) a v menu je tlačidlo Ukončiť

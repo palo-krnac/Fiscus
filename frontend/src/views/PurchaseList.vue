@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vu
 import { useRouter } from 'vue-router'
 import { AgGridVue } from 'ag-grid-vue3'
 import Button from 'primevue/button'
+import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
 import IconField from 'primevue/iconfield'
 import InputIcon from 'primevue/inputicon'
@@ -33,6 +34,44 @@ onMounted(async () => {
     aiReady.value = false
   }
 })
+// ---- schránka digitálneho poštára ----
+const inboxOn = ref(false)
+const inbox = ref([])
+const taken = ref([])
+const inboxOpen = ref(false)
+const inboxBusy = ref('')
+async function loadInbox() {
+  try {
+    inbox.value = await api.einvoiceInbox(session.companyId)
+    taken.value = (await api.einvoices(session.companyId, { direction: 'in' })).slice(0, 10)
+  } catch (err) {
+    if (err.status !== 409) toast.add({ severity: 'error', summary: 'Schránka e-faktúr', detail: err.message, life: 6000 })
+  }
+}
+onMounted(async () => {
+  if (!can('purchases.write')) return
+  try {
+    inboxOn.value = !!(await api.einvoiceSettings(session.companyId)).mode
+  } catch {
+    inboxOn.value = false
+  }
+  if (inboxOn.value) loadInbox()
+})
+async function openDraft(promise, key) {
+  inboxBusy.value = key
+  try {
+    setPurchaseDraft({ ...(await promise()), source: 'ubl' })
+    router.push('/prijate/nova')
+  } catch (err) {
+    toast.add({ severity: 'error', summary: 'E-faktúru sa nepodarilo načítať', detail: err.message, life: 8000 })
+    loadInbox()
+  } finally {
+    inboxBusy.value = ''
+  }
+}
+const takeFromInbox = (m) => openDraft(() => api.takeEInvoice(session.companyId, m.id), m.id)
+const reopenTaken = (e) => openDraft(() => api.reopenEInvoice(session.companyId, e.id), 'r' + e.id)
+
 // e-faktúra (XML) sa načíta bez AI
 const xmlInput = ref(null)
 async function readEInvoice(e) {
@@ -201,6 +240,8 @@ onBeforeUnmount(() => {
       <Select v-model="year" :options="years" option-label="label" option-value="value" size="small" aria-label="Rok" />
       <div class="spacer" />
       <template v-if="can('purchases.write')">
+        <Button v-if="inboxOn" icon="pi pi-inbox" :label="`Schránka${inbox.length ? ` (${inbox.length})` : ''}`" aria-label="Schránka e-faktúr" class="ai-btn"
+          :severity="inbox.length ? 'warn' : 'secondary'" outlined size="small" v-tooltip.bottom="'Prijaté e-faktúry od digitálneho poštára'" @click="(inboxOpen = true), loadInbox()" />
         <input ref="xmlInput" type="file" accept=".xml,application/xml,text/xml" hidden @change="readEInvoice" />
         <Button icon="pi pi-file-import" label="E-faktúra" aria-label="Načítať e-faktúru XML" class="ai-btn" severity="secondary" outlined size="small" :loading="reading"
           v-tooltip.bottom="'Načítať prijatú e-faktúru (XML, UBL / Peppol) — údaje skontrolujete pred uložením'" @click="xmlInput.click()" />
@@ -261,7 +302,34 @@ onBeforeUnmount(() => {
         @row-clicked="(e) => !e.data._totals && router.push(`/prijate/${e.data.id}`)"
       />
     </div>
-  </div>
+    <Dialog v-model:visible="inboxOpen" header="Schránka e-faktúr" modal :style="{ width: '46rem' }" :breakpoints="{ '760px': '96vw' }">
+      <p v-if="!inbox.length" class="muted">Žiadne nové e-faktúry. Poštár ich doručí do schránky; Fiškus ich odtiaľ načíta.</p>
+      <table v-else class="inbox">
+        <thead><tr><th>Doručená</th><th>Dodávateľ</th><th>Číslo</th><th class="num">Suma</th><th /></tr></thead>
+        <tbody>
+          <tr v-for="m in inbox" :key="m.id">
+            <td>{{ formatDate(m.received.slice(0, 10)) }}</td>
+            <template v-if="m.error"><td colspan="3" class="err">{{ m.name }}: {{ m.error }}</td></template>
+            <template v-else>
+              <td>{{ m.supplier }}</td>
+              <td>{{ m.number }}</td>
+              <td class="num">{{ formatAmount(m.total) }} {{ m.currency }}</td>
+            </template>
+            <td class="act"><Button v-if="!m.error" label="Načítať" size="small" :loading="inboxBusy === m.id" @click="takeFromInbox(m)" /></td>
+          </tr>
+        </tbody>
+      </table>
+      <template v-if="taken.length">
+        <h3 class="taken-h">Naposledy prevzaté</h3>
+        <ul class="taken">
+          <li v-for="e in taken" :key="e.id">
+            <span>{{ formatDate(e.created.slice(0, 10)) }} · {{ e.partner }} · {{ e.docNumber }}</span>
+            <Button label="Otvoriť znova" text size="small" :loading="inboxBusy === 'r' + e.id" @click="reopenTaken(e)" />
+          </li>
+        </ul>
+      </template>
+    </Dialog>
+</div>
 </template>
 
 <style scoped>
@@ -359,6 +427,48 @@ onBeforeUnmount(() => {
 .grid :deep(.cell-number) {
   font-weight: 600;
   color: var(--blue-deep);
+}
+.inbox {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+.inbox th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--ink-soft);
+  padding: 4px 6px;
+}
+.inbox td {
+  padding: 6px;
+  border-top: 1px solid var(--rule);
+}
+.inbox .num {
+  text-align: right;
+  white-space: nowrap;
+}
+.inbox .act {
+  text-align: right;
+}
+.inbox .err {
+  color: var(--tone-overdue);
+}
+.taken-h {
+  font-size: var(--fs-md);
+  margin: 16px 0 4px;
+}
+.taken {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: var(--fs-sm);
+}
+.taken li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid var(--rule);
 }
 .grid :deep(.cur) {
   margin-left: 6px;
