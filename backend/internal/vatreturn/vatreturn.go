@@ -54,16 +54,18 @@ type KVLine struct {
 	ID       int64        `json:"id"`
 }
 
-// KVCorrection je riadok C.1 (vydané opravné faktúry).
+// KVCorrection je riadok C.1 (vydané opravné faktúry) alebo C.2 (prijaté
+// opravné faktúry — tam aj oprava odpočítanej dane).
 type KVCorrection struct {
-	Partner  string    `json:"partner"`
-	Name     string    `json:"name"`
-	Number   string    `json:"number"`   // číslo opravnej faktúry (dobropisu)
-	Original string    `json:"original"` // číslo pôvodnej faktúry
-	BaseDiff money.Dec `json:"baseDiff"`
-	VATDiff  money.Dec `json:"vatDiff"`
-	Rate     vat.Rate  `json:"rate"`
-	ID       int64     `json:"id"`
+	Partner      string    `json:"partner"`
+	Name         string    `json:"name"`
+	Number       string    `json:"number"`   // číslo opravnej faktúry (dobropisu)
+	Original     string    `json:"original"` // číslo pôvodnej faktúry
+	BaseDiff     money.Dec `json:"baseDiff"`
+	VATDiff      money.Dec `json:"vatDiff"`
+	Rate         vat.Rate  `json:"rate"`
+	DeductedDiff money.Dec `json:"deductedDiff"` // iba C.2
+	ID           int64     `json:"id"`
 }
 
 // KVSum je súhrnný riadok D.2: základná sadzba a znížené sadzby spolu.
@@ -98,6 +100,7 @@ type KV struct {
 	B1 []KVLine       `json:"b1"`
 	B2 []KVLine       `json:"b2"`
 	C1 []KVCorrection `json:"c1"`
+	C2 []KVCorrection `json:"c2"` // prijaté dobropisy od dodávateľov
 	D2 KVSum          `json:"d2"`
 }
 
@@ -167,7 +170,7 @@ func noSpaces(s string) string { return strings.Join(strings.Fields(s), "") }
 // Compute zostaví priznanie a kontrolný výkaz.
 func Compute(in Input) Return {
 	ret := Return{Period: in.Period, Label: in.Period.Label(), Rows: map[string]money.Dec{}, KV: KV{
-		A1: []KVLine{}, A2: []KVA2{}, B1: []KVLine{}, B2: []KVLine{}, C1: []KVCorrection{},
+		A1: []KVLine{}, A2: []KVA2{}, B1: []KVLine{}, B2: []KVLine{}, C1: []KVCorrection{}, C2: []KVCorrection{},
 	}, SV: []SVLine{}, Warnings: []Warning{}}
 	add := func(row string, v money.Dec) { ret.Rows[row] = ret.Rows[row].Add(v) }
 	warn := func(doc, kind string, id int64, msg string) {
@@ -246,7 +249,8 @@ func Compute(in Input) Return {
 				if orig == "" {
 					warn(inv.Number, "invoice", inv.ID, "Dobropis bez čísla pôvodnej faktúry — v C.1 ho doplňte ručne")
 				}
-				ret.KV.C1 = append(ret.KV.C1, KVCorrection{noSpaces(c.ICDPH), c.Name, noSpaces(inv.Number), noSpaces(orig), r.Base, r.VAT, r.Rate, inv.ID})
+				ret.KV.C1 = append(ret.KV.C1, KVCorrection{Partner: noSpaces(c.ICDPH), Name: c.Name, Number: noSpaces(inv.Number), Original: noSpaces(orig),
+					BaseDiff: r.Base, VATDiff: r.VAT, Rate: r.Rate, ID: inv.ID})
 			case payer:
 				ret.KV.A1 = append(ret.KV.A1, KVLine{Partner: noSpaces(c.ICDPH), Name: c.Name, Number: noSpaces(inv.Number), Date: when,
 					Base: r.Base, VAT: r.VAT, Rate: r.Rate, Kind: "invoice", ID: inv.ID})
@@ -281,7 +285,11 @@ func Compute(in Input) Return {
 			warn(doc, "purchase", p.ID, "Prijatá faktúra v mene "+p.Currency+" nemá kurz — doplňte ho, inak nejde do priznania")
 			continue
 		case tax.Summary.Base.Sign() < 0:
-			warn(doc, "purchase", p.ID, "Dobropis od dodávateľa (C.2, r. 28) zatiaľ nie je podporovaný — doplňte ručne")
+			if msg := ret.addPurchaseCredit(p, tax); msg != "" {
+				warn(doc, "purchase", p.ID, msg)
+			} else {
+				ret.Purchase++
+			}
 			continue
 		case foreign(s.Country) && !p.ReverseCharge:
 			warn(doc, "purchase", p.ID, "Zahraničná faktúra bez prenesenia daňovej povinnosti — zahraničnú DPH nemožno odpočítať v SR. Ak daň platíte vy, označte prenesenie.")
@@ -487,4 +495,39 @@ func (ret *Return) addA2(inv invoice.Invoice, when invoice.Date, warn func(doc, 
 		}
 		ret.KV.A2 = append(ret.KV.A2, g.line)
 	}
+}
+
+// addPurchaseCredit zaradí dobropis od tuzemského platiteľa: zníženie
+// odpočítanej dane do r. 28 (§ 53 ods. 1, kladná suma zvyšuje daň na úhradu)
+// a riadky C.2 so zápornými rozdielmi. Obdobie = doručenie dobropisu.
+// Vráti text upozornenia, ak dobropis nemožno zaradiť.
+func (ret *Return) addPurchaseCredit(p purchase.Purchase, tax purchase.Amounts) string {
+	s := p.Supplier
+	switch {
+	case p.NoDeduction:
+		return "" // odpočet sa neuplatnil — nie je čo opravovať
+	case foreign(s.Country) || p.ReverseCharge:
+		return "Dobropis od zahraničného dodávateľa alebo pri prenesení daňovej povinnosti zatiaľ nie je podporovaný — doplňte ručne"
+	case !isSKPayer(s.ICDPH):
+		return "Dobropis od dodávateľa bez slovenského IČ DPH — opravu odpočtu doplňte ručne"
+	case strings.TrimSpace(p.CorrectsNumber) == "":
+		return "Dobropis bez čísla pôvodnej faktúry dodávateľa — v C.2 ho doplňte ručne"
+	}
+	for _, r := range tax.Rates {
+		if r.Rate == 0 {
+			continue
+		}
+		if _, ok := deductRows[r.Rate]; !ok {
+			return fmt.Sprintf("Sadzba %d %% nepatrí do tlačiva DPHv25", r.Rate)
+		}
+	}
+	for _, r := range tax.Rates {
+		if r.Rate == 0 || r.VAT.IsZero() && r.Base.IsZero() {
+			continue
+		}
+		ret.Rows["r28"] = ret.Rows["r28"].Add(r.VAT.Neg())
+		ret.KV.C2 = append(ret.KV.C2, KVCorrection{Partner: noSpaces(s.ICDPH), Name: s.Name, Number: noSpaces(p.SupplierNumber),
+			Original: noSpaces(p.CorrectsNumber), BaseDiff: r.Base, VATDiff: r.VAT, Rate: r.Rate, DeductedDiff: r.VAT, ID: p.ID})
+	}
+	return ""
 }

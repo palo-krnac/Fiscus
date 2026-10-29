@@ -146,7 +146,7 @@ export const kvColumns = [
   money('Základ', (r) => r.base ?? r.baseDiff),
   money('Daň', (r) => r.vat ?? r.vatDiff),
   { header: 'Sadzba %', value: (r) => r.rate, type: 'number', width: 8 },
-  money('Odpočítaná daň', (r) => r.deducted),
+  money('Odpočítaná daň', (r) => (r.section === 'C.2' ? r.deductedDiff : r.deducted)),
   t('Prenesenie – plnenie', (r) => r.label, 22),
   t('Kód SCS', (r) => r.code, 8),
   t('Druh tovaru', (r) => r.goods, 8),

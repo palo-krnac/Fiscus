@@ -64,6 +64,9 @@ type Purchase struct {
 	// NoDeduction: DPH sa neodpočítava (napr. reprezentácia, súkromná spotreba).
 	NoDeduction bool   `json:"noDeduction"`
 	Description string `json:"description"` // predmet plnenia
+	// CorrectsNumber je číslo pôvodnej faktúry dodávateľa, ktorú dobropis
+	// (záporné sumy) opravuje — do kontrolného výkazu C.2.
+	CorrectsNumber string `json:"correctsNumber"`
 	// Expense je druh výdavku pre peňažný denník (zásoby, služby…); prázdny = služby.
 	Expense ExpenseKind `json:"expense"`
 	Note    string      `json:"note"`
@@ -227,6 +230,15 @@ func (p *Purchase) Deductible() money.Dec {
 	return t.Summary.VAT
 }
 
+// CreditNote: doklad je dobropis od dodávateľa (záporné sumy).
+func (p *Purchase) CreditNote() bool {
+	var b money.Dec
+	for _, r := range p.Rates {
+		b = b.Add(r.Base)
+	}
+	return b.Sign() < 0
+}
+
 // Validate skontroluje doklad.
 func (p *Purchase) Validate() error {
 	var errs []invoice.FieldError
@@ -296,6 +308,16 @@ func (p *Purchase) Validate() error {
 		if r.Rate != vat.Rate0 {
 			hasVAT = true
 		}
+	}
+	neg, pos := false, false
+	for _, r := range p.Rates {
+		neg, pos = neg || r.Base.Sign() < 0, pos || r.Base.Sign() > 0
+	}
+	switch {
+	case neg && pos:
+		add("rates", "Dobropis má všetky sumy záporné, faktúra kladné — nemiešajte ich na jednom doklade")
+	case neg && hasVAT && !p.NoDeduction && strings.TrimSpace(p.CorrectsNumber) == "":
+		add("correctsNumber", "Pri dobropise zadajte číslo pôvodnej faktúry dodávateľa (kontrolný výkaz C.2)")
 	}
 	// pre kontrolný výkaz (B.2) a prenesenie je IČ DPH dodávateľa povinné
 	if hasVAT && !p.NoDeduction && s.ICDPH == "" {
