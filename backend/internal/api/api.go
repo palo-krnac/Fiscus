@@ -12,6 +12,8 @@ import (
 	"strings"
 
 	"github.com/palo-krnac/fiscus/backend/internal/app"
+	"github.com/palo-krnac/fiscus/backend/internal/auth"
+	"github.com/palo-krnac/fiscus/backend/internal/edition"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/registry"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
@@ -23,39 +25,69 @@ type Server struct {
 	Web fs.FS // zostavený frontend (index.html, assets/...); môže byť nil
 	// Registry je vyhľadávanie firiem podľa IČO (RPO); nil = vypnuté.
 	Registry registry.Lookup
+
+	limit limiter // pokusy o prihlásenie
 }
 
 // Handler vráti http.Handler s celým API.
+//
+// Každá adresa okrem prihlásenia a číselníkov prechádza cez s.authed
+// (kto to je) a s.need (či na to má vo firme právo). Zmeny (POST/PUT/DELETE)
+// musia mať hlavičku X-Fiskus — obrana proti CSRF, aj pre lokálny desktop.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/capabilities", s.capabilities)
-	mux.HandleFunc("GET /api/codes", s.codes)
-	mux.HandleFunc("GET /api/companies", s.listCompanies)
-	mux.HandleFunc("POST /api/companies", s.createCompany)
-	mux.HandleFunc("PUT /api/companies/{cid}", s.updateCompany)
-	mux.HandleFunc("GET /api/registry/{ico}", s.lookupICO)
-	mux.HandleFunc("POST /api/companies/{cid}/invoices/preview", s.preview)
-	mux.HandleFunc("GET /api/companies/{cid}/purchases", s.listPurchases)
-	mux.HandleFunc("POST /api/companies/{cid}/purchases", s.savePurchase)
-	mux.HandleFunc("POST /api/companies/{cid}/purchases/preview", s.previewPurchase)
-	mux.HandleFunc("GET /api/companies/{cid}/purchases/{id}", s.getPurchase)
-	mux.HandleFunc("PUT /api/companies/{cid}/purchases/{id}", s.savePurchase)
-	mux.HandleFunc("DELETE /api/companies/{cid}/purchases/{id}", s.deletePurchase)
-	mux.HandleFunc("POST /api/companies/{cid}/purchases/{id}/pay", s.payPurchase)
-	mux.HandleFunc("POST /api/companies/{cid}/purchases/{id}/unpay", s.unpayPurchase)
-	mux.HandleFunc("GET /api/companies/{cid}/contacts", s.listContacts)
-	mux.HandleFunc("POST /api/companies/{cid}/contacts", s.saveContact)
-	mux.HandleFunc("GET /api/companies/{cid}/contacts/{id}", s.getContact)
-	mux.HandleFunc("PUT /api/companies/{cid}/contacts/{id}", s.saveContact)
-	mux.HandleFunc("DELETE /api/companies/{cid}/contacts/{id}", s.deleteContact)
-	mux.HandleFunc("GET /api/companies/{cid}/invoices", s.listInvoices)
-	mux.HandleFunc("POST /api/companies/{cid}/invoices", s.saveInvoice)
-	mux.HandleFunc("GET /api/companies/{cid}/invoices/{id}", s.getInvoice)
-	mux.HandleFunc("PUT /api/companies/{cid}/invoices/{id}", s.saveInvoice)
-	mux.HandleFunc("POST /api/companies/{cid}/invoices/{id}/issue", s.issue)
-	mux.HandleFunc("POST /api/companies/{cid}/invoices/{id}/pay", s.pay)
-	mux.HandleFunc("POST /api/companies/{cid}/invoices/{id}/cancel", s.cancel)
-	mux.HandleFunc("POST /api/companies/{cid}/invoices/{id}/credit-note", s.creditNote)
+	public := func(pattern string, h http.HandlerFunc) { mux.HandleFunc(pattern, s.csrf(h)) }
+	open := func(pattern string, h http.HandlerFunc) { mux.HandleFunc(pattern, s.csrf(s.authed(h))) }
+	need := func(pattern string, p auth.Perm, h http.HandlerFunc) {
+		mux.HandleFunc(pattern, s.csrf(s.authed(s.need(p, h))))
+	}
+
+	public("GET /api/capabilities", s.capabilities)
+	public("GET /api/codes", s.codes)
+	public("POST /api/auth/login", s.login)
+	open("POST /api/auth/logout", s.logout)
+	open("POST /api/auth/password", s.changePassword)
+	open("GET /api/me", s.me)
+	open("GET /api/registry/{ico}", s.lookupICO)
+
+	open("GET /api/companies", s.listCompanies)
+	open("POST /api/companies", s.createCompany)
+	need("PUT /api/companies/{cid}", auth.PermSettingsWrite, s.updateCompany)
+
+	need("GET /api/companies/{cid}/invoices", auth.PermInvoicesRead, s.listInvoices)
+	need("GET /api/companies/{cid}/invoices/{id}", auth.PermInvoicesRead, s.getInvoice)
+	need("POST /api/companies/{cid}/invoices", auth.PermInvoicesWrite, s.saveInvoice)
+	need("POST /api/companies/{cid}/invoices/preview", auth.PermInvoicesWrite, s.preview)
+	need("PUT /api/companies/{cid}/invoices/{id}", auth.PermInvoicesWrite, s.saveInvoice)
+	need("POST /api/companies/{cid}/invoices/{id}/issue", auth.PermInvoicesWrite, s.issue)
+	need("POST /api/companies/{cid}/invoices/{id}/pay", auth.PermInvoicesWrite, s.pay)
+	need("POST /api/companies/{cid}/invoices/{id}/cancel", auth.PermInvoicesWrite, s.cancel)
+	need("POST /api/companies/{cid}/invoices/{id}/credit-note", auth.PermInvoicesWrite, s.creditNote)
+
+	need("GET /api/companies/{cid}/purchases", auth.PermPurchasesRead, s.listPurchases)
+	need("GET /api/companies/{cid}/purchases/{id}", auth.PermPurchasesRead, s.getPurchase)
+	need("POST /api/companies/{cid}/purchases", auth.PermPurchasesWrite, s.savePurchase)
+	need("POST /api/companies/{cid}/purchases/preview", auth.PermPurchasesWrite, s.previewPurchase)
+	need("PUT /api/companies/{cid}/purchases/{id}", auth.PermPurchasesWrite, s.savePurchase)
+	need("DELETE /api/companies/{cid}/purchases/{id}", auth.PermPurchasesWrite, s.deletePurchase)
+	need("POST /api/companies/{cid}/purchases/{id}/pay", auth.PermPurchasesWrite, s.payPurchase)
+	need("POST /api/companies/{cid}/purchases/{id}/unpay", auth.PermPurchasesWrite, s.unpayPurchase)
+
+	need("GET /api/companies/{cid}/contacts", auth.PermContactsRead, s.listContacts)
+	need("GET /api/companies/{cid}/contacts/{id}", auth.PermContactsRead, s.getContact)
+	need("POST /api/companies/{cid}/contacts", auth.PermContactsWrite, s.saveContact)
+	need("PUT /api/companies/{cid}/contacts/{id}", auth.PermContactsWrite, s.saveContact)
+	need("DELETE /api/companies/{cid}/contacts/{id}", auth.PermContactsWrite, s.deleteContact)
+
+	need("GET /api/companies/{cid}/users", auth.PermUsersManage, s.listMembers)
+	need("POST /api/companies/{cid}/users", auth.PermUsersManage, s.addMember)
+	need("PUT /api/companies/{cid}/users/{uid}", auth.PermUsersManage, s.setRole)
+	need("DELETE /api/companies/{cid}/users/{uid}", auth.PermUsersManage, s.removeMember)
+
+	need("GET /api/companies/{cid}/audit", auth.PermAuditRead, s.companyAudit)
+	open("GET /api/audit", s.allAudit)
+	open("GET /api/audit/verify", s.verifyAudit)
+
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "neznáma adresa API", nil)
 	})
@@ -94,8 +126,12 @@ func fail(w http.ResponseWriter, err error) {
 		writeErr(w, http.StatusNotFound, "Záznam neexistuje", nil)
 	case errors.Is(err, invoice.ErrLocked), errors.Is(err, invoice.ErrBadTransition):
 		writeErr(w, http.StatusConflict, err.Error(), nil)
-	case errors.Is(err, app.ErrCompanyLimit):
+	case errors.Is(err, app.ErrCompanyLimit), errors.Is(err, app.ErrForbidden):
 		writeErr(w, http.StatusForbidden, err.Error(), nil)
+	case errors.Is(err, app.ErrNoSession):
+		writeErr(w, http.StatusUnauthorized, err.Error(), nil)
+	case errors.Is(err, app.ErrLastAdmin), errors.Is(err, app.ErrSelfDemote), errors.Is(err, store.ErrDuplicate):
+		writeErr(w, http.StatusConflict, err.Error(), nil)
 	default:
 		log.Printf("api: %v", err)
 		writeErr(w, http.StatusInternalServerError, "Interná chyba servera", nil)
@@ -131,6 +167,11 @@ func (s *Server) company(w http.ResponseWriter, r *http.Request) (int64, bool) {
 		fail(w, err)
 		return 0, false
 	}
+	// člen firmy (akákoľvek rola); konkrétne právo overuje s.need
+	if err := s.App.Require(r.Context(), cid, ""); err != nil {
+		fail(w, err)
+		return 0, false
+	}
 	return cid, true
 }
 
@@ -141,7 +182,7 @@ func (s *Server) capabilities(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) listCompanies(w http.ResponseWriter, r *http.Request) {
-	list, err := s.App.Store.ListCompanies(r.Context())
+	list, err := s.App.VisibleCompanies(r.Context())
 	if err != nil {
 		fail(w, err)
 		return
@@ -153,6 +194,10 @@ func (s *Server) listCompanies(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) createCompany(w http.ResponseWriter, r *http.Request) {
+	if s.App.Caps.Mode == edition.Server && !auth.ActorFrom(r.Context()).SuperAdmin {
+		fail(w, app.ErrForbidden)
+		return
+	}
 	var c store.Company
 	if !decode(w, r, &c) {
 		return

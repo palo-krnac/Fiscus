@@ -5,6 +5,7 @@ import (
 	"net/mail"
 	"strings"
 
+	"github.com/palo-krnac/fiscus/backend/internal/audit"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/party"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
@@ -62,8 +63,34 @@ func (a *App) SaveContact(ctx context.Context, companyID int64, c store.Contact)
 	if len(fe) > 0 {
 		return c, &invoice.ValidationError{Fields: fe}
 	}
-	err := a.Store.SaveContact(ctx, companyID, &c)
-	return c, err
+	var before any
+	if c.ID != 0 {
+		if old, err := a.Store.GetContact(ctx, companyID, c.ID); err == nil {
+			before = old
+		}
+	}
+	if err := a.Store.SaveContact(ctx, companyID, &c); err != nil {
+		return c, err
+	}
+	if before == nil {
+		a.record(ctx, companyID, audit.CatContacts, "create", "contact", c.ID, "Nový kontakt "+c.Name, nil, c)
+	} else {
+		a.record(ctx, companyID, audit.CatContacts, "update", "contact", c.ID, "Úprava kontaktu "+c.Name, before, c)
+	}
+	return c, nil
+}
+
+// DeleteContact zmaže kontakt z adresára.
+func (a *App) DeleteContact(ctx context.Context, companyID, id int64) error {
+	old, err := a.Store.GetContact(ctx, companyID, id)
+	if err != nil {
+		return err
+	}
+	if err := a.Store.DeleteContact(ctx, companyID, id); err != nil {
+		return err
+	}
+	a.record(ctx, companyID, audit.CatContacts, "delete", "contact", id, "Zmazaný kontakt "+old.Name, old, nil)
+	return nil
 }
 
 // PartyFromContact prevedie kontakt na odberateľa faktúry (kópia údajov —

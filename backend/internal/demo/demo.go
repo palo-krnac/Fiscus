@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/palo-krnac/fiscus/backend/internal/app"
+	"github.com/palo-krnac/fiscus/backend/internal/auth"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	m "github.com/palo-krnac/fiscus/backend/internal/money"
 	"github.com/palo-krnac/fiscus/backend/internal/purchase"
@@ -154,4 +155,30 @@ func Seed(ctx context.Context, a *app.App) (store.Company, error) {
 		}
 	}
 	return c, nil
+}
+
+// Ukážkoví používatelia pre serverový režim (heslo všetkých: DemoPassword).
+const (
+	DemoAdmin    = "spravca@demo.sk"
+	DemoPassword = "demo-fiskus"
+)
+
+var demoUsers = []app.NewMember{
+	{Email: "uctovnicka@demo.sk", Name: "Jana Účtovníčka", Role: auth.RoleAccountant},
+	{Email: "fakturant@demo.sk", Name: "Fero Fakturant", Role: auth.RoleInvoicer},
+	{Email: "klient@demo.sk", Name: "Klient Kancelárie", Role: auth.RoleClient},
+}
+
+// SeedUsers vytvorí správcu inštalácie a ukážkových používateľov s rolami vo firme.
+func SeedUsers(ctx context.Context, a *app.App, companyID int64) error {
+	if _, err := a.EnsureAdmin(ctx, DemoAdmin, "Správca Demo", DemoPassword); err != nil {
+		return err
+	}
+	for _, u := range demoUsers {
+		u.Password = DemoPassword
+		if _, err := a.AddMember(ctx, companyID, u); err != nil {
+			return err
+		}
+	}
+	return nil
 }

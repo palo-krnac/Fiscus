@@ -8,6 +8,8 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/palo-krnac/fiscus/backend/internal/audit"
+	"github.com/palo-krnac/fiscus/backend/internal/auth"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/purchase"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
@@ -26,6 +28,11 @@ type Store struct {
 	invoices  map[int64]invoice.Invoice
 	contacts  map[int64]store.Contact
 	purchases map[int64]purchase.Purchase
+	users     map[int64]auth.User
+	members   map[memKey]auth.Role
+	sessions  map[string]auth.Session
+	auditLog  []audit.Entry
+	auditSeq  int64
 	seq       map[seqKey]int
 	nextID    int64
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { ApiError, request } from './api.js'
+import { ApiError, query, request, setUnauthorizedHandler } from './api.js'
 
 const respond = (status, body) =>
   vi.fn().mockResolvedValue({
@@ -35,5 +35,29 @@ describe('request', () => {
 
   it('prázdna odpoveď nie je chyba', async () => {
     expect(await request('POST', '/api/x', undefined, respond(204))).toBeNull()
+  })
+
+  it('zmeny posielajú hlavičku proti CSRF, čítanie nie', async () => {
+    const f = respond(200, {})
+    await request('POST', '/api/x', {}, f)
+    await request('GET', '/api/x', undefined, f)
+    expect(f.mock.calls[0][1].headers['X-Fiskus']).toBe('1')
+    expect(f.mock.calls[1][1].headers['X-Fiskus']).toBeUndefined()
+  })
+
+  it('401 zavolá obsluhu prihlásenia, okrem samotného prihlasovania', async () => {
+    const h = vi.fn()
+    setUnauthorizedHandler(h)
+    await request('GET', '/api/companies', undefined, respond(401, { error: 'x' })).catch(() => {})
+    await request('POST', '/api/auth/login', {}, respond(401, { error: 'x' })).catch(() => {})
+    expect(h).toHaveBeenCalledTimes(1)
+    setUnauthorizedHandler(null)
+  })
+})
+
+describe('query', () => {
+  it('vynechá prázdne hodnoty', () => {
+    expect(query({ category: 'invoices', q: '', user: 0, from: undefined })).toBe('?category=invoices&user=0')
+    expect(query({})).toBe('')
   })
 })

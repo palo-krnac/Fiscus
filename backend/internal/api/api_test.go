@@ -6,11 +6,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"testing/fstest"
 
 	"github.com/palo-krnac/fiscus/backend/internal/app"
+	"github.com/palo-krnac/fiscus/backend/internal/auth"
 	"github.com/palo-krnac/fiscus/backend/internal/edition"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/registry"
@@ -20,9 +23,22 @@ import (
 )
 
 type env struct {
-	t   *testing.T
-	srv *httptest.Server
-	cid int64
+	t      *testing.T
+	srv    *httptest.Server
+	cid    int64
+	app    *app.App
+	client *http.Client
+	noCSRF bool // neposielať hlavičku X-Fiskus
+}
+
+const (
+	adminEmail = "spravca@fiskus.sk"
+	adminPass  = "spravca-heslo-1"
+)
+
+func TestMain(m *testing.M) {
+	auth.HashIterations = 1000 // rýchle testy
+	os.Exit(m.Run())
 }
 
 func setup(t *testing.T, mode edition.Mode) *env {
@@ -40,7 +56,28 @@ func setup(t *testing.T, mode edition.Mode) *env {
 	}
 	srv := httptest.NewServer((&Server{App: a, Web: web}).Handler())
 	t.Cleanup(srv.Close)
-	return &env{t, srv, c.ID}
+	jar, _ := cookiejar.New(nil)
+	e := &env{t: t, srv: srv, cid: c.ID, app: a, client: &http.Client{Jar: jar}}
+	if mode == edition.Server {
+		if _, err := a.EnsureAdmin(context.Background(), adminEmail, "Správca", adminPass); err != nil {
+			t.Fatal(err)
+		}
+		e.login(adminEmail, adminPass, 200)
+	}
+	return e
+}
+
+// anonymous vráti kópiu prostredia bez prihlásenia.
+func (e *env) anonymous() *env {
+	jar, _ := cookiejar.New(nil)
+	c := *e
+	c.client = &http.Client{Jar: jar}
+	return &c
+}
+
+func (e *env) login(email, pass string, want int) {
+	e.t.Helper()
+	e.do("POST", "/api/auth/login", map[string]string{"email": email, "password": pass}, want, nil)
 }
 
 func (e *env) do(method, path string, body any, wantStatus int, out any) {
@@ -54,7 +91,10 @@ func (e *env) do(method, path string, body any, wantStatus int, out any) {
 		}
 	}
 	req, _ := http.NewRequest(method, e.srv.URL+path, &buf)
-	res, err := http.DefaultClient.Do(req)
+	if !e.noCSRF {
+		req.Header.Set(CSRFHeader, "1")
+	}
+	res, err := e.client.Do(req)
 	if err != nil {
 		e.t.Fatal(err)
 	}
@@ -260,7 +300,7 @@ func TestRegistryAPI(t *testing.T) {
 		"31322832": {ICO: "31322832", Name: "SLOVNAFT, a.s.", City: "Bratislava"},
 	}}).Handler())
 	t.Cleanup(srv.Close)
-	e2 := &env{t: t, srv: srv}
+	e2 := &env{t: t, srv: srv, client: http.DefaultClient}
 	var c registry.Company
 	e2.do("GET", "/api/registry/31322832", nil, 200, &c)
 	if c.Name != "SLOVNAFT, a.s." {

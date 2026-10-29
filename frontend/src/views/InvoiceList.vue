@@ -9,7 +9,7 @@ import InputIcon from 'primevue/inputicon'
 import Select from 'primevue/select'
 import SelectButton from 'primevue/selectbutton'
 import { api } from '../lib/api.js'
-import { session } from '../lib/session.js'
+import { session, can } from '../lib/session.js'
 import { formatAmount, formatDate, formatMoney, statusOf } from '../lib/format.js'
 import { fiskusGridTheme, skGridLocale } from '../lib/grid.js'
 
@@ -163,7 +163,7 @@ function onKey(e) {
   const t = e.target
   const typing = t instanceof HTMLElement && (t.isContentEditable || /INPUT|TEXTAREA|SELECT/.test(t.tagName))
   if (typing || e.ctrlKey || e.metaKey || e.altKey) return
-  if (e.key === 'n') {
+  if (e.key === 'n' && can('invoices.write')) {
     e.preventDefault()
     router.push('/faktury/nova')
   } else if (e.key === '/') {
@@ -184,7 +184,7 @@ onBeforeUnmount(() => {
       <h1>Vydané faktúry</h1>
       <Select v-model="year" :options="years" option-label="label" option-value="value" size="small" aria-label="Rok" />
       <div class="spacer" />
-      <Button size="small" @click="router.push('/faktury/nova')">
+      <Button v-if="can('invoices.write')" size="small" @click="router.push('/faktury/nova')">
         <template #default>
           <i class="pi pi-plus" /><span>Nová faktúra</span><kbd class="hint">N</kbd>
         </template>

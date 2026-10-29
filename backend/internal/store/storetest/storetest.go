@@ -10,6 +10,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/palo-krnac/fiscus/backend/internal/audit"
+	"github.com/palo-krnac/fiscus/backend/internal/auth"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	m "github.com/palo-krnac/fiscus/backend/internal/money"
 	"github.com/palo-krnac/fiscus/backend/internal/purchase"
@@ -342,6 +344,132 @@ func Run(t *testing.T, newStore Factory) {
 		}
 		if _, err := s.GetPurchase(ctx, a.ID, p1.ID); !errors.Is(err, store.ErrNotFound) {
 			t.Fatal("nezmazaná")
+		}
+	})
+
+	t.Run("používatelia a roly", func(t *testing.T) {
+		s := newStore(t)
+		a, _ := s.CreateCompany(ctx, store.Company{Name: "Alfa"})
+		b, _ := s.CreateCompany(ctx, store.Company{Name: "Beta"})
+		jana, err := s.CreateUser(ctx, auth.User{Email: "Jana@Kancelaria.sk", Name: "Jana", PasswordHash: "h", Active: true})
+		if err != nil || jana.ID == 0 {
+			t.Fatal(err)
+		}
+		if _, err := s.CreateUser(ctx, auth.User{Email: "jana@kancelaria.sk"}); !errors.Is(err, store.ErrDuplicate) {
+			t.Fatalf("duplicitný e-mail (bez ohľadu na veľkosť písmen): %v", err)
+		}
+		got, err := s.GetUserByEmail(ctx, " JANA@kancelaria.SK ")
+		if err != nil || got.ID != jana.ID || got.PasswordHash != "h" || !got.Active {
+			t.Fatalf("podľa e-mailu: %+v %v", got, err)
+		}
+		peter, _ := s.CreateUser(ctx, auth.User{Email: "peter@x.sk", Name: "Peter", Active: true})
+		peter.Email = "JANA@kancelaria.sk"
+		if err := s.UpdateUser(ctx, peter); !errors.Is(err, store.ErrDuplicate) {
+			t.Fatal("zmena na obsadený e-mail")
+		}
+		peter.Email, peter.Active, peter.SuperAdmin = "peter@x.sk", false, true
+		if err := s.UpdateUser(ctx, peter); err != nil {
+			t.Fatal(err)
+		}
+		if g, _ := s.GetUser(ctx, peter.ID); g.Active || !g.SuperAdmin {
+			t.Fatal("úprava používateľa")
+		}
+		if l, _ := s.ListUsers(ctx); len(l) != 2 {
+			t.Fatal("zoznam používateľov")
+		}
+
+		// roly po firmách
+		_ = s.SetMembership(ctx, auth.Membership{UserID: jana.ID, CompanyID: a.ID, Role: auth.RoleAccountant})
+		_ = s.SetMembership(ctx, auth.Membership{UserID: jana.ID, CompanyID: b.ID, Role: auth.RoleClient})
+		_ = s.SetMembership(ctx, auth.Membership{UserID: jana.ID, CompanyID: a.ID, Role: auth.RoleAdmin}) // zmena roly
+		_ = s.SetMembership(ctx, auth.Membership{UserID: peter.ID, CompanyID: a.ID, Role: auth.RoleViewer})
+		ms, _ := s.UserMemberships(ctx, jana.ID)
+		if len(ms) != 2 || ms[0].Role != auth.RoleAdmin || ms[1].Role != auth.RoleClient {
+			t.Fatalf("roly Jany: %+v", ms)
+		}
+		if m, _ := s.CompanyMembers(ctx, a.ID); len(m) != 2 {
+			t.Fatalf("členovia firmy: %+v", m)
+		}
+		if err := s.SetMembership(ctx, auth.Membership{UserID: 9999, CompanyID: a.ID, Role: auth.RoleAdmin}); err == nil {
+			t.Fatal("rola neexistujúcemu používateľovi")
+		}
+		if err := s.RemoveMembership(ctx, jana.ID, b.ID); err != nil {
+			t.Fatal(err)
+		}
+		if m, _ := s.UserMemberships(ctx, jana.ID); len(m) != 1 {
+			t.Fatal("odobratie z firmy")
+		}
+
+		// relácie
+		_ = s.CreateSession(ctx, auth.Session{TokenHash: "t1", UserID: jana.ID, ExpiresAt: 100})
+		_ = s.CreateSession(ctx, auth.Session{TokenHash: "t2", UserID: jana.ID, ExpiresAt: 200})
+		_ = s.CreateSession(ctx, auth.Session{TokenHash: "t3", UserID: peter.ID, ExpiresAt: 300})
+		if ss, err := s.GetSession(ctx, "t2"); err != nil || ss.UserID != jana.ID || ss.ExpiresAt != 200 {
+			t.Fatal("relácia")
+		}
+		_ = s.DeleteSession(ctx, "t2")
+		if _, err := s.GetSession(ctx, "t2"); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("odhlásenie")
+		}
+		_ = s.DeleteUserSessions(ctx, jana.ID)
+		if _, err := s.GetSession(ctx, "t1"); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("odhlásenie zo všetkých zariadení")
+		}
+		if _, err := s.GetSession(ctx, "t3"); err != nil {
+			t.Fatal("cudzia relácia nesmie zmiznúť")
+		}
+	})
+
+	t.Run("audit", func(t *testing.T) {
+		s := newStore(t)
+		actor := auth.Actor{UserID: 5, Name: "Jana Účtovníčka", Channel: auth.ChannelWeb, IP: "10.0.0.1"}
+		mcp := auth.Actor{UserID: 6, Name: "Asistent", Channel: auth.ChannelMCP}
+		add := func(a auth.Actor, cid int64, cat audit.Category, summary string) audit.Entry {
+			e := audit.New(a, cid, cat, "update", "invoice", 7, summary, map[string]string{"x": "pred"}, map[string]string{"x": "po"})
+			if err := s.AppendAudit(ctx, &e); err != nil || e.ID == 0 || e.Hash == "" {
+				t.Fatalf("AppendAudit: %v", err)
+			}
+			return e
+		}
+		add(actor, 1, audit.CatInvoices, "Vystavená faktúra FA20260001")
+		add(mcp, 1, audit.CatPurchases, "Zaevidovaná prijatá faktúra PF20260001")
+		add(actor, 2, audit.CatInvoices, "Vystavená faktúra FA20260001 (Beta)")
+		last := add(actor, 0, audit.CatAuth, "Prihlásenie")
+
+		all, total, _ := s.ListAudit(ctx, audit.Filter{})
+		if total != 4 || all[0].ID != last.ID {
+			t.Fatalf("najnovšie prvé, spolu %d", total)
+		}
+		if string(all[0].After) != `{"x":"po"}` || all[0].IP != "10.0.0.1" || all[0].Channel != auth.ChannelWeb {
+			t.Fatalf("obsah záznamu: %+v", all[0])
+		}
+		cases := []struct {
+			f    audit.Filter
+			want int
+		}{
+			{audit.Filter{CompanyIDs: []int64{1}}, 2},
+			{audit.Filter{CompanyIDs: []int64{1, 2}}, 3},
+			{audit.Filter{CompanyIDs: []int64{}}, 0},
+			{audit.Filter{Category: audit.CatInvoices}, 2},
+			{audit.Filter{UserID: 6}, 1},
+			{audit.Filter{Search: "prijata"}, 1},
+			{audit.Filter{Search: "účtovníčka"}, 3},
+		}
+		for _, c := range cases {
+			if _, n, _ := s.ListAudit(ctx, c.f); n != c.want {
+				t.Errorf("filter %+v: %d, chcem %d", c.f, n, c.want)
+			}
+		}
+		page, n, _ := s.ListAudit(ctx, audit.Filter{Limit: 2, Offset: 2})
+		if n != 4 || len(page) != 2 || page[0].ID != all[2].ID {
+			t.Fatal("stránkovanie")
+		}
+		chain, _ := s.AuditChain(ctx)
+		if len(chain) != 4 || chain[0].PrevHash != "" {
+			t.Fatal("reťazec")
+		}
+		if err := audit.Verify(chain); err != nil {
+			t.Fatalf("reťazec po načítaní z úložiska: %v", err)
 		}
 	})
 }

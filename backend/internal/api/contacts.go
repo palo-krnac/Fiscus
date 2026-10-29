@@ -90,7 +90,7 @@ func (s *Server) deleteContact(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := s.App.Store.DeleteContact(r.Context(), cid, id); err != nil {
+	if err := s.App.DeleteContact(r.Context(), cid, id); err != nil {
 		fail(w, err)
 		return
 	}
