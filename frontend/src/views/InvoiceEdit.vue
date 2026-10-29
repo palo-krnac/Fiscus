@@ -11,6 +11,8 @@ import DatePicker from 'primevue/datepicker'
 import SelectButton from 'primevue/selectbutton'
 import Checkbox from 'primevue/checkbox'
 import AutoComplete from 'primevue/autocomplete'
+import IcoInput from '../components/IcoInput.vue'
+import { fillFromRegistry } from '../lib/registry.js'
 import { api, ApiError } from '../lib/api.js'
 import { session } from '../lib/session.js'
 import {
@@ -417,6 +419,14 @@ const customerFields = reactive([
                   </div>
                 </template>
               </AutoComplete>
+              <IcoInput
+                v-else-if="f.key === 'ico' && editable"
+                :model-value="c.ico"
+                :invalid="!!fieldError('customer.ico')"
+                :auto="!c.name"
+                @update:model-value="upd(inv.customer, 'ico')($event)"
+                @found="(r) => { inv.customer = fillFromRegistry(inv.customer, r); changed() }"
+              />
               <InputText
                 v-else
                 :model-value="c[f.key]"

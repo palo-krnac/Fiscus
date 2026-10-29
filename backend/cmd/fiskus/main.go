@@ -20,6 +20,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/app"
 	"github.com/palo-krnac/fiscus/backend/internal/demo"
 	"github.com/palo-krnac/fiscus/backend/internal/edition"
+	"github.com/palo-krnac/fiscus/backend/internal/registry"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 	"github.com/palo-krnac/fiscus/backend/internal/store/memstore"
 	"github.com/palo-krnac/fiscus/backend/internal/web"
@@ -37,6 +38,7 @@ func main() {
 	dbPath := flag.String("db", "", "cesta k databáze SQLite")
 	backupDir := flag.String("backup-dir", "", "priečinok na automatické zálohy (heslo v FISKUS_BACKUP_PASSWORD)")
 	demoData := flag.Bool("demo", false, "spustiť s ukážkovými dátami v pamäti")
+	rpoURL := flag.String("rpo-url", registry.DefaultBaseURL, "adresa API Registra právnických osôb; prázdne = vypnuté")
 	flag.Parse()
 
 	log.Printf("Fiskus %s", version)
@@ -71,13 +73,18 @@ func main() {
 		log.Print("načítané ukážkové dáta")
 	}
 
+	var lookup registry.Lookup
+	if *rpoURL != "" {
+		lookup = registry.NewRPO(*rpoURL)
+	}
+
 	webFS := web.FS()
 	if webFS == nil {
 		log.Print("upozornenie: frontend nie je zostavený, beží iba API")
 	}
 	srv := &http.Server{
 		Addr:              *addr,
-		Handler:           (&api.Server{App: a, Web: webFS}).Handler(),
+		Handler:           (&api.Server{App: a, Web: webFS, Registry: lookup}).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

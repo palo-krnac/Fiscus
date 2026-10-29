@@ -15,7 +15,8 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] Nastavenia firmy (údaje, IBAN, platiteľ DPH áno/nie, predvolená splatnosť)
 - [ ] Logo a vlastné číselné rady
 - [x] Adresár odberateľov a dodávateľov, výber odberateľa vo faktúre, vlastná splatnosť
-- [ ] Vyhľadanie firmy v RPO / ORSR podľa IČO
+- [x] Vyhľadanie firmy v registri (RPO) podľa IČO: názov a adresa
+- [ ] DIČ a IČ DPH z registrov finančnej správy (vyžaduje API kľúč)
 - [ ] PDF faktúry + QR kód **PAY by square**, odoslanie e-mailom
 - [ ] Dobropis, zálohová faktúra, cenová ponuka, pravidelná fakturácia
 - [ ] Prijaté faktúry (vrátane AI vyťaženia z PDF: AI iba navrhuje, účtuje pevne naprogramovaný automat)

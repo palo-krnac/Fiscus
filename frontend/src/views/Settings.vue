@@ -6,6 +6,8 @@ import InputText from 'primevue/inputtext'
 import InputNumber from 'primevue/inputnumber'
 import ToggleSwitch from 'primevue/toggleswitch'
 import FormField from '../components/FormField.vue'
+import IcoInput from '../components/IcoInput.vue'
+import { fillFromRegistry } from '../lib/registry.js'
 import { api, ApiError } from '../lib/api.js'
 import { session, replaceCompany } from '../lib/session.js'
 
@@ -70,7 +72,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
         <legend>Údaje na faktúre</legend>
         <div class="form-grid">
           <FormField v-for="f in companyFields" :key="f.key" :label="f.label" :span="f.span" :error="errors[f.key]">
-            <InputText v-model="form[f.key]" size="small" :invalid="!!errors[f.key]" :inputmode="f.inputmode" :autocomplete="f.autocomplete" />
+            <IcoInput v-if="f.key === 'ico'" v-model="form.ico" :invalid="!!errors.ico" @found="(c) => (form = fillFromRegistry(form, c))" />
+            <InputText v-else v-model="form[f.key]" size="small" :invalid="!!errors[f.key]" :inputmode="f.inputmode" :autocomplete="f.autocomplete" />
           </FormField>
         </div>
       </fieldset>
