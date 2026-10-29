@@ -21,19 +21,23 @@ func TestSeed(t *testing.T) {
 	}
 	list, _ := a.Store.ListInvoices(context.Background(), c.ID, store.InvoiceFilter{})
 	// + koncept z ponuky, dnešná pravidelná faktúra, 2 zálohové faktúry,
-	// doklad k prijatej platbe, koncept vyúčtovania a faktúra s prenesením pri položkách
+	// doklad k prijatej platbe, koncept vyúčtovania, faktúra s prenesením pri položkách
+	// a koncept z pravidelnej fakturácie na kontrolu
 	rc := 0
 	for _, inv := range list {
 		if inv.DomesticReverse() && inv.Status == invoice.StatusIssued {
 			rc++
 		}
 	}
-	if len(list) != 50 || rc != 1 {
+	if len(list) != 51 || rc != 1 {
 		t.Fatalf("%d faktúr, s prenesením %d", len(list), rc)
 	}
 	rec, _ := a.Recurring(context.Background(), c.ID)
-	if len(rec) != 3 || rec[0].Generated != 1 || rec[0].History[0].Number == "" || rec[2].Active {
+	if len(rec) != 4 || rec[0].Generated != 1 || rec[0].History[0].Number == "" || rec[3].Active {
 		t.Fatalf("pravidelné: %+v", rec)
+	}
+	if drafts, _ := a.RecurringDrafts(context.Background(), c.ID); len(drafts) != 1 || drafts[0].Template != "Technická podpora – hodiny" {
+		t.Fatalf("koncepty na kontrolu: %+v", drafts)
 	}
 	if rs, _ := a.Reminders(context.Background(), c.ID, 0); len(rs) != 1 || rs[0].Level != 1 || len(rs[0].Items) == 0 {
 		t.Fatalf("upomienky: %+v", rs)

@@ -12,12 +12,21 @@ import UserMenu from './components/UserMenu.vue'
 import MFADialog from './components/MFADialog.vue'
 import { api } from './lib/api.js'
 import { startHeartbeat } from './lib/desktop.js'
+import { attention, badgeText, refreshDrafts } from './lib/attention.js'
 
 const route = useRoute()
 const navOpen = ref(false)
 
 onMounted(loadSession)
 watch(() => route.path, () => (navOpen.value = false))
+// odznak v menu: koncepty z pravidelnej fakturácie na kontrolu
+watch(
+  () => [session.companyId, session.me, route.path],
+  () => {
+    if (session.companyId && can('invoices.read')) refreshDrafts(() => api.recurringDrafts(session.companyId))
+  },
+  { immediate: true },
+)
 
 const menu = computed(() =>
   visibleModules(
@@ -104,6 +113,7 @@ const isActive = (path) => route.path === path || route.path.startsWith(path + '
           >
             <i class="pi" :class="item.icon" aria-hidden="true" />
             <span>{{ item.label }}</span>
+            <span v-if="badgeText(attention[item.path])" class="nav-badge" :title="`Na kontrolu: ${attention[item.path]}`">{{ badgeText(attention[item.path]) }}</span>
           </RouterLink>
         </section>
       </nav>
@@ -231,6 +241,19 @@ nav {
 }
 .nav-item:hover {
   background: rgba(255, 255, 255, 0.06);
+}
+.nav-badge {
+  margin-left: auto;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 .nav-item.pending {
   color: #9fb0c5;

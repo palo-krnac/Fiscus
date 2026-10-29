@@ -31,6 +31,8 @@ func TestValidate(t *testing.T) {
 		{"zlý odosielateľ", func(s *mail.Settings) { s.FromEmail = "faktury" }, "fromEmail"},
 		{"zlá odpoveď", func(s *mail.Settings) { s.ReplyTo = "a@b" }, "replyTo"},
 		{"meno s koncom riadku", func(s *mail.Settings) { s.FromName = "A\r\nBcc: x@y.sk" }, "fromName"},
+		{"zlá adresa upozornení", func(s *mail.Settings) { s.NotifyDrafts = "uctovnik@firma.sk, nie" }, "notifyDrafts"},
+		{"dve adresy upozornení", func(s *mail.Settings) { s.NotifyDrafts = "a@firma.sk; b@firma.sk" }, ""},
 	}
 	for _, tt := range tests {
 		s := ok

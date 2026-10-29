@@ -357,6 +357,10 @@ func seedRecurring(ctx context.Context, a *app.App, c store.Company, contactIDs 
 		{Name: "Prenájom meracej techniky", Active: true, Interval: recurring.Quarterly, NextDate: today.AddDays(20),
 			Customer: party(3), ContactID: contactIDs[3], DueDays: 30,
 			Lines: line("Prenájom analyzátora siete – {obdobie}", "štvrťrok", "390")},
+		// bez automatického vystavenia: koncept čaká na kontrolu (počet hodín sa mení)
+		{Name: "Technická podpora – hodiny", Active: true, Interval: recurring.Monthly, NextDate: today.AddDays(-2),
+			Customer: party(1), ContactID: contactIDs[1], Note: "Hodiny podľa výkazu za {obdobie} — upravte pred vystavením.",
+			Lines: line("Technická podpora {mesiac} {rok}", "hod", "45")},
 		{Name: "Licencia vizualizácie", Interval: recurring.Yearly, NextDate: today.AddDays(75), AutoIssue: true,
 			Customer: party(6), ContactID: contactIDs[6], EndDate: today.AddDays(800),
 			Lines: line("Ročná licencia a aktualizácie HMI {obdobie}", "rok", "640")},

@@ -134,6 +134,7 @@ func main() {
 	defer st.Close()
 
 	a := app.New(st, caps)
+	a.PublicURL = *publicURL
 	a.ECBURL = *ecbURL
 	a.AIBaseURL = *claudeURL
 	a.Backups, a.BackupsOff = backups, backupsOff

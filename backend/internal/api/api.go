@@ -156,6 +156,7 @@ func (s *Server) Handler() http.Handler {
 	need("POST /api/companies/{cid}/quotes/{id}/invoice", auth.PermInvoicesWrite, s.invoiceQuote)
 
 	need("GET /api/companies/{cid}/recurring", auth.PermInvoicesRead, s.listRecurring)
+	need("GET /api/companies/{cid}/recurring/drafts", auth.PermInvoicesRead, s.recurringDrafts)
 	need("GET /api/companies/{cid}/recurring/{id}", auth.PermInvoicesRead, s.getRecurring)
 	need("POST /api/companies/{cid}/recurring", auth.PermInvoicesWrite, s.saveRecurring)
 	need("POST /api/companies/{cid}/recurring/preview", auth.PermInvoicesWrite, s.previewRecurring)

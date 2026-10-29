@@ -2,8 +2,10 @@ package api
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
+	"github.com/palo-krnac/fiscus/backend/internal/app"
 	"github.com/palo-krnac/fiscus/backend/internal/edition"
 )
 
@@ -54,6 +56,19 @@ func TestRecurringAPI(t *testing.T) {
 	e.do("GET", base, nil, 200, &list)
 	if len(list) != 1 || !list[0].Active || list[0].NextDate != "2026-12-03" || list[0].History[0].Number != "FA20260001" {
 		t.Fatalf("zoznam: %+v", list)
+	}
+	var drafts []app.RecurringDraft
+	e.do("GET", base+"/drafts", nil, 200, &drafts)
+	if len(drafts) != 0 {
+		t.Fatalf("koncepty: %+v", drafts)
+	}
+	manual := strings.Replace(body, `"autoIssue":true`, `"autoIssue":false`, 1)
+	var y tpl
+	e.do("POST", base, manual, 201, &y)
+	e.do("POST", fmt.Sprintf("%s/%d/generate", base, y.ID), nil, 201, nil)
+	e.do("GET", base+"/drafts", nil, 200, &drafts)
+	if len(drafts) != 1 || drafts[0].TemplateID != y.ID || drafts[0].Customer != "Zákazník s.r.o." {
+		t.Fatalf("koncepty: %+v", drafts)
 	}
 	e.do("DELETE", fmt.Sprintf("%s/%d", base, x.ID), nil, 204, nil)
 	e.do("GET", fmt.Sprintf("%s/%d", base, x.ID), nil, 404, nil)

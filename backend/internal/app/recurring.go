@@ -236,6 +236,7 @@ func (a *App) RunRecurring(ctx context.Context) (RecurringResult, error) {
 		if err != nil {
 			return res, err
 		}
+		var drafts []RecurringDraft // nové koncepty na kontrolu → upozornenie e-mailom
 		for i := range list {
 			t := &list[i]
 			for _, period := range t.DueDates(today) {
@@ -247,9 +248,14 @@ func (a *App) RunRecurring(ctx context.Context) (RecurringResult, error) {
 				res.Created++
 				if inv.Status == invoice.StatusIssued {
 					res.Issued++
+				} else if len(t.History) > 0 {
+					if d, ok := a.pendingDraft(ctx, c.ID, t, t.History[0]); ok {
+						drafts = append(drafts, d)
+					}
 				}
 			}
 		}
+		a.notifyDrafts(ctx, c.ID, drafts)
 	}
 	return res, nil
 }

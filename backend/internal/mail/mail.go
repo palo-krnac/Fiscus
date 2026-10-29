@@ -40,8 +40,10 @@ type Settings struct {
 	FromEmail   string `json:"fromEmail"`
 	ReplyTo     string `json:"replyTo"`
 	// BccSelf: kópia každej správy na adresu odosielateľa (do vlastnej pošty).
-	BccSelf   bool                `json:"bccSelf"`
-	Templates map[string]Template `json:"templates"`
+	BccSelf bool `json:"bccSelf"`
+	// NotifyDrafts: adresa pre upozornenia na koncepty z pravidelnej fakturácie (prázdna = neposielať).
+	NotifyDrafts string              `json:"notifyDrafts"`
+	Templates    map[string]Template `json:"templates"`
 }
 
 // Template je predmet a text správy; obsahuje zástupné znaky {cislo} a pod.
@@ -123,6 +125,7 @@ func (s *Settings) Normalize() {
 	s.FromName = strings.TrimSpace(s.FromName)
 	s.FromEmail = strings.TrimSpace(s.FromEmail)
 	s.ReplyTo = strings.TrimSpace(s.ReplyTo)
+	s.NotifyDrafts = strings.TrimSpace(s.NotifyDrafts)
 	if s.Security == "" {
 		s.Security = StartTLS
 	}
@@ -170,6 +173,11 @@ func (s Settings) Validate() error {
 	}
 	if s.ReplyTo != "" && !ValidAddress(s.ReplyTo) {
 		add("replyTo", "Neplatná e-mailová adresa")
+	}
+	if strings.TrimSpace(s.NotifyDrafts) != "" {
+		if _, err := ParseList(s.NotifyDrafts); err != nil {
+			add("notifyDrafts", "Neplatná e-mailová adresa")
+		}
 	}
 	if hasNewline(s.FromName) || hasNewline(s.Username) {
 		add("fromName", "Meno nesmie obsahovať koniec riadku")

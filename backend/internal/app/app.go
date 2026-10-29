@@ -36,6 +36,8 @@ type App struct {
 	Caps  edition.Capabilities // režim bez licencie; aktuálne schopnosti vracia Capabilities()
 	Today func() invoice.Date  // dá sa podvrhnúť v testoch
 	Now   func() time.Time     // čas pre licenciu; nil = time.Now
+	// PublicURL je verejná adresa servera (odkazy v upozorneniach); prázdna = bez odkazu.
+	PublicURL string
 
 	// LicenseKeys sú verejné kľúče na overenie licencie; nil = license.TrustedKeys.
 	LicenseKeys []ed25519.PublicKey
