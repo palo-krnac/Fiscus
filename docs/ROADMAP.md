@@ -50,8 +50,9 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] Roly pre každú firmu zvlášť: správca, účtovník, fakturant, zákazník (klient kancelárie), len čítanie
 - [x] Práva kontroluje backend pri každej požiadavke; rozhranie skrýva nepovolené akcie
 - [x] Audit všetkých zmien (kto, kedy, kanál, čo, pred/po), nemenný reťazec s odtlačkami; filter podľa firmy a kategórie
-- [ ] Audit API kľúčov a MCP (kanály sú pripravené, chýbajú samotné API kľúče a MCP server)
-- [ ] MCP server pre AI asistentov: čítanie dát a kontrolované akcie v rámci práv používateľa, každé volanie auditované
+- [x] API kľúče používateľa (len na čítanie / ako používateľ), iba hash v databáze, zrušenie
+- [x] MCP server pre AI asistentov (POST /mcp, Streamable HTTP) + most `fiskus-mcp` pre stdio; práva používateľa, každé volanie v audite
+- [ ] Ďalšie MCP nástroje: prijaté faktúry (zaevidovanie), párovanie platieb, dobropis, upomienky; OAuth pre vzdialených klientov
 
 ## Etapa 2 — účtovníctvo
 - [ ] Jednoduché účtovníctvo (peňažný denník)

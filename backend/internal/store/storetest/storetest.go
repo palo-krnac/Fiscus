@@ -291,6 +291,46 @@ func Run(t *testing.T, newStore Factory) {
 		}
 	})
 
+	t.Run("API kľúče", func(t *testing.T) {
+		s := newStore(t)
+		k1 := auth.APIKey{UserID: 7, Name: "Claude", Prefix: "fk_ab12", Hash: "h1", ReadOnly: true, CreatedAt: 1000}
+		k2 := auth.APIKey{UserID: 7, Name: "Skript", Prefix: "fk_cd34", Hash: "h2", CreatedAt: 2000}
+		k3 := auth.APIKey{UserID: 8, Name: "Iný", Prefix: "fk_ef56", Hash: "h3", CreatedAt: 3000}
+		for _, k := range []*auth.APIKey{&k1, &k2, &k3} {
+			if err := s.CreateAPIKey(ctx, k); err != nil || k.ID == 0 {
+				t.Fatalf("vytvorenie: %v", err)
+			}
+		}
+		dup := auth.APIKey{UserID: 7, Name: "x", Hash: "h1"}
+		if err := s.CreateAPIKey(ctx, &dup); !errors.Is(err, store.ErrDuplicate) {
+			t.Fatalf("rovnaký hash: %v", err)
+		}
+		list, _ := s.ListAPIKeys(ctx, 7)
+		if len(list) != 2 || list[0].ID != k2.ID {
+			t.Fatalf("zoznam: %+v", list)
+		}
+		got, err := s.GetAPIKeyByHash(ctx, "h1")
+		if err != nil || !reflect.DeepEqual(got, k1) {
+			t.Fatalf("podľa hashu: %+v %v", got, err)
+		}
+		if _, err := s.GetAPIKeyByHash(ctx, "nie"); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("neznámy hash")
+		}
+		if err := s.TouchAPIKey(ctx, k1.ID, 5000); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.RevokeAPIKey(ctx, 8, k1.ID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("cudzí používateľ zrušil kľúč")
+		}
+		if err := s.RevokeAPIKey(ctx, 7, k1.ID); err != nil {
+			t.Fatal(err)
+		}
+		got, _ = s.GetAPIKeyByHash(ctx, "h1")
+		if !got.Revoked || got.LastUsedAt != 5000 {
+			t.Fatalf("po zrušení: %+v", got)
+		}
+	})
+
 	t.Run("bankové pohyby", func(t *testing.T) {
 		s := newStore(t)
 		a, _ := s.CreateCompany(ctx, store.Company{Name: "Alfa"})

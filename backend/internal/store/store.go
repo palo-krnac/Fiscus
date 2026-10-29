@@ -149,6 +149,13 @@ type Store interface {
 	DeleteSession(ctx context.Context, tokenHash string) error
 	DeleteUserSessions(ctx context.Context, userID int64) error
 
+	// ---- API kľúče (AI asistenti cez MCP) ----
+	CreateAPIKey(ctx context.Context, k *auth.APIKey) error               // nastaví ID
+	ListAPIKeys(ctx context.Context, userID int64) ([]auth.APIKey, error) // kľúče používateľa, najnovšie prvé
+	GetAPIKeyByHash(ctx context.Context, hash string) (auth.APIKey, error)
+	TouchAPIKey(ctx context.Context, id int64, at int64) error // čas posledného použitia
+	RevokeAPIKey(ctx context.Context, userID, id int64) error  // ErrNotFound pre cudzí kľúč
+
 	// ---- audit (iba pridávanie, nikdy úprava ani mazanie) ----
 	// AppendAudit atomicky pridá záznam na koniec reťazca (nastaví ID, PrevHash, Hash).
 	AppendAudit(ctx context.Context, e *audit.Entry) error

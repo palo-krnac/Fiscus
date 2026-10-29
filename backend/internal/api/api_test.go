@@ -17,6 +17,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/edition"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/license/licensetest"
+	"github.com/palo-krnac/fiscus/backend/internal/mcp"
 	"github.com/palo-krnac/fiscus/backend/internal/registry"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 	"github.com/palo-krnac/fiscus/backend/internal/store/memstore"
@@ -67,7 +68,7 @@ func setupLicensed(t *testing.T, mode edition.Mode, licensed bool) *env {
 		"index.html":    {Data: []byte("<html>Fiskus</html>")},
 		"assets/app.js": {Data: []byte("console.log(1)")},
 	}
-	srv := httptest.NewServer((&Server{App: a, Web: web}).Handler())
+	srv := httptest.NewServer((&Server{App: a, Web: web, MCP: mcp.New(a, "test")}).Handler())
 	t.Cleanup(srv.Close)
 	jar, _ := cookiejar.New(nil)
 	e := &env{t: t, srv: srv, cid: c.ID, app: a, client: &http.Client{Jar: jar}}

@@ -157,3 +157,14 @@ export const svColumns = [
   { header: 'Kód plnenia', value: (r) => r.code, type: 'number', width: 8 },
   { header: 'Počet dokladov', value: (r) => r.count, type: 'number', width: 8 },
 ]
+
+const unixDate = (sec) => (sec ? new Date(sec * 1000).toISOString().slice(0, 10) : '')
+
+export const apiKeyColumns = [
+  t('Názov', (r) => r.name, 24),
+  t('Kľúč', (r) => r.prefix + '…', 14),
+  t('Práva', (r) => (r.readOnly ? 'len čítanie' : 'ako používateľ'), 14),
+  date('Vytvorený', (r) => unixDate(r.createdAt)),
+  date('Naposledy použitý', (r) => unixDate(r.lastUsedAt)),
+  t('Stav', (r) => (r.revoked ? 'zrušený' : 'aktívny'), 10),
+]

@@ -24,6 +24,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/app"
 	"github.com/palo-krnac/fiscus/backend/internal/demo"
 	"github.com/palo-krnac/fiscus/backend/internal/edition"
+	"github.com/palo-krnac/fiscus/backend/internal/mcp"
 	"github.com/palo-krnac/fiscus/backend/internal/registry"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 	"github.com/palo-krnac/fiscus/backend/internal/store/memstore"
@@ -109,7 +110,7 @@ func main() {
 	}
 	srv := &http.Server{
 		Addr:              *addr,
-		Handler:           (&api.Server{App: a, Web: webFS, Registry: lookup}).Handler(),
+		Handler:           (&api.Server{App: a, Web: webFS, Registry: lookup, MCP: mcp.New(a, version)}).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

@@ -22,6 +22,7 @@ web:
 build: web
 	cd backend && CGO_ENABLED=0 go build -tags sqlite \
 		-ldflags "-s -w -X main.version=$(VERSION)" -o ../bin/fiskus ./cmd/fiskus
+	cd backend && CGO_ENABLED=0 go build -ldflags "-s -w" -o ../bin/fiskus-mcp ./cmd/fiskus-mcp
 
 # ukážka s demo dátami: http://127.0.0.1:8080
 demo: web

@@ -20,6 +20,7 @@ var (
 	ErrForbidden    = errors.New("Na túto akciu nemáte oprávnenie")
 	ErrLastAdmin    = errors.New("Firma musí mať aspoň jedného správcu")
 	ErrSelfDemote   = errors.New("Vlastnú rolu správcu si nemôžete odobrať — požiadajte iného správcu")
+	ErrReadOnly     = errors.New("kľúč je iba na čítanie — zmeny nie sú povolené")
 	SessionDuration = 14 * 24 * time.Hour
 )
 
@@ -31,6 +32,11 @@ var dummyHash = sync.OnceValue(func() string {
 
 // record zapíše záznam do auditu. Zlyhanie auditu sa zaloguje (nemá zhodiť
 // už vykonanú zmenu), ale v produkcii by sa na to malo upozorniť.
+// Audit zapíše záznam do auditu (pre iné balíky, napr. MCP server).
+func (a *App) Audit(ctx context.Context, companyID int64, cat audit.Category, action, entityType string, entityID int64, summary string, before, after any) {
+	a.record(ctx, companyID, cat, action, entityType, entityID, summary, before, after)
+}
+
 func (a *App) record(ctx context.Context, companyID int64, cat audit.Category, action, entityType string, entityID int64, summary string, before, after any) {
 	e := audit.New(auth.ActorFrom(ctx), companyID, cat, action, entityType, entityID, summary, before, after)
 	if err := a.Store.AppendAudit(ctx, &e); err != nil {
@@ -148,6 +154,9 @@ func (a *App) Require(ctx context.Context, companyID int64, p auth.Perm) error {
 	}
 	if p != "" && !role.Can(p) {
 		return ErrForbidden
+	}
+	if p.IsWrite() && auth.ActorFrom(ctx).ReadOnly {
+		return ErrReadOnly
 	}
 	return nil
 }
