@@ -19,20 +19,37 @@ func isUnique(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed")
 }
 
-const userCols = "id, email, name, password_hash, active, super_admin"
+const userCols = "id, email, name, password_hash, active, super_admin, mfa_json"
 
 func scanUser(r interface{ Scan(...any) error }) (auth.User, error) {
 	var u auth.User
-	err := r.Scan(&u.ID, &u.Email, &u.Name, &u.PasswordHash, &u.Active, &u.SuperAdmin)
+	var mfa string
+	err := r.Scan(&u.ID, &u.Email, &u.Name, &u.PasswordHash, &u.Active, &u.SuperAdmin, &mfa)
 	if errors.Is(err, sql.ErrNoRows) {
 		return u, store.ErrNotFound
+	}
+	if err == nil && mfa != "" {
+		err = json.Unmarshal([]byte(mfa), &u.MFA)
 	}
 	return u, err
 }
 
+// mfaJSON: prázdny reťazec, kým si používateľ 2FA nenastaví.
+func mfaJSON(m auth.MFA) (string, error) {
+	if !m.Enabled && m.Secret == "" && len(m.Recovery) == 0 {
+		return "", nil
+	}
+	b, err := json.Marshal(m)
+	return string(b), err
+}
+
 func (s *Store) CreateUser(ctx context.Context, u auth.User) (auth.User, error) {
-	res, err := s.db.ExecContext(ctx, `INSERT INTO users (email, name, password_hash, active, super_admin)
-		VALUES (?, ?, ?, ?, ?)`, strings.TrimSpace(u.Email), u.Name, u.PasswordHash, u.Active, u.SuperAdmin)
+	mfa, err := mfaJSON(u.MFA)
+	if err != nil {
+		return u, err
+	}
+	res, err := s.db.ExecContext(ctx, `INSERT INTO users (email, name, password_hash, active, super_admin, mfa_json)
+		VALUES (?, ?, ?, ?, ?, ?)`, strings.TrimSpace(u.Email), u.Name, u.PasswordHash, u.Active, u.SuperAdmin, mfa)
 	if isUnique(err) {
 		return u, store.ErrDuplicate
 	}
@@ -52,8 +69,12 @@ func (s *Store) GetUserByEmail(ctx context.Context, email string) (auth.User, er
 }
 
 func (s *Store) UpdateUser(ctx context.Context, u auth.User) error {
-	res, err := s.db.ExecContext(ctx, `UPDATE users SET email = ?, name = ?, password_hash = ?, active = ?, super_admin = ?
-		WHERE id = ?`, strings.TrimSpace(u.Email), u.Name, u.PasswordHash, u.Active, u.SuperAdmin, u.ID)
+	mfa, err := mfaJSON(u.MFA)
+	if err != nil {
+		return err
+	}
+	res, err := s.db.ExecContext(ctx, `UPDATE users SET email = ?, name = ?, password_hash = ?, active = ?, super_admin = ?, mfa_json = ?
+		WHERE id = ?`, strings.TrimSpace(u.Email), u.Name, u.PasswordHash, u.Active, u.SuperAdmin, mfa, u.ID)
 	if isUnique(err) {
 		return store.ErrDuplicate
 	}

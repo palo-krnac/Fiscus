@@ -159,19 +159,63 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := auth.WithActor(r.Context(), auth.Actor{Name: strings.TrimSpace(body.Email), Channel: auth.ChannelWeb, IP: clientIP(r)})
 	token, u, err := s.App.Login(ctx, body.Email, body.Password)
-	if err != nil {
-		if errors.Is(err, app.ErrBadLogin) {
-			s.limit.fail(key, now)
-			writeErr(w, http.StatusUnauthorized, err.Error(), nil)
-			return
-		}
+	var need *app.MFARequired
+	switch {
+	case errors.As(err, &need):
+		// heslo sedí, relácia vznikne až po kóde z aplikácie
+		writeJSON(w, http.StatusOK, map[string]any{"mfa": true, "ticket": need.Ticket})
+		return
+	case errors.Is(err, app.ErrBadLogin):
+		s.limit.fail(key, now)
+		writeErr(w, http.StatusUnauthorized, err.Error(), nil)
+		return
+	case err != nil:
 		fail(w, err)
 		return
 	}
 	s.limit.reset(key)
+	s.setSession(w, r, token, u)
+}
+
+func (s *Server) setSession(w http.ResponseWriter, r *http.Request, token string, u auth.User) {
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: token, Path: "/",
 		MaxAge: int(app.SessionDuration.Seconds()), HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: secure(r)})
 	writeJSON(w, http.StatusOK, map[string]any{"id": u.ID, "name": u.Name, "email": u.Email})
+}
+
+// loginMFA dokončí prihlásenie kódom 2FA.
+func (s *Server) loginMFA(w http.ResponseWriter, r *http.Request) {
+	if !s.authRequired() {
+		writeErr(w, http.StatusBadRequest, "Desktopová verzia nepoužíva prihlasovanie", nil)
+		return
+	}
+	var body struct {
+		Ticket string `json:"ticket"`
+		Code   string `json:"code"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	// podľa lístka, nie iba IP: v kancelárii za jednou IP by inak zlé kódy
+	// jedného človeka zablokovali prihlásenie všetkým
+	key := clientIP(r) + "|2fa|" + auth.TokenHash(body.Ticket)
+	now := time.Now()
+	if !s.limit.allow(key, now) {
+		writeErr(w, http.StatusTooManyRequests, "Priveľa neúspešných pokusov. Skúste to o 15 minút.", nil)
+		return
+	}
+	ctx := auth.WithActor(r.Context(), auth.Actor{Channel: auth.ChannelWeb, IP: clientIP(r)})
+	token, u, err := s.App.LoginMFA(ctx, body.Ticket, body.Code)
+	switch {
+	case errors.Is(err, app.ErrMFACode), errors.Is(err, app.ErrMFATicket):
+		s.limit.fail(key, now)
+		writeErr(w, http.StatusUnauthorized, err.Error(), nil)
+		return
+	case err != nil:
+		fail(w, err)
+		return
+	}
+	s.setSession(w, r, token, u)
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {

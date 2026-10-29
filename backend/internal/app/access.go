@@ -58,6 +58,18 @@ func (a *App) Login(ctx context.Context, email, password string) (string, auth.U
 		a.record(ctx, 0, audit.CatAuth, "login_failed", "user", u.ID, "Neúspešné prihlásenie: "+u.Email, nil, nil)
 		return "", auth.User{}, ErrBadLogin
 	}
+	if u.MFA.Enabled {
+		ticket, err := a.mfaTickets.issue(u.ID, a.now())
+		if err != nil {
+			return "", u, err
+		}
+		return "", u, &MFARequired{Ticket: ticket}
+	}
+	return a.startSession(ctx, u)
+}
+
+// startSession vytvorí reláciu po úspešnom overení.
+func (a *App) startSession(ctx context.Context, u auth.User) (string, auth.User, error) {
 	token, hash, err := auth.NewToken()
 	if err != nil {
 		return "", u, err
@@ -202,10 +214,11 @@ type publicUserT struct {
 	Name       string `json:"name"`
 	Active     bool   `json:"active"`
 	SuperAdmin bool   `json:"superAdmin"`
+	TwoFactor  bool   `json:"twoFactor"`
 }
 
 func publicUser(u auth.User) publicUserT {
-	return publicUserT{u.ID, u.Email, u.Name, u.Active, u.SuperAdmin}
+	return publicUserT{u.ID, u.Email, u.Name, u.Active, u.SuperAdmin, u.MFA.Enabled}
 }
 
 // CompanyUsers vráti používateľov firmy s rolami.

@@ -96,6 +96,8 @@ type User struct {
 	// SuperAdmin je správca celej inštalácie (napr. majiteľ účtovnej kancelárie):
 	// zakladá firmy a používateľov a vidí všetky firmy.
 	SuperAdmin bool `json:"superAdmin"`
+	// MFA je dvojfázové overenie (kľúč a záložné kódy sa nikdy neposielajú von).
+	MFA MFA `json:"-"`
 }
 
 // Membership je rola používateľa v jednej firme.
