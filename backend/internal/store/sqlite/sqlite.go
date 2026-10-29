@@ -1,0 +1,352 @@
+//go:build sqlite
+
+// Package sqlite je úložisko nad SQLite (ovládač modernc.org/sqlite — čisté Go,
+// bez C kompilátora, takže sa dá krížovo kompilovať pre Windows/macOS/Linux).
+//
+// Kompiluje sa s tagom: go build -tags sqlite
+package sqlite
+
+import (
+	"context"
+	"database/sql"
+	_ "embed"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+
+	_ "modernc.org/sqlite"
+
+	"github.com/palo-krnac/fiscus/backend/internal/invoice"
+	"github.com/palo-krnac/fiscus/backend/internal/money"
+	"github.com/palo-krnac/fiscus/backend/internal/store"
+	"github.com/palo-krnac/fiscus/backend/internal/vat"
+)
+
+//go:embed schema.sql
+var schemaV1 string
+
+// migrations[i] prevedie schému z verzie i na i+1.
+var migrations = []string{schemaV1}
+
+// Store je SQLite úložisko.
+type Store struct{ db *sql.DB }
+
+// Open otvorí (alebo vytvorí) databázu a spustí migrácie.
+func Open(path string) (*Store, error) {
+	dsn := "file:" + path + "?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return nil, err
+	}
+	// SQLite má jedného zapisovateľa; jedno spojenie vylúči konflikty zámkov.
+	db.SetMaxOpenConns(1)
+	s := &Store{db: db}
+	if err := s.migrate(context.Background()); err != nil {
+		db.Close()
+		return nil, err
+	}
+	return s, nil
+}
+
+func (s *Store) migrate(ctx context.Context) error {
+	var v int
+	if err := s.db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&v); err != nil {
+		return err
+	}
+	if v > len(migrations) {
+		return fmt.Errorf("databáza je z novšej verzie programu (schéma %d)", v)
+	}
+	for i := v; i < len(migrations); i++ {
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, migrations[i]); err != nil {
+			tx.Rollback()
+			return fmt.Errorf("migrácia %d: %w", i+1, err)
+		}
+		if _, err := tx.ExecContext(ctx, fmt.Sprintf("PRAGMA user_version = %d", i+1)); err != nil {
+			tx.Rollback()
+			return err
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Store) Close() error { return s.db.Close() }
+
+// ---- firmy ----
+
+const companyCols = "id, name, street, city, zip, ico, dic, icdph, iban, vat_payer"
+
+func scanCompany(r interface{ Scan(...any) error }) (store.Company, error) {
+	var c store.Company
+	err := r.Scan(&c.ID, &c.Name, &c.Street, &c.City, &c.Zip, &c.ICO, &c.DIC, &c.ICDPH, &c.IBAN, &c.VATPayer)
+	return c, err
+}
+
+func (s *Store) ListCompanies(ctx context.Context) ([]store.Company, error) {
+	rows, err := s.db.QueryContext(ctx, "SELECT "+companyCols+" FROM companies ORDER BY id")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []store.Company
+	for rows.Next() {
+		c, err := scanCompany(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) CountCompanies(ctx context.Context) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM companies").Scan(&n)
+	return n, err
+}
+
+func (s *Store) CreateCompany(ctx context.Context, c store.Company) (store.Company, error) {
+	res, err := s.db.ExecContext(ctx,
+		`INSERT INTO companies (name, street, city, zip, ico, dic, icdph, iban, vat_payer)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		c.Name, c.Street, c.City, c.Zip, c.ICO, c.DIC, c.ICDPH, c.IBAN, c.VATPayer)
+	if err != nil {
+		return c, err
+	}
+	c.ID, err = res.LastInsertId()
+	return c, err
+}
+
+func (s *Store) GetCompany(ctx context.Context, id int64) (store.Company, error) {
+	c, err := scanCompany(s.db.QueryRowContext(ctx, "SELECT "+companyCols+" FROM companies WHERE id = ?", id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return c, store.ErrNotFound
+	}
+	return c, err
+}
+
+// ---- faktúry ----
+
+const invoiceCols = `id, company_id, kind, status, number, variable_symbol,
+	customer_name, customer_street, customer_city, customer_zip, customer_country,
+	customer_ico, customer_dic, customer_icdph, customer_email,
+	issue_date, delivery_date, due_date, paid_date,
+	currency, price_mode, reverse_charge, note, summary_json`
+
+func scanInvoice(r interface{ Scan(...any) error }) (invoice.Invoice, error) {
+	var inv invoice.Invoice
+	var issue, delivery, due, paid, summary string
+	c := &inv.Customer
+	err := r.Scan(&inv.ID, &inv.CompanyID, &inv.Kind, &inv.Status, &inv.Number, &inv.VariableSymbol,
+		&c.Name, &c.Street, &c.City, &c.Zip, &c.Country, &c.ICO, &c.DIC, &c.ICDPH, &c.Email,
+		&issue, &delivery, &due, &paid,
+		&inv.Currency, &inv.PriceMode, &inv.ReverseCharge, &inv.Note, &summary)
+	if err != nil {
+		return inv, err
+	}
+	for _, d := range []struct {
+		src string
+		dst *invoice.Date
+	}{{issue, &inv.IssueDate}, {delivery, &inv.DeliveryDate}, {due, &inv.DueDate}, {paid, &inv.PaidDate}} {
+		if d.src != "" {
+			if *d.dst, err = invoice.ParseDate(d.src); err != nil {
+				return inv, err
+			}
+		}
+	}
+	err = json.Unmarshal([]byte(summary), &inv.Summary)
+	return inv, err
+}
+
+func (s *Store) loadLines(ctx context.Context, inv *invoice.Invoice) error {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT description, quantity, unit, unit_price, vat_rate, amount
+		 FROM invoice_lines WHERE invoice_id = ? ORDER BY position`, inv.ID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	inv.Lines = nil
+	for rows.Next() {
+		var l invoice.Line
+		var q, p, a int64
+		var r int
+		if err := rows.Scan(&l.Description, &q, &l.Unit, &p, &r, &a); err != nil {
+			return err
+		}
+		l.Quantity, l.UnitPrice, l.Amount, l.Rate = money.FromRaw(q), money.FromRaw(p), money.FromRaw(a), vat.Rate(r)
+		inv.Lines = append(inv.Lines, l)
+	}
+	return rows.Err()
+}
+
+func (s *Store) ListInvoices(ctx context.Context, companyID int64, f store.InvoiceFilter) ([]invoice.Invoice, error) {
+	q := "SELECT " + invoiceCols + " FROM invoices WHERE company_id = ?"
+	args := []any{companyID}
+	if f.Year != 0 {
+		q += " AND substr(issue_date, 1, 4) = ?"
+		args = append(args, fmt.Sprintf("%04d", f.Year))
+	}
+	if f.Status != "" {
+		q += " AND status = ?"
+		args = append(args, string(f.Status))
+	}
+	// Hľadanie sa robí v Go: lower() v SQLite nepozná slovenskú diakritiku.
+	q += " ORDER BY issue_date DESC, id DESC"
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	var out []invoice.Invoice
+	needle := strings.ToLower(strings.TrimSpace(f.Search))
+	for rows.Next() {
+		inv, err := scanInvoice(rows)
+		if err != nil {
+			rows.Close()
+			return nil, err
+		}
+		if needle != "" {
+			hay := strings.ToLower(inv.Number + " " + inv.Customer.Name + " " + inv.Customer.ICO)
+			if !strings.Contains(hay, needle) {
+				continue
+			}
+		}
+		out = append(out, inv)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for i := range out {
+		if err := s.loadLines(ctx, &out[i]); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
+func (s *Store) GetInvoice(ctx context.Context, companyID, id int64) (invoice.Invoice, error) {
+	inv, err := scanInvoice(s.db.QueryRowContext(ctx,
+		"SELECT "+invoiceCols+" FROM invoices WHERE id = ? AND company_id = ?", id, companyID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return inv, store.ErrNotFound
+	}
+	if err != nil {
+		return inv, err
+	}
+	return inv, s.loadLines(ctx, &inv)
+}
+
+func (s *Store) SaveInvoice(ctx context.Context, companyID int64, inv *invoice.Invoice) error {
+	summary, err := json.Marshal(inv.Summary)
+	if err != nil {
+		return err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	c := inv.Customer
+	vals := []any{string(inv.Kind), string(inv.Status), inv.Number, inv.VariableSymbol,
+		c.Name, c.Street, c.City, c.Zip, c.Country, c.ICO, c.DIC, c.ICDPH, c.Email,
+		inv.IssueDate.String(), inv.DeliveryDate.String(), inv.DueDate.String(), inv.PaidDate.String(),
+		inv.Currency, string(inv.PriceMode), inv.ReverseCharge, inv.Note, string(summary)}
+
+	if inv.ID == 0 {
+		res, err := tx.ExecContext(ctx, `INSERT INTO invoices (company_id, kind, status, number, variable_symbol,
+			customer_name, customer_street, customer_city, customer_zip, customer_country,
+			customer_ico, customer_dic, customer_icdph, customer_email,
+			issue_date, delivery_date, due_date, paid_date,
+			currency, price_mode, reverse_charge, note, summary_json)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			append([]any{companyID}, vals...)...)
+		if err != nil {
+			return err
+		}
+		if inv.ID, err = res.LastInsertId(); err != nil {
+			return err
+		}
+	} else {
+		res, err := tx.ExecContext(ctx, `UPDATE invoices SET kind = ?, status = ?, number = ?, variable_symbol = ?,
+			customer_name = ?, customer_street = ?, customer_city = ?, customer_zip = ?, customer_country = ?,
+			customer_ico = ?, customer_dic = ?, customer_icdph = ?, customer_email = ?,
+			issue_date = ?, delivery_date = ?, due_date = ?, paid_date = ?,
+			currency = ?, price_mode = ?, reverse_charge = ?, note = ?, summary_json = ?
+			WHERE id = ? AND company_id = ?`,
+			append(vals, inv.ID, companyID)...)
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return store.ErrNotFound // neexistuje alebo patrí inej firme
+		}
+		if _, err := tx.ExecContext(ctx, "DELETE FROM invoice_lines WHERE invoice_id = ?", inv.ID); err != nil {
+			return err
+		}
+	}
+	for i, l := range inv.Lines {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO invoice_lines
+			(invoice_id, position, description, quantity, unit, unit_price, vat_rate, amount)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			inv.ID, i, l.Description, l.Quantity.Raw(), l.Unit, l.UnitPrice.Raw(), int(l.Rate), l.Amount.Raw()); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	inv.CompanyID = companyID
+	return nil
+}
+
+func (s *Store) NextSequence(ctx context.Context, companyID int64, series string, year int) (int, error) {
+	if series == "" || year < 2000 {
+		return 0, fmt.Errorf("neplatný rad %q/%d", series, year)
+	}
+	var v int
+	err := s.db.QueryRowContext(ctx, `INSERT INTO sequences (company_id, series, year, value) VALUES (?, ?, ?, 1)
+		ON CONFLICT (company_id, series, year) DO UPDATE SET value = value + 1
+		RETURNING value`, companyID, series, year).Scan(&v)
+	return v, err
+}
+
+// ---- zálohy (implementuje backup.Source) ----
+
+// Snapshot vytvorí konzistentnú kópiu databázy aj počas behu programu.
+func (s *Store) Snapshot(ctx context.Context, dst string) error {
+	_, err := s.db.ExecContext(ctx, "VACUUM INTO ?", dst)
+	return err
+}
+
+// Verify otvorí súbor databázy a spustí PRAGMA integrity_check.
+func (s *Store) Verify(ctx context.Context, path string) error {
+	db, err := sql.Open("sqlite", "file:"+path+"?mode=ro")
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	var res string
+	if err := db.QueryRowContext(ctx, "PRAGMA integrity_check").Scan(&res); err != nil {
+		return err
+	}
+	if res != "ok" {
+		return fmt.Errorf("integrity_check: %s", res)
+	}
+	var v int
+	if err := db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&v); err != nil {
+		return err
+	}
+	if v == 0 {
+		return errors.New("súbor neobsahuje databázu Fiskus")
+	}
+	return nil
+}

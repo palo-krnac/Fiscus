@@ -1,0 +1,99 @@
+// Fiskus — účtovný program. Jedna binárka: API + frontend.
+//
+//	fiskus -demo                          ukážkové dáta v pamäti
+//	fiskus -db fiskus.db                  SQLite (zostaviť s -tags sqlite)
+//	fiskus -mode server -addr :8080 ...   serverový režim (viac firiem)
+package main
+
+import (
+	"context"
+	"errors"
+	"flag"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/palo-krnac/fiscus/backend/internal/api"
+	"github.com/palo-krnac/fiscus/backend/internal/app"
+	"github.com/palo-krnac/fiscus/backend/internal/demo"
+	"github.com/palo-krnac/fiscus/backend/internal/edition"
+	"github.com/palo-krnac/fiscus/backend/internal/store"
+	"github.com/palo-krnac/fiscus/backend/internal/store/memstore"
+	"github.com/palo-krnac/fiscus/backend/internal/web"
+)
+
+// version sa nastaví pri zostavení: -ldflags "-X main.version=1.0.0"
+var version = "dev"
+
+// openSQLite nastaví súbor sqlite_on.go (iba pri zostavení s -tags sqlite).
+var openSQLite func(path string, backupDir string) (store.Store, func(), error)
+
+func main() {
+	mode := flag.String("mode", "desktop", "režim: desktop | server")
+	addr := flag.String("addr", "127.0.0.1:8080", "adresa HTTP servera")
+	dbPath := flag.String("db", "", "cesta k databáze SQLite")
+	backupDir := flag.String("backup-dir", "", "priečinok na automatické zálohy (heslo v FISKUS_BACKUP_PASSWORD)")
+	demoData := flag.Bool("demo", false, "spustiť s ukážkovými dátami v pamäti")
+	flag.Parse()
+
+	log.Printf("Fiskus %s", version)
+	caps, err := edition.For(edition.Mode(*mode))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var st store.Store
+	cleanup := func() {}
+	switch {
+	case *dbPath != "":
+		if openSQLite == nil {
+			log.Fatal("táto binárka je zostavená bez SQLite — použite -tags sqlite alebo -demo")
+		}
+		st, cleanup, err = openSQLite(*dbPath, *backupDir)
+		if err != nil {
+			log.Fatal(err)
+		}
+	case *demoData:
+		st = memstore.New()
+	default:
+		log.Fatal("zadajte -db <súbor> alebo -demo")
+	}
+	defer st.Close()
+
+	a := app.New(st, caps)
+	if *demoData {
+		if _, err := demo.Seed(context.Background(), a); err != nil {
+			log.Fatal(err)
+		}
+		log.Print("načítané ukážkové dáta")
+	}
+
+	webFS := web.FS()
+	if webFS == nil {
+		log.Print("upozornenie: frontend nie je zostavený, beží iba API")
+	}
+	srv := &http.Server{
+		Addr:              *addr,
+		Handler:           (&api.Server{App: a, Web: webFS}).Handler(),
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+
+	go func() {
+		log.Printf("režim %s, otvorte http://%s", caps.Mode, *addr)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatal(err)
+		}
+	}()
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	<-stop
+	log.Print("ukončujem…")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_ = srv.Shutdown(ctx)
+	cleanup() // pri SQLite: záverečná záloha
+}

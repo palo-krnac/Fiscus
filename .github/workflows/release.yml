@@ -1,0 +1,57 @@
+name: Release
+
+# Spustí sa pri značke verzie, napr.: git tag v0.1.0 && git push --tags
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Binárky pre Windows, macOS, Linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npx vite build --outDir ../backend/internal/web/dist --emptyOutDir
+
+      - name: Go závislosti
+        working-directory: backend
+        run: |
+          go get modernc.org/sqlite@latest
+          go mod tidy
+
+      - name: Krížová kompilácia
+        working-directory: backend
+        env:
+          CGO_ENABLED: '0'
+        run: |
+          mkdir -p ../dist
+          for target in windows/amd64 darwin/arm64 darwin/amd64 linux/amd64 linux/arm64; do
+            os=${target%/*}; arch=${target#*/}
+            ext=""; [ "$os" = windows ] && ext=".exe"
+            GOOS=$os GOARCH=$arch go build -tags sqlite -trimpath \
+              -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" \
+              -o ../dist/fiskus-${GITHUB_REF_NAME}-${os}-${arch}${ext} ./cmd/fiskus
+          done
+          ls -la ../dist
+
+      - name: GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
