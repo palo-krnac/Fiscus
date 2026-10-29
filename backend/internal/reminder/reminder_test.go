@@ -31,11 +31,11 @@ func TestStatutoryRate(t *testing.T) {
 		{"2020-05-05", false, "5.00"},
 	}
 	for _, c := range cases {
-		if got := StatutoryRate(d(c.firstDay), c.business).String(); got != c.want {
+		if got := DefaultLaw().StatutoryRate(d(c.firstDay), c.business).String(); got != c.want {
 			t.Errorf("%s podnikateľ=%v: %s, chcel som %s", c.firstDay, c.business, got, c.want)
 		}
 	}
-	if ECBUpdated.String() != "2026-09-16" {
+	if BuiltinECB().Updated().String() != "2026-09-16" {
 		t.Fatal("dátum aktualizácie ECB")
 	}
 }
@@ -87,6 +87,9 @@ func TestBuild(t *testing.T) {
 	}
 	if it := r.Items[1]; it.Days != 17 || it.Interest.String() != "1.33" {
 		t.Fatalf("položka 2: %+v", it)
+	}
+	if r.Margin.String() != "9.00" || r.FeeEach.String() != "40.00" {
+		t.Fatalf("prirážka a náhrada: %s %s", r.Margin, r.FeeEach)
 	}
 	if r.Principal.String() != "1246.00" || r.InterestTotal.String() != "11.22" || r.Fees.String() != "80.00" || r.Total.String() != "1337.22" {
 		t.Fatalf("súčty: %s %s %s %s", r.Principal, r.InterestTotal, r.Fees, r.Total)
@@ -200,5 +203,59 @@ func TestJSONRoundTrip(t *testing.T) {
 	var back Reminder
 	if err := json.Unmarshal(b, &back); err != nil || !reflect.DeepEqual(back, r) {
 		t.Fatalf("JSON:\n got %+v\nwant %+v", back, r)
+	}
+}
+
+func TestLaw(t *testing.T) {
+	law := DefaultLaw()
+	law.ECB = Sorted(append(BuiltinECB(), Rate{From: d("2026-12-16"), Rate: m.MustParse("2.90")}))
+	law.BusinessMargin, law.FlatFee = m.MustParse("8"), m.MustParse("50")
+	if law.ECB.Updated().String() != "2026-12-16" {
+		t.Fatalf("zoradenie: %s", law.ECB.Updated())
+	}
+	cases := []struct {
+		day      string
+		business bool
+		want     string
+	}{
+		{"2026-12-17", true, "10.90"}, // ručne doplnená sadzba ECB, prirážka 8
+		{"2026-12-17", false, "7.90"}, // spotrebiteľ, prirážka 5
+		{"2026-10-01", true, "10.65"}, // zabudovaná sadzba ECB
+		{"2010-01-01", true, "8.05"},  // pred prvým záznamom
+	}
+	for _, c := range cases {
+		if got := law.StatutoryRate(d(c.day), c.business).String(); got != c.want {
+			t.Errorf("%s: %s, chcel som %s", c.day, got, c.want)
+		}
+	}
+	if (ECBTable{}).On(d("2026-01-01")).Sign() != 0 || !(ECBTable{}).Updated().IsZero() {
+		t.Fatal("prázdna tabuľka")
+	}
+	// upomienka použije parametre z volieb
+	a := overdue(1, "FA20261", "2026-12-20", "")
+	a.Summary.Total = m.MustParse("1000")
+	r, err := Build([]invoice.Invoice{a}, 1, Options{Date: d("2027-01-20"), PayBy: d("2027-01-27"), Interest: InterestStatutory,
+		ChargeFee: true, Law: &law})
+	if err != nil || r.Items[0].Rate.String() != "10.90" || r.Fees.String() != "50.00" {
+		t.Fatalf("upomienka s vlastnými parametrami: %+v %v", r.Items, err)
+	}
+}
+
+func TestValidateRate(t *testing.T) {
+	cases := []struct {
+		r     Rate
+		field string
+	}{
+		{Rate{From: d("2027-01-01"), Rate: m.MustParse("3")}, ""},
+		{Rate{From: d("2027-01-01"), Rate: m.MustParse("-0.5")}, ""},
+		{Rate{Rate: m.MustParse("3")}, "from"},
+		{Rate{From: d("2027-01-01"), Rate: m.MustParse("25")}, "rate"},
+		{Rate{From: d("2027-01-01"), Rate: m.MustParse("-2")}, "rate"},
+	}
+	for _, c := range cases {
+		err := ValidateRate(c.r)
+		if c.field == "" && err != nil || c.field != "" && !fieldIs(c.field)(err) {
+			t.Errorf("%+v: %v", c.r, err)
+		}
 	}
 }

@@ -1,13 +1,16 @@
 package reminder
 
 import (
+	"sort"
+
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/money"
 )
 
-// Základná úroková sadzba ECB (hlavné refinančné operácie) od daného dňa.
-// Zdroj: ECB, prehľad sadzieb úrokov z omeškania na najpravo.sk.
-// Pri zmene sadzby ECB treba doplniť riadok (a ECBUpdated).
+// Zabudovaná tabuľka: základná úroková sadzba ECB (hlavné refinančné operácie)
+// od daného dňa. Zdroj: ECB, prehľad sadzieb úrokov z omeškania na najpravo.sk.
+// Je to iba predvyplnenie: platné sadzby sú v Nastaveniach → Legislatíva
+// (balík legal). Nové riadky doplnené sem pri novej verzii sa doplnia aj tam.
 var ecbRates = []struct {
 	from string
 	rate string
@@ -36,17 +39,65 @@ var ecbRates = []struct {
 	{"2026-09-16", "2.65"},
 }
 
-// ECBUpdated je dátum poslednej známej zmeny sadzby ECB v tabuľke.
-var ECBUpdated = invoice.MustDate(ecbRates[len(ecbRates)-1].from)
+// Rate je základná úroková sadzba ECB platná od daného dňa.
+type Rate struct {
+	From invoice.Date `json:"from"`
+	Rate money.Dec    `json:"rate"`
+}
 
-// ECBRate vráti základnú úrokovú sadzbu ECB (% p. a.) platnú v daný deň.
-func ECBRate(d invoice.Date) money.Dec {
-	rate := money.MustParse(ecbRates[0].rate)
-	for _, r := range ecbRates {
-		if d.Before(invoice.MustDate(r.from)) {
+// ECBTable sú sadzby zoradené podľa dátumu.
+type ECBTable []Rate
+
+// BuiltinECB vráti zabudovanú tabuľku sadzieb (predvolené hodnoty novej inštalácie).
+func BuiltinECB() ECBTable {
+	out := make(ECBTable, len(ecbRates))
+	for i, r := range ecbRates {
+		out[i] = Rate{From: invoice.MustDate(r.from), Rate: money.MustParse(r.rate)}
+	}
+	return out
+}
+
+// Sorted vráti tabuľku zoradenú podľa dátumu.
+func Sorted(rates []Rate) ECBTable {
+	out := append(ECBTable(nil), rates...)
+	sort.SliceStable(out, func(i, j int) bool { return out[i].From.Before(out[j].From) })
+	return out
+}
+
+// On vráti sadzbu platnú v daný deň (pred prvým záznamom platí prvý záznam).
+func (t ECBTable) On(d invoice.Date) money.Dec {
+	if len(t) == 0 {
+		return money.Zero
+	}
+	rate := t[0].Rate
+	for _, r := range t {
+		if d.Before(r.From) {
 			break
 		}
-		rate = money.MustParse(r.rate)
+		rate = r.Rate
 	}
 	return rate
+}
+
+// Updated vráti dátum poslednej zmeny sadzby v tabuľke.
+func (t ECBTable) Updated() invoice.Date {
+	if len(t) == 0 {
+		return invoice.Date{}
+	}
+	return t[len(t)-1].From
+}
+
+// ValidateRate skontroluje ručne zadanú sadzbu.
+func ValidateRate(r Rate) error {
+	var fe []invoice.FieldError
+	if r.From.IsZero() {
+		fe = append(fe, invoice.FieldError{Field: "from", Message: "Zadajte dátum, od ktorého sadzba platí"})
+	}
+	if r.Rate.Cmp(money.FromInt(-1)) < 0 || r.Rate.Cmp(money.FromInt(20)) > 0 {
+		fe = append(fe, invoice.FieldError{Field: "rate", Message: "Sadzba ECB musí byť od −1 do 20 %"})
+	}
+	if len(fe) > 0 {
+		return &invoice.ValidationError{Fields: fe}
+	}
+	return nil
 }

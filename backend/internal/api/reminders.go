@@ -7,6 +7,7 @@ import (
 
 	"github.com/palo-krnac/fiscus/backend/internal/app"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
+	"github.com/palo-krnac/fiscus/backend/internal/money"
 	"github.com/palo-krnac/fiscus/backend/internal/reminder"
 )
 
@@ -26,11 +27,14 @@ func (s *Server) overdue(w http.ResponseWriter, r *http.Request) {
 		failReminder(w, err)
 		return
 	}
+	law := s.App.Law()
 	writeJSON(w, http.StatusOK, struct {
-		Groups     []app.OverdueGroup `json:"groups"`
-		ECBUpdated invoice.Date       `json:"ecbUpdated"`
-		FlatFee    string             `json:"flatFee"`
-	}{groups, reminder.ECBUpdated, reminder.FlatFee.String()})
+		Groups         []app.OverdueGroup `json:"groups"`
+		ECBUpdated     invoice.Date       `json:"ecbUpdated"`
+		FlatFee        money.Dec          `json:"flatFee"`
+		BusinessMargin money.Dec          `json:"businessMargin"`
+		ConsumerMargin money.Dec          `json:"consumerMargin"`
+	}{groups, law.ECB.Updated(), law.FlatFee, law.BusinessMargin, law.ConsumerMargin})
 }
 
 func (s *Server) listReminders(w http.ResponseWriter, r *http.Request) {

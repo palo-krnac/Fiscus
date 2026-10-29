@@ -80,6 +80,9 @@ func main() {
 
 	a := app.New(st, caps)
 	a.Backups, a.BackupsOff = backups, backupsOff
+	if err := a.LoadLegal(context.Background()); err != nil {
+		log.Fatalf("legislatíva: %v", err)
+	}
 	if *demoData {
 		a.BackupsOff = "Ukážkové dáta sú iba v pamäti a nezálohujú sa. Pre ostrú prácu spustite Fiškus s parametrami -db a -backup-dir."
 	}

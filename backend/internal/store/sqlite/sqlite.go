@@ -65,9 +65,12 @@ var schemaV13 string
 //go:embed schema_v14.sql
 var schemaV14 string
 
+//go:embed schema_v15.sql
+var schemaV15 string
+
 // migrations[i] prevedie schému z verzie i na i+1. Existujúce migrácie sa
 // nikdy nemenia — zmena schémy je vždy nová migrácia na konci.
-var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4, schemaV5, schemaV6, schemaV7, schemaV8, schemaV9, schemaV10, schemaV11, schemaV12, schemaV13, schemaV14}
+var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4, schemaV5, schemaV6, schemaV7, schemaV8, schemaV9, schemaV10, schemaV11, schemaV12, schemaV13, schemaV14, schemaV15}
 
 // Store je SQLite úložisko.
 type Store struct{ db *sql.DB }

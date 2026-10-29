@@ -66,6 +66,9 @@ func (s *Server) Handler() http.Handler {
 	open("GET /api/license", s.getLicense)
 	open("POST /api/license", s.setLicense)
 	open("GET /api/registry/{ico}", s.lookupICO)
+	open("GET /api/legal", s.getLegal)
+	open("PUT /api/legal", s.setLegal)
+	open("POST /api/legal/reset", s.resetLegal)
 
 	open("GET /api/companies", s.listCompanies)
 	open("POST /api/companies", s.createCompany)

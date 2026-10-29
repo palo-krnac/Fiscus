@@ -17,7 +17,7 @@ import Textarea from 'primevue/textarea'
 import { useConfirm } from 'primevue/useconfirm'
 import { useToast } from 'primevue/usetoast'
 import { api, ApiError } from '../lib/api.js'
-import { can, session } from '../lib/session.js'
+import { can, isSuperAdmin, session } from '../lib/session.js'
 import { formatAmount, formatDate, formatMoney, fromISODate, toISODate } from '../lib/format.js'
 import { matches, searchTerms } from '../lib/search.js'
 import { overdueColumns, reminderColumns } from '../lib/columns.js'
@@ -39,6 +39,7 @@ const year = ref(thisYear)
 const groups = ref([])
 const ecbUpdated = ref('')
 const flatFee = ref('40.00')
+const margins = ref({ business: '9', consumer: '5' })
 const reminders = ref([])
 const selected = ref({}) // id faktúry → true
 const loading = ref(true)
@@ -51,6 +52,7 @@ async function load() {
     groups.value = ov.groups
     ecbUpdated.value = ov.ecbUpdated
     flatFee.value = ov.flatFee
+    margins.value = { business: ov.businessMargin, consumer: ov.consumerMargin }
     reminders.value = list
     selected.value = Object.fromEntries(ov.groups.flatMap((g) => g.invoices.map((i) => [i.id, true])))
     loadError.value = ''
@@ -359,7 +361,9 @@ function remove(r) {
             <strong>{{ formatMoney(dlg.preview.total) }}</strong>
           </div>
           <p class="muted">
-            Zákonná sadzba = sadzba ECB k prvému dňu omeškania + {{ dlg.group.business ? 9 : 5 }} p. b. Sadzby ECB podľa údajov k {{ formatDate(ecbUpdated) }}.
+            Zákonná sadzba = sadzba ECB k prvému dňu omeškania + {{ String(Number(dlg.group.business ? margins.business : margins.consumer)).replace('.', ',') }} p. b.
+            Posledná sadzba ECB v Legislatíve je od {{ formatDate(ecbUpdated) }}.
+            <RouterLink v-if="isSuperAdmin()" to="/legislativa">Upraviť</RouterLink>
           </p>
         </div>
       </template>

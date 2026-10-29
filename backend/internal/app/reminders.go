@@ -146,6 +146,8 @@ func (a *App) buildReminder(ctx context.Context, companyID int64, req ReminderRe
 		invs = append(invs, inv)
 		next = max(next, level[id]+1)
 	}
+	law := a.Law()
+	req.Options.Law = &law
 	return reminder.Build(invs, next, req.Options)
 }
 

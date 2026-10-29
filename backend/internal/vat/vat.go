@@ -1,6 +1,6 @@
 // Package vat počíta DPH podľa slovenských pravidiel.
 //
-// Sadzby sú v číselníku Periods s obdobím platnosti (od 1. 1. 2025: 23 %
+// Sadzby sú v číselníku Periods() s obdobím platnosti (od 1. 1. 2025: 23 %
 // základná, 19 % a 5 % znížené; do 31. 12. 2024: 20 % a 10 %, 5 %).
 // 0 % = oslobodené plnenie alebo prenesenie daňovej povinnosti. DPH sa počíta zo súčtu
 // základov za každú sadzbu a zaokrúhľuje na centy — tak, ako ju
@@ -10,6 +10,8 @@ package vat
 import (
 	"fmt"
 	"sort"
+	"sync"
+	"time"
 
 	"github.com/palo-krnac/fiscus/backend/internal/money"
 )
@@ -33,25 +35,91 @@ type Period struct {
 	Rates []Rate `json:"rates"` // od najvyššej; 0 = oslobodené / prenesenie
 }
 
-// Periods je číselník sadzieb DPH na Slovensku. Pri zmene zákona sa
-// pridá nové obdobie na koniec a ukončí sa predchádzajúce.
-var Periods = []Period{
+// DefaultPeriods je predvolený číselník sadzieb DPH na Slovensku (predvyplnenie
+// novej inštalácie). Platný číselník je v Nastaveniach → Legislatíva a do
+// programu sa dostane cez SetPeriods.
+var DefaultPeriods = []Period{
 	{From: "2023-01-01", To: "2024-12-31", Rates: []Rate{Rate20, Rate10, Rate5, Rate0}},
 	{From: "2025-01-01", Rates: []Rate{Rate23, Rate19, Rate5, Rate0}},
+}
+
+var (
+	periodsMu sync.RWMutex
+	periods   = DefaultPeriods
+)
+
+// Periods vráti platný číselník sadzieb DPH.
+func Periods() []Period {
+	periodsMu.RLock()
+	defer periodsMu.RUnlock()
+	return periods
+}
+
+// SetPeriods nastaví platný číselník (po kontrole cez ValidatePeriods).
+func SetPeriods(ps []Period) {
+	cp := make([]Period, len(ps))
+	for i, p := range ps {
+		cp[i] = Period{From: p.From, To: p.To, Rates: append([]Rate(nil), p.Rates...)}
+	}
+	periodsMu.Lock()
+	periods = cp
+	periodsMu.Unlock()
+}
+
+// ValidatePeriods skontroluje číselník: obdobia zoradené, neprekrývajú sa,
+// iba posledné môže byť bez konca, sadzby 0–100 % bez opakovania.
+func ValidatePeriods(ps []Period) error {
+	if len(ps) == 0 {
+		return fmt.Errorf("číselník sadzieb DPH musí mať aspoň jedno obdobie")
+	}
+	for i, p := range ps {
+		n := i + 1
+		if _, err := time.Parse("2006-01-02", p.From); err != nil {
+			return fmt.Errorf("obdobie %d: neplatný začiatok", n)
+		}
+		if p.To != "" {
+			if _, err := time.Parse("2006-01-02", p.To); err != nil {
+				return fmt.Errorf("obdobie %d: neplatný koniec", n)
+			}
+			if p.To < p.From {
+				return fmt.Errorf("obdobie %d: koniec je pred začiatkom", n)
+			}
+		} else if i < len(ps)-1 {
+			return fmt.Errorf("obdobie %d: bez konca môže byť iba posledné obdobie", n)
+		}
+		if i > 0 && p.From <= ps[i-1].To {
+			return fmt.Errorf("obdobie %d sa prekrýva s predchádzajúcim alebo nie je zoradené", n)
+		}
+		if len(p.Rates) == 0 {
+			return fmt.Errorf("obdobie %d: zadajte sadzby", n)
+		}
+		seen := map[Rate]bool{}
+		for _, r := range p.Rates {
+			if r < 0 || r > 100 {
+				return fmt.Errorf("obdobie %d: sadzba %d %% je mimo 0–100", n, r)
+			}
+			if seen[r] {
+				return fmt.Errorf("obdobie %d: sadzba %d %% je dvakrát", n, r)
+			}
+			seen[r] = true
+		}
+	}
+	return nil
 }
 
 // RatesOn vráti sadzby platné k dátumu dodania (YYYY-MM-DD).
 // Pre dátum pred prvým obdobím vráti sadzby prvého obdobia.
 func RatesOn(date string) []Rate {
-	for _, p := range Periods {
+	ps := Periods()
+	for _, p := range ps {
 		if date >= p.From && (p.To == "" || date <= p.To) {
 			return p.Rates
 		}
 	}
-	if date < Periods[0].From {
-		return Periods[0].Rates
+	if date < ps[0].From {
+		return ps[0].Rates
 	}
-	return Periods[len(Periods)-1].Rates
+	return ps[len(ps)-1].Rates
 }
 
 // ValidOn vráti true, ak sadzba platila k dátumu dodania.
@@ -66,7 +134,7 @@ func (r Rate) ValidOn(date string) bool {
 
 // Known vráti true pre sadzbu, ktorá je v niektorom období číselníka.
 func (r Rate) Known() bool {
-	for _, p := range Periods {
+	for _, p := range Periods() {
 		for _, v := range p.Rates {
 			if v == r {
 				return true

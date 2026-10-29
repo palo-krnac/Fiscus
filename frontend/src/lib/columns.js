@@ -250,3 +250,14 @@ export const overdueColumns = [
   t('Upomenutá', (r) => (r.reminded ? levelShort(r.reminded) : ''), 12),
   date('Posledná upomienka', (r) => r.lastReminded),
 ]
+
+export const ecbColumns = [
+  date('Platí od', (r) => r.from),
+  { header: 'Sadzba ECB (%)', value: (r) => Number(r.rate), type: 'number', width: 14 },
+]
+
+export const vatPeriodColumns = [
+  date('Platí od', (r) => r.from),
+  date('Platí do', (r) => r.to),
+  t('Sadzby DPH (%)', (r) => (r.rates ?? []).join(', '), 20),
+]

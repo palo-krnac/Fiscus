@@ -1,5 +1,8 @@
 // Upomienky: názvy stupňov, texty listu a právne odkazy.
-import { formatDate } from './format.js'
+import { formatAmount, formatDate } from './format.js'
+
+// 9.00 → "9", 8.50 → "8,5"
+const num = (v) => String(Number(v ?? 0)).replace('.', ',')
 
 export const levelTitle = (level) =>
   ({ 1: 'Upomienka', 2: '2. upomienka', 3: 'Posledná upomienka pred vymáhaním' })[level] ?? 'Upomienka'
@@ -25,14 +28,14 @@ export function legalNotes(r) {
   if (r.interestMode === 'statutory' && Number(r.interestTotal) > 0) {
     out.push(
       r.business
-        ? 'Úrok z omeškania podľa § 369 Obchodného zákonníka a nariadenia vlády č. 21/2013 Z. z. (základná úroková sadzba ECB platná k prvému dňu omeškania zvýšená o 9 percentuálnych bodov), vypočítaný ku dňu vystavenia upomienky.'
-        : 'Úrok z omeškania podľa § 517 Občianskeho zákonníka a nariadenia vlády č. 87/1995 Z. z. (základná úroková sadzba ECB platná k prvému dňu omeškania zvýšená o 5 percentuálnych bodov), vypočítaný ku dňu vystavenia upomienky.',
+        ? `Úrok z omeškania podľa § 369 Obchodného zákonníka a nariadenia vlády č. 21/2013 Z. z. (základná úroková sadzba ECB platná k prvému dňu omeškania zvýšená o ${num(r.margin)} percentuálnych bodov), vypočítaný ku dňu vystavenia upomienky.`
+        : `Úrok z omeškania podľa § 517 Občianskeho zákonníka a nariadenia vlády č. 87/1995 Z. z. (základná úroková sadzba ECB platná k prvému dňu omeškania zvýšená o ${num(r.margin)} percentuálnych bodov), vypočítaný ku dňu vystavenia upomienky.`,
     )
   } else if (r.interestMode === 'custom' && Number(r.interestTotal) > 0) {
     out.push(`Úrok z omeškania vo výške ${String(r.customRate).replace('.', ',')} % ročne, vypočítaný ku dňu vystavenia upomienky.`)
   }
   if (Number(r.fees) > 0) {
-    out.push('Paušálna náhrada nákladov spojených s uplatnením pohľadávky podľa § 369c Obchodného zákonníka (40 € za každú faktúru).')
+    out.push(`Paušálna náhrada nákladov spojených s uplatnením pohľadávky podľa § 369c Obchodného zákonníka (${formatAmount(r.feeEach)} € za každú faktúru).`)
   }
   if (Number(r.interestTotal) > 0) {
     out.push('Úrok z omeškania plynie až do zaplatenia; uvedená suma je k dátumu upomienky.')
