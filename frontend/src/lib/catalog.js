@@ -37,3 +37,24 @@ export function importLabel(n) {
   const word = n === 1 ? 'položku' : n >= 2 && n <= 4 ? 'položky' : 'položiek'
   return `Importovať ${n} ${word}`
 }
+
+/** Rovnaký názov položky (bez ohľadu na veľkosť písmen a medzery). */
+export function sameNameItem(items, name) {
+  const key = (s) => String(s ?? '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('sk')
+  const k = key(name)
+  return k ? items.find((it) => !it.archived && key(it.name) === k) ?? null : null
+}
+
+/**
+ * Položka cenníka z riadku faktúry: cena v režime faktúry (bez DPH / s DPH),
+ * neplatiteľ DPH ukladá cenu bez DPH so sadzbou 0 %.
+ */
+export function itemFromLine(line, { priceMode = 'net', nonVat = false } = {}) {
+  return {
+    name: String(line.description ?? '').trim(),
+    unit: line.unit || 'ks',
+    price: String(line.unitPrice ?? '0'),
+    priceMode: nonVat ? 'net' : priceMode,
+    vatRate: nonVat ? 0 : Number(line.vatRate ?? 23),
+  }
+}
