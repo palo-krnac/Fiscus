@@ -22,3 +22,17 @@ export function stdioConfig(url, token) {
     2,
   )
 }
+
+/** Klient Claude na webe a v mobile potrebuje verejnú adresu s HTTPS. */
+export function connectorReady(url) {
+  try {
+    const u = new URL(url)
+    const local = ['localhost', '127.0.0.1', '[::1]'].includes(u.hostname) || /^(10|192\.168|172\.(1[6-9]|2\d|3[01]))\./.test(u.hostname)
+    return u.protocol === 'https:' && !local
+  } catch {
+    return false
+  }
+}
+
+/** Povolenie OAuth (pripojená aplikácia) v zozname kľúčov. */
+export const isOAuthGrant = (k) => k?.prefix === 'OAuth'

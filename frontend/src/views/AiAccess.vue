@@ -10,11 +10,11 @@ import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
 import { api } from '../lib/api.js'
 import { formatDate } from '../lib/format.js'
-import { can, isSuperAdmin } from '../lib/session.js'
+import { can, isSuperAdmin, session } from '../lib/session.js'
 import Password from 'primevue/password'
 import { matches, searchTerms } from '../lib/search.js'
 import { apiKeyColumns } from '../lib/columns.js'
-import { claudeCodeCommand, mcpURL, stdioConfig } from '../lib/mcp.js'
+import { claudeCodeCommand, connectorReady, isOAuthGrant, mcpURL, stdioConfig } from '../lib/mcp.js'
 import FormField from '../components/FormField.vue'
 import ExportButton from '../components/ExportButton.vue'
 
@@ -97,7 +97,9 @@ async function copy(text, what) {
 function revoke(k) {
   confirm.require({
     header: 'Zrušiť kľúč',
-    message: `Zrušiť kľúč „${k.name}“ (${k.prefix}…)? Asistent, ktorý ho používa, stratí prístup okamžite.`,
+    message: isOAuthGrant(k)
+      ? `Odpojiť aplikáciu „${k.name}“? Stratí prístup okamžite; znova sa pripojí iba s vaším súhlasom.`
+      : `Zrušiť kľúč „${k.name}“ (${k.prefix}…)? Asistent, ktorý ho používa, stratí prístup okamžite.`,
     acceptLabel: 'Zrušiť kľúč',
     rejectLabel: 'Späť',
     acceptProps: { severity: 'danger', size: 'small' },
@@ -127,6 +129,21 @@ function revoke(k) {
       <RouterLink v-if="can('audit.read')" to="/audit">auditu</RouterLink><template v-else>auditu</template>.
       Faktúry asistent vytvára ako koncepty a vystaví ich až na váš výslovný pokyn.
     </p>
+
+    <section v-if="session.caps.mode === 'server'" class="card">
+      <h2>Claude na webe a v mobile</h2>
+      <p>Bez kľúča — Claude sa prihlási do Fiškusu a vy mu povolíte prístup.</p>
+      <ol class="steps">
+        <li>V Claude otvorte <em>Nastavenia → Konektory</em> a pridajte vlastný konektor.</li>
+        <li>Ako adresu zadajte <code>{{ url }}</code> <Button icon="pi pi-copy" text size="small" aria-label="Kopírovať adresu" @click="copy(url, 'Adresa')" /></li>
+        <li>Po kliknutí na <em>Pripojiť</em> sa otvorí Fiškus: prihláste sa a povoľte prístup. Pripojenie sa zobrazí nižšie v zozname a dá sa zrušiť.</li>
+      </ol>
+      <p v-if="!connectorReady(url)" class="warn">
+        <i class="pi pi-exclamation-triangle" /> Claude sa pripája zo svojich serverov, preto musí byť Fiškus dostupný z internetu cez
+        <strong>https</strong> (napr. za reverznou proxy s certifikátom). Táto adresa taká nie je; za proxy spustite Fiškus s
+        <code>-public-url https://vasa-adresa.sk</code>.
+      </p>
+    </section>
 
     <section class="card">
       <h2>Nový kľúč</h2>
@@ -190,7 +207,10 @@ function revoke(k) {
           <tr v-if="!loading && !visible.length"><td colspan="6" class="empty">Zatiaľ žiadny kľúč.</td></tr>
           <tr v-for="k in visible" :key="k.id" :class="{ revoked: k.revoked }">
             <td class="name" data-label="Názov">{{ k.name }}</td>
-            <td data-label="Kľúč"><code>{{ k.prefix }}…</code></td>
+            <td data-label="Kľúč">
+              <span v-if="isOAuthGrant(k)" class="badge oauth" v-tooltip.top="'Pripojená aplikácia cez OAuth (Claude na webe, v mobile)'">pripojená aplikácia</span>
+              <code v-else>{{ k.prefix }}…</code>
+            </td>
             <td data-label="Práva">{{ k.readOnly ? 'len čítanie' : 'ako používateľ' }}</td>
             <td data-label="Vytvorený">{{ unixDate(k.createdAt) }}</td>
             <td data-label="Použitý">{{ unixDate(k.lastUsedAt) }}</td>
@@ -376,6 +396,27 @@ h3 {
 }
 .empty {
   color: var(--ink-faint);
+}
+.steps {
+  margin: 4px 0 8px;
+  padding-left: 1.3em;
+  display: grid;
+  gap: 4px;
+}
+.steps .p-button {
+  vertical-align: middle;
+}
+.warn {
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--tone-draft-bg);
+  color: var(--tone-draft);
+  border-radius: var(--radius);
+  font-size: var(--fs-sm);
+}
+.badge.oauth {
+  background: var(--blue-wash);
+  color: var(--blue-deep);
 }
 .badge {
   font-size: var(--fs-xs);

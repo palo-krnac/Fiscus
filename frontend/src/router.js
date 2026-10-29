@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import InvoiceList from './views/InvoiceList.vue'
 import InvoiceEdit from './views/InvoiceEdit.vue'
+import OAuthConsent from './views/OAuthConsent.vue'
 import Placeholder from './views/Placeholder.vue'
 import Contacts from './views/Contacts.vue'
 import Settings from './views/Settings.vue'
@@ -96,6 +97,7 @@ export const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', redirect: '/faktury' },
+    { path: '/oauth/povolit', component: OAuthConsent, meta: { title: 'Pripojenie aplikácie', consent: true } },
     { path: '/faktury', component: InvoiceList, meta: { title: 'Vydané faktúry', perm: 'invoices.read' } },
     { path: '/faktury/nova', component: InvoiceEdit, meta: { title: 'Nová faktúra', perm: 'invoices.write' } },
     { path: '/faktury/:id(\\d+)', component: InvoiceEdit, props: true, meta: { title: 'Faktúra', perm: 'invoices.read' } },

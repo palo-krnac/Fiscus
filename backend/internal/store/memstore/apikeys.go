@@ -71,3 +71,25 @@ func (s *Store) RevokeAPIKey(_ context.Context, userID, id int64) error {
 	s.apiKeys[id] = k
 	return nil
 }
+
+func (s *Store) GetAPIKey(_ context.Context, id int64) (auth.APIKey, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	k, ok := s.apiKeys[id]
+	if !ok {
+		return auth.APIKey{}, store.ErrNotFound
+	}
+	return k, nil
+}
+
+func (s *Store) RotateAPIKey(_ context.Context, id int64, oldHash, newHash string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	k, ok := s.apiKeys[id]
+	if !ok || k.Hash != oldHash || k.Revoked {
+		return store.ErrNotFound
+	}
+	k.Hash = newHash
+	s.apiKeys[id] = k
+	return nil
+}

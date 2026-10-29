@@ -108,6 +108,9 @@ export const api = {
   mfaEnable: (code) => request('POST', '/api/me/mfa/enable', { code }),
   mfaDisable: (password, code) => request('POST', '/api/me/mfa/disable', { password, code }),
   mfaRecovery: (password) => request('POST', '/api/me/mfa/recovery', { password }),
+  // súhlas s pripojením aplikácie cez OAuth (query = parametre /oauth/authorize)
+  oauthRequest: (query) => request('GET', `/api/oauth/request?${query}`),
+  oauthDecision: (query, allow, readOnly) => request('POST', '/api/oauth/decision', { query, allow, readOnly }),
   mfaReset: (uid) => request('POST', `/api/users/${uid}/mfa-reset`),
 
   members: (cid) => request('GET', `/api/companies/${cid}/users`),

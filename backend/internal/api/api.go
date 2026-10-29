@@ -33,6 +33,10 @@ type Server struct {
 	// MCP je server pre AI asistentov (POST /mcp); nil = vypnuté.
 	MCP *mcp.Server
 
+	// PublicURL je verejná adresa servera (https://…) pre OAuth; prázdna =
+	// podľa požiadavky (Host a X-Forwarded-Proto).
+	PublicURL string
+
 	// Version je verzia programu (zobrazí sa v rozhraní).
 	Version string
 
@@ -229,6 +233,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "neznáma adresa API", nil)
 	})
+	s.routeOAuth(mux, open)
 	if s.Web != nil {
 		mux.Handle("/", spa(s.Web))
 	}

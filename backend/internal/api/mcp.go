@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/palo-krnac/fiscus/backend/internal/app"
 	"github.com/palo-krnac/fiscus/backend/internal/auth"
 )
 
@@ -29,15 +30,27 @@ func (s *Server) mcpHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// na serveri klient z 401 zistí, kde sa prihlásiť cez OAuth (RFC 9728)
+	challenge := `Bearer realm="fiskus"`
+	if s.authRequired() {
+		challenge += `, resource_metadata="` + s.baseURL(r) + `/.well-known/oauth-protected-resource"`
+	}
 	token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
 	if !ok {
-		w.Header().Set("WWW-Authenticate", `Bearer realm="fiskus"`)
+		w.Header().Set("WWW-Authenticate", challenge)
 		writeErr(w, http.StatusUnauthorized, "Chýba API kľúč (Authorization: Bearer fk_…)", nil)
 		return
 	}
-	actor, err := s.App.KeyActor(r.Context(), strings.TrimSpace(token), auth.ChannelMCP, clientIP(r))
+	token = strings.TrimSpace(token)
+	var actor auth.Actor
+	var err error
+	if strings.HasPrefix(token, app.OAuthAccessPrefix) {
+		actor, err = s.App.OAuthActor(r.Context(), token, auth.ChannelMCP, clientIP(r))
+	} else {
+		actor, err = s.App.KeyActor(r.Context(), token, auth.ChannelMCP, clientIP(r))
+	}
 	if err != nil {
-		w.Header().Set("WWW-Authenticate", `Bearer realm="fiskus", error="invalid_token"`)
+		w.Header().Set("WWW-Authenticate", challenge+`, error="invalid_token"`)
 		writeErr(w, http.StatusUnauthorized, err.Error(), nil)
 		return
 	}
