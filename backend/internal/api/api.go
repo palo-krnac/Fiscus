@@ -31,6 +31,9 @@ type Server struct {
 	// MCP je server pre AI asistentov (POST /mcp); nil = vypnuté.
 	MCP *mcp.Server
 
+	// Version je verzia programu (zobrazí sa v rozhraní).
+	Version string
+
 	// Desktop je spúšťač desktopovej verzie z inštalátora (okno sa ozýva,
 	// tlačidlo Ukončiť); nil pri spustení z príkazového riadka a na serveri.
 	Desktop Launcher
@@ -149,6 +152,13 @@ func (s *Server) Handler() http.Handler {
 	need("GET /api/companies/{cid}/reminders/{id}/email", auth.PermInvoicesRead, s.mailDoc(app.MailReminder))
 	need("POST /api/companies/{cid}/reminders/{id}/email", auth.PermInvoicesWrite, s.mailDoc(app.MailReminder))
 	need("GET /api/companies/{cid}/emails", auth.PermInvoicesRead, s.listEmails)
+	need("GET /api/companies/{cid}/einvoice-settings", auth.PermInvoicesRead, s.getEInvoiceSettings)
+	need("PUT /api/companies/{cid}/einvoice-settings", auth.PermSettingsWrite, s.putEInvoiceSettings)
+	need("POST /api/companies/{cid}/invoices/{id}/einvoice", auth.PermInvoicesWrite, s.sendEInvoice)
+	need("GET /api/companies/{cid}/einvoices", auth.PermInvoicesRead, s.listEInvoices)
+	need("POST /api/companies/{cid}/einvoices/{id}/reopen", auth.PermPurchasesWrite, s.reopenEInvoice)
+	need("GET /api/companies/{cid}/einvoice-inbox", auth.PermPurchasesWrite, s.einvoiceInbox)
+	need("POST /api/companies/{cid}/einvoice-inbox/{msg}/take", auth.PermPurchasesWrite, s.takeEInvoice)
 	need("GET /api/companies/{cid}/mail-settings", auth.PermSettingsWrite, s.getMailSettings)
 	need("PUT /api/companies/{cid}/mail-settings", auth.PermSettingsWrite, s.putMailSettings)
 	need("POST /api/companies/{cid}/mail-settings/test", auth.PermSettingsWrite, s.testMail)
@@ -306,8 +316,9 @@ func (s *Server) capabilities(w http.ResponseWriter, _ *http.Request) {
 	c.License = nil
 	writeJSON(w, http.StatusOK, struct {
 		edition.Capabilities
-		Launcher bool `json:"launcher"` // desktop z inštalátora: okno sa ozýva, dá sa ukončiť
-	}{c, s.Desktop != nil})
+		Launcher bool   `json:"launcher"` // desktop z inštalátora: okno sa ozýva, dá sa ukončiť
+		Version  string `json:"version"`
+	}{c, s.Desktop != nil, s.Version})
 }
 
 func (s *Server) listCompanies(w http.ResponseWriter, r *http.Request) {

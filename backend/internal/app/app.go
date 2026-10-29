@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/palo-krnac/fiscus/backend/internal/backup"
+	"github.com/palo-krnac/fiscus/backend/internal/postman"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -48,6 +49,10 @@ type App struct {
 	FetchRates func(ctx context.Context, url string) ([]fx.Rate, error)
 	// AIBaseURL je adresa Claude API ("" = api.anthropic.com; v testoch falošný server).
 	AIBaseURL string
+
+	// Postman vytvorí digitálneho poštára z nastavenia firmy (nil = postman.New;
+	// v testoch falošný poštár).
+	Postman func(postman.Settings) (postman.Provider, error)
 	// Mailer posiela e-maily (nil = SMTP podľa nastavenia firmy).
 	Mailer  mail.Sender
 	lic     atomic.Pointer[license.License]

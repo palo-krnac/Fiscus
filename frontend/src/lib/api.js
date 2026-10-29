@@ -225,6 +225,13 @@ export const api = {
   aiSettings: () => request('GET', '/api/ai/settings'),
   saveAISettings: (s) => request('PUT', '/api/ai/settings', s),
   // PDF alebo fotka prijatej faktúry → koncept na kontrolu (Claude API)
+  einvoiceSettings: (cid) => request('GET', `/api/companies/${cid}/einvoice-settings`),
+  saveEInvoiceSettings: (cid, s) => request('PUT', `/api/companies/${cid}/einvoice-settings`, s),
+  sendEInvoice: (cid, id) => request('POST', `/api/companies/${cid}/invoices/${id}/einvoice`),
+  einvoices: (cid, filter = {}) => request('GET', `/api/companies/${cid}/einvoices` + query(filter)),
+  einvoiceInbox: (cid) => request('GET', `/api/companies/${cid}/einvoice-inbox`),
+  takeEInvoice: (cid, msg) => request('POST', `/api/companies/${cid}/einvoice-inbox/${encodeURIComponent(msg)}/take`),
+  reopenEInvoice: (cid, id) => request('POST', `/api/companies/${cid}/einvoices/${id}/reopen`),
   importUBL: (cid, file) => request('POST', `/api/companies/${cid}/purchases/import-ubl${query({ name: file.name })}`, file),
   extractPurchase: (cid, file) => request('POST', `/api/companies/${cid}/purchases/extract${query({ name: file.name })}`, file),
   legal: () => request('GET', '/api/legal'),

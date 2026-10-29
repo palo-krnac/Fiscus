@@ -14,6 +14,7 @@ import { fillFromRegistry } from '../lib/registry.js'
 import { api, ApiError } from '../lib/api.js'
 import { session, replaceCompany } from '../lib/session.js'
 import CompanyLogo from '../components/CompanyLogo.vue'
+import EInvoiceSettings from '../components/EInvoiceSettings.vue'
 
 const toast = useToast()
 const clone = (c) => ({ ...c, units: [...(c.units ?? [])], numberFormats: { ...(c.numberFormats ?? {}) } })
@@ -251,6 +252,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
           </FormField>
         </div>
       </fieldset>
+
+      <EInvoiceSettings />
     </div>
   </div>
 </template>

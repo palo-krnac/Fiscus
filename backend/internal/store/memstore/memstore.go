@@ -45,6 +45,7 @@ type Store struct {
 	items     map[int64]catalog.Item
 	logos     map[int64]store.Logo
 	emails    []store.Email
+	einvoices []store.EInvoice
 	rates     map[fxKey]fx.Rate
 	users     map[int64]auth.User
 	members   map[memKey]auth.Role

@@ -177,7 +177,7 @@ func main() {
 	if webFS == nil {
 		log.Print("upozornenie: frontend nie je zostavený, beží iba API")
 	}
-	apiSrv := &api.Server{App: a, Web: webFS, Registry: lookup, MCP: mcp.New(a, version)}
+	apiSrv := &api.Server{App: a, Web: webFS, Registry: lookup, MCP: mcp.New(a, version), Version: version}
 	var watchdog *desktop.Watchdog
 	if *appMode {
 		watchdog = desktop.NewWatchdog()
