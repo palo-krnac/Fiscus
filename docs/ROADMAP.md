@@ -17,7 +17,8 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] Adresár odberateľov a dodávateľov, výber odberateľa vo faktúre, vlastná splatnosť
 - [x] Vyhľadanie firmy v registri (RPO) podľa IČO: názov a adresa
 - [ ] DIČ a IČ DPH z registrov finančnej správy (vyžaduje API kľúč)
-- [ ] PDF faktúry + QR kód **PAY by square**, odoslanie e-mailom
+- [x] Tlač a PDF faktúry (A4) s QR kódom **PAY by square**
+- [ ] Odoslanie faktúry e-mailom (PDF na serveri + SMTP)
 - [ ] Dobropis, zálohová faktúra, cenová ponuka, pravidelná fakturácia
 - [ ] Prijaté faktúry (vrátane AI vyťaženia z PDF: AI iba navrhuje, účtuje pevne naprogramovaný automat)
 - [ ] Banka: import výpisov (camt.053 / CSV), párovanie platieb

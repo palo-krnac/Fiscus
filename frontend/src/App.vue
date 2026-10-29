@@ -17,7 +17,12 @@ const isActive = (path) => route.path === path || route.path.startsWith(path + '
 </script>
 
 <template>
-  <div class="shell" :class="{ 'nav-open': navOpen }">
+  <!-- tlačové zobrazenie bez menu a hlavičky -->
+  <template v-if="route.meta.bare">
+    <RouterView v-if="session.ready && session.companyId" />
+    <Toast position="bottom-right" />
+  </template>
+  <div v-else class="shell" :class="{ 'nav-open': navOpen }">
     <aside class="sidebar" aria-label="Moduly">
       <RouterLink to="/faktury" class="brand" aria-label="Fiskus – úvod">
         <svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true">

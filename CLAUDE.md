@@ -10,6 +10,7 @@ Komunikácia a texty v rozhraní sú po slovensky. Kód (identifikátory) je po 
 - Všetko s dátami firmy je filtrované cez `companyID`.
 - Vystavená faktúra sa nesmie meniť, opravuje sa dobropisom.
 - SQLite kód je za build tagom `sqlite`: `go test -tags sqlite ./...`.
+- QR platba PAY by square sa skladá vo frontende (`lib/payqr.js`, knižnica bysquare) z hotových súm z API; test overuje, že sa QR dá prečítať a dekódovať späť.
 
 ## Príkazy
 - `make test`: všetky testy
