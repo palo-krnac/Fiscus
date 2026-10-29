@@ -122,6 +122,11 @@ type SVLine struct {
 type Return struct {
 	Period Period               `json:"period"`
 	Label  string               `json:"label"`
+	// Druh priznania; pri dodatočnom aj dátum zistenia a posledná známa povinnosť.
+	Kind       Kind         `json:"kind"`
+	Discovered invoice.Date `json:"discovered,omitempty"`
+	LastKnown  *money.Dec   `json:"lastKnown,omitempty"`
+	Deadline   invoice.Date `json:"deadline"`
 	Rows   map[string]money.Dec `json:"rows"` // r01 … r37 (iba nenulové)
 	// Deduction je odpočet dane spolu (r. 18 + 18a + 19) na prehľad.
 	Deduction money.Dec `json:"deduction"`
@@ -166,7 +171,7 @@ func noSpaces(s string) string { return strings.Join(strings.Fields(s), "") }
 
 // Compute zostaví priznanie a kontrolný výkaz.
 func Compute(in Input) Return {
-	ret := Return{Period: in.Period, Label: in.Period.Label(), Rows: map[string]money.Dec{}, KV: KV{
+	ret := Return{Period: in.Period, Label: in.Period.Label(), Kind: KindRegular, Deadline: in.Period.Deadline(), Rows: map[string]money.Dec{}, KV: KV{
 		A1: []KVLine{}, A2: []KVA2{}, B1: []KVLine{}, B2: []KVLine{}, C1: []KVCorrection{},
 	}, SV: []SVLine{}, Warnings: []Warning{}}
 	add := func(row string, v money.Dec) { ret.Rows[row] = ret.Rows[row].Add(v) }

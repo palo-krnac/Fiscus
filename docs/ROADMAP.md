@@ -43,7 +43,8 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] A.2 a tuzemské prenesenie pri dodaní (§ 69 ods. 12) pri položkách: druhy a) až j), kód colného sadzobníka, hranica 5 000 €, XML
 - [ ] Dobropis k A.2 (kód opravy), trojstranný obchod (kód 1), call-off stock, dovoz s DPH na colnici (r. 22–23)
 - [ ] Dobropisy od dodávateľov (C.2, r. 28), zjednodušené faktúry a pokladničné doklady (B.3, D.1), čiastočný odpočet (koeficient)
-- [ ] Opravné a dodatočné priznanie / KV (KOpr, r. 36–37)
+- [x] Opravné a dodatočné priznanie k DPH (dátum zistenia, r. 36 rozdiel oproti poslednej známej povinnosti, r. 37), opravný KV, záznam o podaní (posledná známa povinnosť, návrh druhu podľa lehoty)
+- [ ] Dodatočný kontrolný výkaz (iba opravované záznamy)
 - [ ] Podanie priamo na portál finančnej správy (vyžaduje autentifikáciu)
 - [x] Upomienky: faktúry po splatnosti podľa odberateľov, 1., 2. a posledná upomienka, zákonný úrok z omeškania (ECB + 9 p. b. podnikateľ, + 5 p. b. spotrebiteľ, k prvému dňu omeškania), dohodnutá sadzba, paušálna náhrada 40 € (§ 369c ObZ), tlač listu, číselný rad UP
 - [x] Legislatíva v nastaveniach (spoločná pre všetky firmy): obdobia sadzieb DPH, sadzby ECB, prirážky úroku z omeškania, paušálna náhrada; nová inštalácia sa predvyplní, nová verzia programu doplní nové riadky a úpravy používateľa nechá

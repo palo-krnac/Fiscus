@@ -65,7 +65,8 @@ func dpDate(d invoice.Date) string {
 	return day + "." + m + "." + y
 }
 
-// DPHXML vytvorí riadne daňové priznanie k DPH vo formáte eDane (DPHv25).
+// DPHXML vytvorí daňové priznanie k DPH vo formáte eDane (DPHv25) — riadne,
+// opravné alebo dodatočné podľa r.Kind (pozri Apply).
 func DPHXML(r Return, tp Taxpayer, declared invoice.Date) []byte {
 	var w xw
 	b01 := func(v bool) string {
@@ -84,10 +85,10 @@ func DPHXML(r Return, tp Taxpayer, declared invoice.Date) []byte {
 	w.el("danovyUrad", tp.TaxOffice)
 	w.el("nevzniklaPov", "0")
 	w.raw("<typDP>")
-	w.el("rdp", "1")
-	w.el("odp", "0")
-	w.el("ddp", "0")
-	w.el("datumZisteniaDdp", "")
+	w.el("rdp", b01(r.Kind == KindRegular || r.Kind == ""))
+	w.el("odp", b01(r.Kind == KindCorrective))
+	w.el("ddp", b01(r.Kind == KindSupplementary))
+	w.el("datumZisteniaDdp", dpDate(r.Discovered))
 	w.raw("</typDP><osoba>")
 	w.el("platitel", "1")
 	w.el("registrovana", "0")
@@ -131,14 +132,20 @@ func DPHXML(r Return, tp Taxpayer, declared invoice.Date) []byte {
 	return w.b.Bytes()
 }
 
-// KVXML vytvorí riadny kontrolný výkaz vo formáte eDane (KVDPHv25).
+// KVXML vytvorí riadny alebo opravný kontrolný výkaz vo formáte eDane
+// (KVDPHv25). Dodatočný KV obsahuje iba opravované záznamy — ten Fiškus
+// nevytvára (ErrSupplementaryK).
 func KVXML(r Return, tp Taxpayer) []byte {
 	var w xw
 	street, number := splitStreet(tp.Street)
 	w.raw(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
 	w.raw(`<KVDPH_2025 xmlns="` + KVNamespace + `"><Identifikacia>`)
 	w.el("IcDphPlatitela", strings.ToUpper(noSpaces(tp.ICDPH)))
-	w.el("Druh", "R")
+	druh := "R"
+	if r.Kind == KindCorrective {
+		druh = "O" // opravný KV nahrádza riadny celý
+	}
+	w.el("Druh", druh)
 	w.raw("<Obdobie>")
 	w.el("Rok", strconv.Itoa(r.Period.Year))
 	if r.Period.Quarter > 0 {

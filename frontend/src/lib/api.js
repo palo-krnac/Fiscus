@@ -155,10 +155,13 @@ export const api = {
   bankUnmatch: (cid, id) => request('POST', `/api/companies/${cid}/bank/${id}/unmatch`),
   bankIgnore: (cid, id, ignore, note) => request('POST', `/api/companies/${cid}/bank/${id}/ignore`, { ignore, note }),
 
-  vat: (cid, period, excess) => request('GET', `/api/companies/${cid}/vat` + query({ period, excess })),
+  vat: (cid, period, excess, opts = {}) => request('GET', `/api/companies/${cid}/vat` + query({ period, excess, ...opts })),
+  vatFilings: (cid, period) => request('GET', `/api/companies/${cid}/vat/filings` + query({ period })),
+  recordVatFiling: (cid, period, excess, opts = {}, podane) =>
+    request('POST', `/api/companies/${cid}/vat/filings` + query({ period, excess, ...opts, podane })),
   /** XML pre eDane ako Blob (kind: 'dph' | 'kv'). */
-  vatXML: (cid, kind, period, excess, fetchImpl = globalThis.fetch) =>
-    download(`/api/companies/${cid}/vat/${kind}.xml` + query({ period, excess }), `${kind}.xml`, fetchImpl),
+  vatXML: (cid, kind, period, excess, opts = {}, fetchImpl = globalThis.fetch) =>
+    download(`/api/companies/${cid}/vat/${kind}.xml` + query({ period, excess, ...opts }), `${kind}.xml`, fetchImpl),
   /** E-faktúra (UBL, Peppol BIS 3.0) ako Blob; chýbajúce údaje sú v ApiError.fields. */
   einvoice: (cid, id, fetchImpl = globalThis.fetch) => download(`/api/companies/${cid}/invoices/${id}/ubl`, 'e-faktura.xml', fetchImpl),
 
