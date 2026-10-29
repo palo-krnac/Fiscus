@@ -19,6 +19,7 @@ import CashPrint from './views/CashPrint.vue'
 import QuoteList from './views/QuoteList.vue'
 import RecurringList from './views/RecurringList.vue'
 import Reminders from './views/Reminders.vue'
+import Emails from './views/Emails.vue'
 import ReminderPrint from './views/ReminderPrint.vue'
 import Legal from './views/Legal.vue'
 import Catalog from './views/Catalog.vue'
@@ -32,6 +33,7 @@ export const modules = [
       { path: '/ponuky', label: 'Cenové ponuky', icon: 'pi-file-edit', ready: true, perm: 'invoices.read' },
       { path: '/pravidelne', label: 'Pravidelná fakturácia', icon: 'pi-replay', ready: true, perm: 'invoices.read' },
       { path: '/upomienky', label: 'Upomienky', icon: 'pi-bell', ready: true, perm: 'invoices.read' },
+      { path: '/emaily', label: 'E-maily', icon: 'pi-envelope', ready: true, perm: 'invoices.read' },
       { path: '/cennik', label: 'Cenník', icon: 'pi-tags', ready: true, perm: 'invoices.read' },
     ],
   },
@@ -106,6 +108,7 @@ export const router = createRouter({
     { path: '/cennik', component: Catalog, meta: { title: 'Cenník', perm: 'invoices.read' } },
     { path: '/cennik/:id(\\d+|nova)', component: Catalog, props: true, meta: { title: 'Cenník', perm: 'invoices.read' } },
     { path: '/upomienky', component: Reminders, meta: { title: 'Upomienky', perm: 'invoices.read' } },
+    { path: '/emaily', component: Emails, meta: { title: 'E-maily', perm: 'invoices.read' } },
     { path: '/upomienky/:id(\\d+)/tlac', component: ReminderPrint, props: true, meta: { title: 'Upomienka', bare: true, perm: 'invoices.read' } },
     { path: '/prijate', component: PurchaseList, meta: { title: 'Prijaté faktúry', perm: 'purchases.read' } },
     { path: '/prijate/nova', component: PurchaseEdit, meta: { title: 'Nová prijatá faktúra', perm: 'purchases.write' } },

@@ -280,6 +280,13 @@ func (a *App) generate(ctx context.Context, companyID int64, t *recurring.Templa
 			return inv, err
 		default:
 			inv, run.Issued, run.Number = issued, true, issued.Number
+			if t.SendEmail {
+				to, err := a.autoMail(ctx, companyID, inv.ID)
+				if err != nil {
+					run.Error = "Vystavená, ale e-mail sa neodoslal: " + err.Error()
+				}
+				run.Emailed = to
+			}
 		}
 	}
 	t.Record(run)

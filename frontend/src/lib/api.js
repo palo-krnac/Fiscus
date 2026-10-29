@@ -190,6 +190,13 @@ export const api = {
   overdue: (cid) => request('GET', `/api/companies/${cid}/overdue`),
   items: (cid) => request('GET', `/api/companies/${cid}/items`),
   logoURL: (cid, v = 0) => `/api/companies/${cid}/logo?v=${v}`,
+  // E-maily: kind dokladu v URL je invoices | quotes | reminders
+  mailSettings: (cid) => request('GET', `/api/companies/${cid}/mail-settings`),
+  saveMailSettings: (cid, s) => request('PUT', `/api/companies/${cid}/mail-settings`, s),
+  testMail: (cid, to) => request('POST', `/api/companies/${cid}/mail-settings/test`, { to }),
+  emails: (cid, year) => request('GET', `/api/companies/${cid}/emails${query({ year })}`),
+  mailDraft: (cid, kind, id) => request('GET', `/api/companies/${cid}/${kind}/${id}/email`),
+  sendMail: (cid, kind, id, msg) => request('POST', `/api/companies/${cid}/${kind}/${id}/email`, msg),
   // PDF dokladu zo servera; kind: invoices | quotes | reminders
   pdfURL: (cid, kind, id, inline = false) => `/api/companies/${cid}/${kind}/${id}/pdf${inline ? '?inline=1' : ''}`,
   uploadLogo: (cid, file) => request('PUT', `/api/companies/${cid}/logo`, file),
