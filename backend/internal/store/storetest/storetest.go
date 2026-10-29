@@ -19,6 +19,7 @@ import (
 	m "github.com/palo-krnac/fiscus/backend/internal/money"
 	"github.com/palo-krnac/fiscus/backend/internal/purchase"
 	"github.com/palo-krnac/fiscus/backend/internal/quote"
+	"github.com/palo-krnac/fiscus/backend/internal/recurring"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 	"github.com/palo-krnac/fiscus/backend/internal/vat"
 )
@@ -384,6 +385,55 @@ func Run(t *testing.T, newStore Factory) {
 		}
 		if err := s.SaveQuote(ctx, b.ID, &q1); !errors.Is(err, store.ErrNotFound) {
 			t.Fatal("úprava ponuky inej firmy")
+		}
+	})
+
+	t.Run("pravidelná fakturácia", func(t *testing.T) {
+		s := newStore(t)
+		a, _ := s.CreateCompany(ctx, store.Company{Name: "Alfa"})
+		b, _ := s.CreateCompany(ctx, store.Company{Name: "Beta"})
+		t1 := recurring.Template{Name: "Paušál", Active: true, Interval: recurring.Monthly, StartDate: invoice.MustDate("2026-01-15"),
+			Customer: invoice.Party{Name: "Odberateľ", Country: "SK"}, DueDays: 10, AutoIssue: true,
+			Lines: []invoice.Line{{Description: "Paušál {mesiac}", Quantity: m.MustParse("1"), Unit: "mes", UnitPrice: m.MustParse("100"), Rate: 23}}}
+		t1.Record(recurring.Run{Period: invoice.MustDate("2026-01-15"), InvoiceID: 3, Issued: true})
+		t2 := recurring.Template{Name: "Nájom", Interval: recurring.Quarterly, StartDate: invoice.MustDate("2026-04-01")}
+		for _, x := range []*recurring.Template{&t1, &t2} {
+			if err := s.SaveRecurring(ctx, a.ID, x); err != nil || x.ID == 0 || x.CompanyID != a.ID {
+				t.Fatalf("uloženie: %v", err)
+			}
+		}
+		got, err := s.GetRecurring(ctx, a.ID, t1.ID)
+		if err != nil || !reflect.DeepEqual(got, t1) {
+			t.Fatalf("načítanie:\n got %+v\nwant %+v", got, t1)
+		}
+		if _, err := s.GetRecurring(ctx, b.ID, t1.ID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("šablóna inej firmy")
+		}
+		if list, _ := s.ListRecurring(ctx, a.ID); len(list) != 2 || list[0].ID != t1.ID {
+			t.Fatalf("zoznam: %+v", list)
+		}
+		if list, _ := s.ListRecurring(ctx, b.ID); len(list) != 0 {
+			t.Fatal("zoznam inej firmy")
+		}
+		got.History[0].InvoiceID = 99
+		if g, _ := s.GetRecurring(ctx, a.ID, t1.ID); g.History[0].InvoiceID != 3 {
+			t.Fatal("úložisko zdieľa históriu s volajúcim")
+		}
+		t1.Active = false
+		if err := s.SaveRecurring(ctx, a.ID, &t1); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.SaveRecurring(ctx, b.ID, &t1); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("úprava šablóny inej firmy")
+		}
+		if err := s.DeleteRecurring(ctx, b.ID, t1.ID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("zmazanie šablóny inej firmy")
+		}
+		if err := s.DeleteRecurring(ctx, a.ID, t1.ID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.GetRecurring(ctx, a.ID, t1.ID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("po zmazaní")
 		}
 	})
 

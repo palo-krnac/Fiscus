@@ -3,6 +3,7 @@ import { codes, countryName, paymentLabel } from './codes.js'
 import { purchaseStatusOf, statusOf } from './format.js'
 import { actionLabel, channelLabel } from './audit.js'
 import { quoteStatusOf } from './quotes.js'
+import { intervalLabel, recurringStatusOf } from './recurring.js'
 
 const t = (header, value, width) => ({ header, value, width })
 const money = (header, value) => ({ header, value, type: 'money', width: 14 })
@@ -204,4 +205,20 @@ export const quoteColumns = [
   t('Stav', (r) => quoteStatusOf(r).label, 16),
   t('Faktúra', (r) => (r.invoiceId ? r.invoiceNumber || 'koncept' : ''), 14),
   t('Poznámka', (r) => r.note, 30),
+]
+
+export const recurringColumns = [
+  t('Názov', (r) => r.name, 28),
+  t('Odberateľ', (r) => r.customer?.name, 32),
+  t('IČO', (r) => r.customer?.ico, 11),
+  t('Interval', (r) => intervalLabel(r.interval), 12),
+  date('Ďalšia faktúra', (r) => r.nextDate),
+  date('Koniec', (r) => r.endDate),
+  money('Základ', (r) => r.summary?.base),
+  money('Spolu', (r) => r.summary?.total),
+  t('Vystaviť automaticky', (r) => yes(r.autoIssue), 10),
+  t('Splatnosť (dni)', (r) => r.dueDays || '', 10),
+  { header: 'Vytvorených faktúr', value: (r) => r.generated ?? 0, type: 'number', width: 10 },
+  t('Stav', (r) => recurringStatusOf(r).label, 14),
+  t('Položky', (r) => (r.lines ?? []).map((l) => l.description).join('; '), 40),
 ]

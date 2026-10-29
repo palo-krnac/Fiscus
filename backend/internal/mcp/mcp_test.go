@@ -13,6 +13,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/money"
 	"github.com/palo-krnac/fiscus/backend/internal/quote"
+	"github.com/palo-krnac/fiscus/backend/internal/recurring"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 	"github.com/palo-krnac/fiscus/backend/internal/store/memstore"
 )
@@ -116,7 +117,7 @@ func TestProtocol(t *testing.T) {
 			t.Errorf("%s: schéma", x.Name)
 		}
 	}
-	for name, ro := range map[string]bool{"list_invoices": true, "list_quotes": true, "vat_return": true, "create_invoice_draft": false, "issue_invoice": false} {
+	for name, ro := range map[string]bool{"list_invoices": true, "list_quotes": true, "list_recurring_invoices": true, "vat_return": true, "create_invoice_draft": false, "issue_invoice": false} {
 		if got, ok := names[name]; !ok || got != ro {
 			t.Errorf("%s: readOnly=%v (%v)", name, got, ok)
 		}
@@ -242,4 +243,18 @@ func TestQuoteTool(t *testing.T) {
 func validQuoteForMCP() quote.Quote {
 	return quote.Quote{Customer: invoice.Party{Name: "Zákazník a.s.", Country: "SK"},
 		Lines: []invoice.Line{{Description: "Práca", Quantity: money.MustParse("1"), Unit: "hod", UnitPrice: money.MustParse("50"), Rate: 23}}}
+}
+
+func TestRecurringTool(t *testing.T) {
+	s, ctx, cid := setup(t)
+	r := recurring.Template{Name: "Paušál", Active: true, Interval: recurring.Monthly, NextDate: invoice.MustDate("2026-11-01"),
+		Customer: invoice.Party{Name: "Zákazník a.s.", Country: "SK"},
+		Lines:    []invoice.Line{{Description: "Paušál", Quantity: money.MustParse("1"), Unit: "mes", UnitPrice: money.MustParse("100"), Rate: 23}}}
+	if _, err := s.App.SaveRecurring(ctx, cid, r); err != nil {
+		t.Fatal(err)
+	}
+	res := callTool(t, s, ctx, "list_recurring_invoices", map[string]any{})
+	if res.IsError || res.Structured["count"].(float64) != 1 || !strings.Contains(res.Content[0].Text, `"next_date": "2026-11-01"`) {
+		t.Fatalf("%+v", res)
+	}
 }

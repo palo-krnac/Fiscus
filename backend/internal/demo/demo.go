@@ -14,6 +14,7 @@ import (
 	m "github.com/palo-krnac/fiscus/backend/internal/money"
 	"github.com/palo-krnac/fiscus/backend/internal/purchase"
 	"github.com/palo-krnac/fiscus/backend/internal/quote"
+	"github.com/palo-krnac/fiscus/backend/internal/recurring"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 	"github.com/palo-krnac/fiscus/backend/internal/vat"
 )
@@ -201,7 +202,41 @@ func Seed(ctx context.Context, a *app.App) (store.Company, error) {
 	if err := seedQuotes(ctx, a, c, contactIDs); err != nil {
 		return c, fmt.Errorf("demo ponuky: %w", err)
 	}
+	if err := seedRecurring(ctx, a, c, contactIDs); err != nil {
+		return c, fmt.Errorf("demo pravidelná fakturácia: %w", err)
+	}
 	return c, nil
+}
+
+// seedRecurring pripraví pravidelné faktúry: mesačný paušál (dnes sa vystaví),
+// štvrťročný prenájom (koncepty na kontrolu) a pozastavenú ročnú licenciu.
+func seedRecurring(ctx context.Context, a *app.App, c store.Company, contactIDs []int64) error {
+	today := a.Today()
+	line := func(desc, unit, price string) []invoice.Line {
+		return []invoice.Line{{Description: desc, Unit: unit, Quantity: m.MustParse("1"), UnitPrice: m.MustParse(price), Rate: vat.Rate23}}
+	}
+	party := func(ci int) invoice.Party {
+		cu := customers[ci]
+		return invoice.Party{Name: cu.name, City: cu.city, Country: "SK", ICO: cu.ico, ICDPH: cu.icdph}
+	}
+	plan := []recurring.Template{
+		{Name: "Servisný paušál – údržba PLC", Active: true, Interval: recurring.Monthly, NextDate: today, AutoIssue: true,
+			Customer: party(0), ContactID: contactIDs[0], Note: "Paušál za servis a vzdialenú podporu za {obdobie}.",
+			Lines: line("Servisný paušál {mesiac} {rok}", "mes", "180")},
+		{Name: "Prenájom meracej techniky", Active: true, Interval: recurring.Quarterly, NextDate: today.AddDays(20),
+			Customer: party(3), ContactID: contactIDs[3], DueDays: 30,
+			Lines: line("Prenájom analyzátora siete – {obdobie}", "štvrťrok", "390")},
+		{Name: "Licencia vizualizácie", Interval: recurring.Yearly, NextDate: today.AddDays(75), AutoIssue: true,
+			Customer: party(6), ContactID: contactIDs[6], EndDate: today.AddDays(800),
+			Lines: line("Ročná licencia a aktualizácie HMI {obdobie}", "rok", "640")},
+	}
+	for _, t := range plan {
+		if _, err := a.SaveRecurring(ctx, c.ID, t); err != nil {
+			return err
+		}
+	}
+	_, err := a.RunRecurring(ctx)
+	return err
 }
 
 // seedQuotes pripraví cenové ponuky vo všetkých stavoch.

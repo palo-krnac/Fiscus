@@ -42,6 +42,7 @@ func Today() Date {
 func (d Date) IsZero() bool         { return d.t.IsZero() }
 func (d Date) Year() int            { return d.t.Year() }
 func (d Date) Month() int           { return int(d.t.Month()) }
+func (d Date) Day() int             { return d.t.Day() }
 func (d Date) Before(o Date) bool   { return d.t.Before(o.t) }
 func (d Date) After(o Date) bool    { return d.t.After(o.t) }
 func (d Date) AddDays(n int) Date   { return Date{d.t.AddDate(0, 0, n)} }

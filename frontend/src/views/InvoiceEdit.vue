@@ -24,12 +24,16 @@ import {
 import { fiskusGridTheme, skGridLocale } from '../lib/grid.js'
 import { contactFromCustomer, customerFromContact, dueDaysFor, filterContacts } from '../lib/contacts.js'
 import { quoteActions, quoteStatusOf, validDays as quoteValidDays } from '../lib/quotes.js'
+import { firstOfNextMonth, intervals, placeholders, recurringStatusOf } from '../lib/recurring.js'
+import InputNumber from 'primevue/inputnumber'
 
-// Ten istý editor slúži aj cenovej ponuke (quote): rovnaké položky a výpočet DPH,
-// iné dátumy (platnosť namiesto splatnosti) a akcie.
-const props = defineProps({ id: String, quote: Boolean })
+// Ten istý editor slúži aj cenovej ponuke (quote) a šablóne pravidelnej faktúry
+// (recurring): rovnaké položky a výpočet DPH, iné dátumy a akcie.
+const props = defineProps({ id: String, quote: Boolean, recurring: Boolean })
 const isQuote = computed(() => props.quote)
-const base = computed(() => (isQuote.value ? '/ponuky' : '/faktury'))
+const isRecurring = computed(() => props.recurring)
+const base = computed(() => (isQuote.value ? '/ponuky' : isRecurring.value ? '/pravidelne' : '/faktury'))
+const sample = ref(null) // ukážka textov ďalšej pravidelnej faktúry
 const router = useRouter()
 const route = useRoute()
 const toast = useToast()
@@ -52,11 +56,16 @@ const canWrite = computed(() => can('invoices.write'))
 const editable = computed(() => canWrite.value && (!inv.value?.status || inv.value.status === 'draft'))
 // neplatiteľ DPH: faktúra bez DPH (o režime rozhoduje backend podľa nastavení firmy)
 const nonVat = computed(() => !!inv.value?.nonVatPayer)
-const status = computed(() => (inv.value ? (isQuote.value ? quoteStatusOf(inv.value) : statusOf(inv.value)) : null))
+const status = computed(() => {
+  if (!inv.value) return null
+  if (isRecurring.value) return recurringStatusOf(inv.value)
+  return isQuote.value ? quoteStatusOf(inv.value) : statusOf(inv.value)
+})
 const qa = computed(() => quoteActions(inv.value))
 const isCredit = computed(() => inv.value?.kind === 'credit_note')
 const title = computed(() => {
   if (!inv.value) return ''
+  if (isRecurring.value) return inv.value.id ? inv.value.name || 'Pravidelná faktúra' : 'Nová pravidelná faktúra'
   if (isQuote.value) return inv.value.number ? `Ponuka ${inv.value.number}` : inv.value.id ? 'Koncept ponuky' : 'Nová ponuka'
   const doc = isCredit.value ? 'Dobropis' : 'Faktúra'
   if (inv.value.number) return `${doc} ${inv.value.number}`
@@ -85,7 +94,7 @@ async function createCreditNote() {
 async function load() {
   try {
     if (props.id) {
-      const data = await (isQuote.value ? api.quote : api.invoice)(session.companyId, props.id)
+      const data = await (isQuote.value ? api.quote : isRecurring.value ? api.recurring : api.invoice)(session.companyId, props.id)
       inv.value = data
       lines.value = data.lines.map(withKey)
     } else {
@@ -94,7 +103,27 @@ async function load() {
       due.setDate(due.getDate() + dueDaysFor(null, session.company))
       const valid = new Date()
       valid.setDate(valid.getDate() + 30)
-      inv.value = isQuote.value
+      inv.value = isRecurring.value
+        ? {
+            name: '',
+            active: true,
+            interval: 'monthly',
+            nextDate: firstOfNextMonth(),
+            endDate: null,
+            dueDays: 0,
+            autoIssue: true,
+            customer: { name: '', street: '', city: '', zip: '', country: 'SK', ico: '', dic: '', icdph: '', email: '' },
+            priceMode: 'net',
+            reverseCharge: false,
+            supplyKind: '',
+            paymentMethod: 'transfer',
+            nonVatPayer: !session.company?.vatPayer,
+            contactId: 0,
+            note: '',
+            history: [],
+            summary: { rates: [], base: '0', vat: '0', total: '0' },
+          }
+        : isQuote.value
         ? {
             status: 'draft',
             customer: { name: '', street: '', city: '', zip: '', country: 'SK', ico: '', dic: '', icdph: '', email: '' },
@@ -133,19 +162,22 @@ async function load() {
     loadError.value = e.message
   }
 }
-onMounted(load)
+onMounted(async () => {
+  await load()
+  if (isRecurring.value && inv.value) recalc() // ukážka textov ďalšej faktúry
+})
 // prechod medzi dokladmi v tom istom editore (napr. faktúra → nový dobropis)
 watch(
-  () => [props.id, props.quote],
-  ([id, quote], [prev, prevQuote]) => {
-    // ponuka a faktúra môžu mať rovnaké ID — rozhoduje aj druh dokladu
-    if (quote === prevQuote && (id === prev || (!prev && id && inv.value && String(inv.value.id) === id))) return
+  () => [props.id, props.quote, props.recurring],
+  ([id, quote, rec], [prev, prevQuote, prevRec]) => {
+    // ponuka, šablóna a faktúra môžu mať rovnaké ID — rozhoduje aj druh dokladu
+    if (quote === prevQuote && rec === prevRec && (id === prev || (!prev && id && inv.value && String(inv.value.id) === id))) return
     loadError.value = null
     dirty.value = false
     showErrors.value = false
     errors.value = {}
     previewErrors.value = {}
-    load()
+    load().then(() => isRecurring.value && inv.value && recalc())
   },
 )
 
@@ -165,7 +197,7 @@ function changed() {
 async function recalc() {
   const mine = ++seq
   try {
-    const out = await (isQuote.value ? api.previewQuote : api.preview)(session.companyId, payload())
+    const out = await (isQuote.value ? api.previewQuote : isRecurring.value ? api.previewRecurring : api.preview)(session.companyId, payload())
     if (mine !== seq) return // medzitým prišla novšia zmena
     inv.value.summary = out.summary
     inv.value.nonVatPayer = out.nonVatPayer
@@ -174,6 +206,7 @@ async function recalc() {
     })
     gridApi.value?.refreshCells({ columns: ['amount'] })
     previewErrors.value = Object.fromEntries(out.errors.map((e) => [e.field, e.message]))
+    if (isRecurring.value) sample.value = out.sample
   } catch {
     /* chybný vstup sa ukáže pri uložení */
   }
@@ -194,6 +227,14 @@ const issueDate = dateModel('issueDate')
 const deliveryDate = dateModel('deliveryDate')
 const dueDate = dateModel('dueDate')
 const validUntil = dateModel('validUntil')
+const nextDate = dateModel('nextDate')
+const endDate = computed({
+  get: () => fromISODate(inv.value?.endDate),
+  set: (d) => {
+    inv.value.endDate = d ? toISODate(d) : null
+    changed()
+  },
+})
 const validFor = computed(() => quoteValidDays(inv.value?.issueDate, inv.value?.validUntil))
 function setValidDays(n) {
   const d = fromISODate(inv.value.issueDate)
@@ -239,7 +280,7 @@ const lineCols = computed(() => [
   },
   {
     field: 'vatRate', headerName: 'DPH', width: 74, type: 'rightAligned', hide: nonVat.value,
-    cellEditor: 'agSelectCellEditor', cellEditorParams: () => ({ values: ratesOn(isQuote.value ? inv.value?.issueDate : inv.value?.deliveryDate) }),
+    cellEditor: 'agSelectCellEditor', cellEditorParams: () => ({ values: ratesOn(isQuote.value ? inv.value?.issueDate : isRecurring.value ? inv.value?.nextDate : inv.value?.deliveryDate) }),
     valueFormatter: (p) => `${p.value} %`,
     valueParser: (p) => Number(p.newValue),
   },
@@ -301,13 +342,13 @@ async function save({ quiet = false } = {}) {
   gridApi.value?.stopEditing()
   busy.value = true
   try {
-    const saved = await (isQuote.value ? api.saveQuote : api.saveInvoice)(session.companyId, payload())
+    const saved = await (isQuote.value ? api.saveQuote : isRecurring.value ? api.saveRecurring : api.saveInvoice)(session.companyId, payload())
     const wasNew = !inv.value.id
     inv.value = saved
     lines.value = saved.lines.length ? saved.lines.map(withKey) : [blankLine()]
     dirty.value = false
     errors.value = {}
-    if (!quiet) toast.add({ severity: 'success', summary: 'Koncept uložený', life: 2500 })
+    if (!quiet) toast.add({ severity: 'success', summary: isRecurring.value ? 'Pravidelná faktúra uložená' : 'Koncept uložený', life: 2500 })
     if (wasNew) router.replace(`${base.value}/${saved.id}`)
     return saved
   } catch (e) {
@@ -367,6 +408,61 @@ function cancelInvoice() {
       try {
         inv.value = await api.cancel(session.companyId, inv.value.id)
         toast.add({ severity: 'info', summary: 'Faktúra stornovaná', life: 2500 })
+      } catch (e) {
+        applyError(e)
+      }
+    },
+  })
+}
+
+// ---- akcie pravidelnej faktúry ----
+async function setActive(active) {
+  if (dirty.value && !(await save({ quiet: true }))) return
+  busy.value = true
+  try {
+    inv.value = await api.recurringAction(session.companyId, inv.value.id, active ? 'resume' : 'pause')
+    toast.add({ severity: 'success', summary: active ? 'Obnovená — ďalšia faktúra ' + formatDate(inv.value.nextDate) : 'Pozastavená', life: 3000 })
+  } catch (e) {
+    applyError(e)
+  } finally {
+    busy.value = false
+  }
+}
+
+function generateNow() {
+  confirm.require({
+    header: 'Faktúra hneď',
+    message: `Vytvorí sa faktúra za najbližšie obdobie (${sample.value?.period ?? formatDate(inv.value.nextDate)}) s dnešným dátumom${
+      inv.value.autoIssue ? ' a hneď sa vystaví' : ' ako koncept'}. Ďalšia faktúra sa posunie o jedno obdobie.`,
+    acceptProps: { label: 'Vytvoriť faktúru' },
+    rejectProps: { label: 'Zrušiť', severity: 'secondary', outlined: true },
+    accept: async () => {
+      if (dirty.value && !(await save({ quiet: true }))) return
+      busy.value = true
+      try {
+        const created = await api.recurringAction(session.companyId, inv.value.id, 'generate')
+        toast.add({ severity: 'success', summary: created.number ? `Vystavená ${created.number}` : 'Koncept faktúry vytvorený', life: 3000 })
+        router.push(`/faktury/${created.id}`)
+      } catch (e) {
+        applyError(e)
+      } finally {
+        busy.value = false
+      }
+    },
+  })
+}
+
+function deleteRecurring() {
+  confirm.require({
+    header: 'Zmazať pravidelnú faktúru',
+    message: 'Šablóna sa zmaže a ďalšie faktúry sa už nevytvoria. Doteraz vytvorené faktúry zostanú.',
+    acceptProps: { label: 'Zmazať', severity: 'danger' },
+    rejectProps: { label: 'Ponechať', severity: 'secondary', outlined: true },
+    accept: async () => {
+      try {
+        await api.deleteRecurring(session.companyId, inv.value.id)
+        toast.add({ severity: 'info', summary: 'Pravidelná faktúra zmazaná', life: 2500 })
+        router.push('/pravidelne')
       } catch (e) {
         applyError(e)
       }
@@ -451,7 +547,7 @@ function searchContacts(e) {
 function applyContact(ct) {
   inv.value.customer = customerFromContact(ct)
   inv.value.contactId = ct.id
-  if (isQuote.value) return changed()
+  if (isQuote.value || isRecurring.value) return changed()
   const d = fromISODate(inv.value.issueDate)
   d.setDate(d.getDate() + dueDaysFor(ct, session.company))
   inv.value.dueDate = toISODate(d)
@@ -500,13 +596,23 @@ const customerFields = reactive([
 
   <div v-else-if="inv" class="editor" :class="{ locked: !editable }">
     <header class="bar">
-      <RouterLink :to="base" class="back" :aria-label="isQuote ? 'Späť na zoznam ponúk' : 'Späť na zoznam faktúr'"><i class="pi pi-arrow-left" /></RouterLink>
+      <RouterLink :to="base" class="back" aria-label="Späť na zoznam"><i class="pi pi-arrow-left" /></RouterLink>
       <h1>{{ title }}</h1>
       <span v-if="inv.id" class="tag" :data-tone="status.tone"><span class="tag-text">{{ status.label }}</span></span>
       <span v-if="dirty && editable" class="unsaved">neuložené zmeny</span>
       <div class="spacer" />
+      <template v-if="isRecurring">
+        <template v-if="canWrite && inv.id">
+          <Button label="Zmazať" severity="danger" text size="small" :disabled="busy" @click="deleteRecurring" />
+          <Button v-if="inv.active" label="Pozastaviť" icon="pi pi-pause" severity="secondary" text size="small" :disabled="busy" @click="setActive(false)" />
+          <Button v-else-if="inv.nextDate" label="Obnoviť" icon="pi pi-play" severity="secondary" text size="small" :disabled="busy"
+            v-tooltip.bottom="'Obdobia počas pozastavenia sa preskočia'" @click="setActive(true)" />
+          <Button v-if="inv.nextDate" label="Faktúra hneď" icon="pi pi-bolt" severity="secondary" outlined size="small" :disabled="busy" @click="generateNow" />
+        </template>
+        <Button v-if="canWrite" label="Uložiť" icon="pi pi-check" size="small" :loading="busy" @click="save()" v-tooltip.bottom="'Ctrl+S'" />
+      </template>
       <Button
-        v-if="inv.id"
+        v-else-if="inv.id"
         icon="pi pi-print"
         label="Tlač / PDF"
         severity="secondary"
@@ -514,7 +620,7 @@ const customerFields = reactive([
         size="small"
         @click="router.push(`${base}/${inv.id}/tlac`)"
       />
-      <template v-if="editable">
+      <template v-if="editable && !isRecurring">
         <Button label="Uložiť koncept" severity="secondary" outlined size="small" :loading="busy" @click="save()" v-tooltip.bottom="'Ctrl+S'" />
         <Button label="Vystaviť" icon="pi pi-check" size="small" :disabled="busy" @click="issue" />
       </template>
@@ -629,9 +735,53 @@ const customerFields = reactive([
           </div>
         </fieldset>
 
-        <fieldset class="block">
-          <legend>Doklad</legend>
-          <div v-if="isQuote" class="fields dates">
+        <fieldset v-if="isRecurring" class="block">
+          <legend>Rozvrh</legend>
+          <div class="fields schedule">
+            <label class="wide">
+              <span>Názov (pre vás, na faktúre nie je)</span>
+              <InputText :model-value="inv.name" :disabled="!editable" size="small" maxlength="80" placeholder="Napr. Servisný paušál"
+                :invalid="!!fieldError('name')" @update:model-value="upd(inv, 'name')($event)" />
+            </label>
+            <label class="wide">
+              <span>Ako často</span>
+              <SelectButton :model-value="inv.interval" :options="intervals" option-label="label" option-value="value" :allow-empty="false"
+                :disabled="!editable" size="small" @update:model-value="upd(inv, 'interval')($event)" />
+              <small v-if="fieldError('interval')" class="err">{{ fieldError('interval') }}</small>
+            </label>
+            <label>
+              <span>{{ inv.generated ? 'Ďalšia faktúra' : 'Prvá faktúra' }}</span>
+              <DatePicker v-model="nextDate" :disabled="!editable" date-format="d. m. yy" show-icon icon-display="input" size="small" :invalid="!!fieldError('nextDate')" />
+              <small v-if="fieldError('nextDate')" class="err">{{ fieldError('nextDate') }}</small>
+            </label>
+            <label>
+              <span>Koniec (nepovinné)</span>
+              <DatePicker v-model="endDate" :disabled="!editable" date-format="d. m. yy" show-icon show-clear icon-display="input" size="small" :invalid="!!fieldError('endDate')" />
+              <small v-if="fieldError('endDate')" class="err">{{ fieldError('endDate') }}</small>
+            </label>
+            <label>
+              <span>Splatnosť (dni)</span>
+              <InputNumber :model-value="inv.dueDays || null" :min="0" :max="365" :disabled="!editable" size="small" placeholder="podľa odberateľa"
+                :invalid="!!fieldError('dueDays')" @update:model-value="upd(inv, 'dueDays')($event ?? 0)" />
+            </label>
+            <label class="check auto">
+              <Checkbox :model-value="inv.autoIssue" binary :disabled="!editable" input-id="auto" @update:model-value="upd(inv, 'autoIssue')($event)" />
+              <span>Vystaviť automaticky <small>(inak ostane koncept na kontrolu)</small></span>
+            </label>
+          </div>
+          <div class="fields pay-row">
+            <label>
+              <span>Spôsob úhrady</span>
+              <Select :model-value="inv.paymentMethod || 'transfer'" :options="codes.paymentMethods" option-label="label" option-value="code"
+                :disabled="!editable" size="small" class="pay-method" @update:model-value="upd(inv, 'paymentMethod')($event)" />
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset v-if="!isRecurring || !nonVat || isForeign(inv.customer.country)" class="block">
+          <legend>{{ isRecurring ? 'DPH' : 'Doklad' }}</legend>
+          <div v-if="isRecurring" />
+          <div v-else-if="isQuote" class="fields dates">
             <label>
               <span>Dátum ponuky</span>
               <DatePicker v-model="issueDate" :disabled="!editable" date-format="d. m. yy" show-icon icon-display="input" size="small" :invalid="!!fieldError('issueDate')" />
@@ -664,7 +814,7 @@ const customerFields = reactive([
               <button v-for="n in [7, 14, 30]" :key="n" type="button" :class="{ on: dueDays === n }" @click="setDueDays(n)">{{ n }} dní</button>
             </div>
           </div>
-          <div v-if="!isQuote" class="fields pay-row">
+          <div v-if="!isQuote && !isRecurring" class="fields pay-row">
             <label>
               <span>Spôsob úhrady</span>
               <Select
@@ -737,11 +887,30 @@ const customerFields = reactive([
             <li v-for="m in lineErrors" :key="m">{{ m }}</li>
           </ul>
           <Button v-if="editable" label="Pridať položku" icon="pi pi-plus" text size="small" class="add" @click="addLine" />
+          <p v-if="isRecurring && editable" class="tokens">
+            V popise a poznámke môžete použiť
+            <span v-for="p in placeholders" :key="p.token"><code>{{ p.token }}</code> ({{ p.hint }})</span>
+          </p>
         </fieldset>
 
         <fieldset class="block">
           <legend>Poznámka na {{ isQuote ? 'ponuke' : 'faktúre' }}</legend>
           <Textarea :model-value="inv.note" :disabled="!editable" rows="2" auto-resize class="note" @update:model-value="upd(inv, 'note')($event)" />
+        </fieldset>
+
+        <fieldset v-if="isRecurring && inv.id" class="block">
+          <legend>Vytvorené faktúry <span class="muted">{{ inv.generated || 0 }}</span></legend>
+          <p v-if="!inv.history?.length" class="muted">Zatiaľ žiadna.</p>
+          <table v-else class="history">
+            <thead><tr><th>Obdobie</th><th>Faktúra</th><th>Stav</th></tr></thead>
+            <tbody>
+              <tr v-for="h in inv.history" :key="h.invoiceId + h.period">
+                <td>{{ formatDate(h.period) }}{{ h.manual ? ' (ručne)' : '' }}</td>
+                <td><RouterLink v-if="h.invoiceId" :to="`/faktury/${h.invoiceId}`">{{ h.number || 'koncept' }}</RouterLink></td>
+                <td :class="{ warn: !h.issued && h.error }">{{ h.issued ? 'vystavená' : h.error || 'koncept' }}</td>
+              </tr>
+            </tbody>
+          </table>
         </fieldset>
       </div>
 
@@ -774,11 +943,26 @@ const customerFields = reactive([
           </tfoot>
         </table>
         <div class="payable">
-          <span>{{ isQuote ? 'Cena spolu' : isCredit ? 'Suma dobropisu' : 'K úhrade' }}</span>
+          <span>{{ isQuote ? 'Cena spolu' : isRecurring ? 'Suma faktúry' : isCredit ? 'Suma dobropisu' : 'K úhrade' }}</span>
           <strong class="num">{{ formatMoney(inv.summary.total, inv.currency) }}</strong>
         </div>
         <p v-if="nonVat" class="note-rc">Nie som platiteľ DPH. Faktúra je bez DPH.</p>
         <p v-if="inv.reverseCharge && !nonVat" class="note-rc">Prenesenie daňovej povinnosti — DPH odvedie odberateľ.</p>
+        <template v-if="isRecurring">
+          <dl class="pay-info">
+            <dt>{{ inv.generated ? 'Ďalšia faktúra' : 'Prvá faktúra' }}</dt>
+            <dd>{{ inv.nextDate ? formatDate(inv.nextDate) : 'žiadna — skončená' }}</dd>
+            <template v-if="sample?.period">
+              <dt>Obdobie</dt>
+              <dd>{{ sample.period }}</dd>
+            </template>
+          </dl>
+          <div v-if="sample?.lines?.some((l, i) => l !== lines[i]?.description) || (sample?.note && sample.note !== inv.note)" class="sample">
+            <h3>Na faktúre bude</h3>
+            <p v-for="(l, i) in sample.lines" :key="i">{{ l }}</p>
+            <p v-if="sample.note" class="muted">{{ sample.note }}</p>
+          </div>
+        </template>
         <dl v-if="isQuote && inv.id" class="pay-info">
           <dt>Platná do</dt>
           <dd :class="{ expired: inv.expired }">{{ formatDate(inv.validUntil) }}{{ inv.expired ? ' (uplynula)' : '' }}</dd>
@@ -1164,6 +1348,73 @@ legend {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+.fields.schedule {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: end;
+}
+.fields.schedule .wide {
+  grid-column: span 2;
+}
+.check.auto small {
+  color: var(--ink-faint);
+  font-size: var(--fs-sm);
+}
+.tokens {
+  margin: 4px 0 0;
+  font-size: var(--fs-sm);
+  color: var(--ink-faint);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+}
+.tokens code {
+  color: var(--ink-soft);
+}
+.muted {
+  color: var(--ink-faint);
+  font-size: var(--fs-sm);
+  font-weight: 400;
+}
+.history {
+  width: 100%;
+  max-width: 640px;
+  border-collapse: collapse;
+  font-size: var(--fs-md);
+}
+.history th {
+  text-align: left;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--ink-soft);
+  border-bottom: 1px solid var(--rule);
+  padding: 3px 8px 3px 0;
+}
+.history td {
+  padding: 3px 8px 3px 0;
+  border-bottom: 1px solid var(--rule-soft);
+  font-variant-numeric: tabular-nums;
+}
+.history a {
+  color: var(--blue);
+}
+.history td.warn {
+  color: var(--tone-draft);
+}
+.sample {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--rule);
+  font-size: var(--fs-sm);
+}
+.sample h3 {
+  margin: 0 0 4px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+.sample p {
+  margin: 0 0 2px;
+}
 .pay-info dd.expired {
   color: var(--tone-overdue);
 }
@@ -1195,7 +1446,8 @@ legend {
   .fields.customer {
     grid-template-columns: 1fr 1fr;
   }
-  .fields.dates {
+  .fields.dates,
+  .fields.schedule {
     grid-template-columns: 1fr 1fr;
   }
   .vat-opts {

@@ -131,12 +131,16 @@ func main() {
 		}
 	}()
 
+	runCtx, stopRecurring := context.WithCancel(context.Background())
+	go recurringLoop(runCtx, a)
+
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	<-stop
 	log.Print("ukončujem…")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	stopRecurring()
 	_ = srv.Shutdown(ctx)
 	cleanup() // pri SQLite: záverečná záloha
 }
@@ -167,6 +171,31 @@ func setupLicense(a *app.App, path, dbPath string) {
 		log.Printf("licencia: %s, platná do %s", st.Customer, st.Expires.Format("2. 1. 2006"))
 		if st.Warning != "" {
 			log.Printf("licencia: %s", st.Warning)
+		}
+	}
+}
+
+// recurringLoop vytvára pravidelné faktúry: krátko po štarte a potom každú hodinu
+// (desktop môže bežať cez polnoc, server nepretržite).
+func recurringLoop(ctx context.Context, a *app.App) {
+	run := func() {
+		res, err := a.RunRecurring(ctx)
+		switch {
+		case err != nil:
+			log.Printf("pravidelná fakturácia: %v", err)
+		case res.Created > 0:
+			log.Printf("pravidelná fakturácia: vytvorených %d faktúr, z toho vystavených %d", res.Created, res.Issued)
+		}
+	}
+	t := time.NewTimer(5 * time.Second)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			run()
+			t.Reset(time.Hour)
 		}
 	}
 }

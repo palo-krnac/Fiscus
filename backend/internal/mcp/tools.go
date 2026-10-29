@@ -14,6 +14,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/money"
 	"github.com/palo-krnac/fiscus/backend/internal/purchase"
 	"github.com/palo-krnac/fiscus/backend/internal/quote"
+	"github.com/palo-krnac/fiscus/backend/internal/recurring"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 	"github.com/palo-krnac/fiscus/backend/internal/vat"
 )
@@ -342,6 +343,50 @@ func (s *Server) allTools() []Tool {
 					}
 				}
 				return map[string]any{"quotes": out, "count": len(out)}, nil
+			},
+		},
+		{
+			Name: "list_recurring_invoices", Title: "Pravidelná fakturácia",
+			Description: "Šablóny pravidelných faktúr (paušály, nájmy): interval, dátum ďalšej faktúry, suma, či sa vystavujú automaticky a posledné vytvorené faktúry. Faktúry z nich vytvára Fiškus sám.",
+			Props:       map[string]any{"company_id": pCompany},
+			Run: func(c *callCtx, args json.RawMessage) (any, error) {
+				var p struct {
+					CompanyID int64 `json:"company_id"`
+				}
+				if err := parse(args, &p); err != nil {
+					return nil, err
+				}
+				cid, err := c.company(p.CompanyID, auth.PermInvoicesRead)
+				if err != nil {
+					return nil, err
+				}
+				list, err := a.Recurring(c.ctx, cid)
+				if err != nil {
+					return nil, err
+				}
+				type row struct {
+					ID        int64              `json:"id"`
+					Name      string             `json:"name"`
+					Customer  string             `json:"customer"`
+					Interval  recurring.Interval `json:"interval"`
+					Active    bool               `json:"active"`
+					AutoIssue bool               `json:"auto_issue"`
+					NextDate  invoice.Date       `json:"next_date"`
+					EndDate   invoice.Date       `json:"end_date"`
+					Total     money.Dec          `json:"total"`
+					Generated int                `json:"generated"`
+					Last      []recurring.Run    `json:"last_invoices"`
+				}
+				out := []row{}
+				for _, t := range list {
+					last := t.History
+					if len(last) > 3 {
+						last = last[:3]
+					}
+					out = append(out, row{t.ID, t.Name, t.Customer.Name, t.Interval, t.Active, t.AutoIssue, t.NextDate, t.EndDate,
+						t.Summary.Total, t.Generated, last})
+				}
+				return map[string]any{"templates": out, "count": len(out)}, nil
 			},
 		},
 		{

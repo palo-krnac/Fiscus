@@ -17,6 +17,7 @@ import Cash from './views/Cash.vue'
 import Backups from './views/Backups.vue'
 import CashPrint from './views/CashPrint.vue'
 import QuoteList from './views/QuoteList.vue'
+import RecurringList from './views/RecurringList.vue'
 
 // Moduly z etapového plánu — zatiaľ prázdne stránky s popisom.
 export const modules = [
@@ -25,7 +26,7 @@ export const modules = [
     items: [
       { path: '/faktury', label: 'Vydané faktúry', icon: 'pi-file-export', ready: true, perm: 'invoices.read' },
       { path: '/ponuky', label: 'Cenové ponuky', icon: 'pi-file-edit', ready: true, perm: 'invoices.read' },
-      { path: '/pravidelne', label: 'Pravidelná fakturácia', icon: 'pi-replay', stage: 1, perm: 'invoices.read' },
+      { path: '/pravidelne', label: 'Pravidelná fakturácia', icon: 'pi-replay', ready: true, perm: 'invoices.read' },
     ],
   },
   {
@@ -92,6 +93,9 @@ export const router = createRouter({
     { path: '/ponuky/nova', component: InvoiceEdit, props: { quote: true }, meta: { title: 'Nová ponuka', perm: 'invoices.write' } },
     { path: '/ponuky/:id(\\d+)', component: InvoiceEdit, props: (r) => ({ id: r.params.id, quote: true }), meta: { title: 'Cenová ponuka', perm: 'invoices.read' } },
     { path: '/ponuky/:id(\\d+)/tlac', component: InvoicePrint, props: (r) => ({ id: r.params.id, quote: true }), meta: { title: 'Cenová ponuka', bare: true, perm: 'invoices.read' } },
+    { path: '/pravidelne', component: RecurringList, meta: { title: 'Pravidelná fakturácia', perm: 'invoices.read' } },
+    { path: '/pravidelne/nova', component: InvoiceEdit, props: { recurring: true }, meta: { title: 'Nová pravidelná faktúra', perm: 'invoices.write' } },
+    { path: '/pravidelne/:id(\\d+)', component: InvoiceEdit, props: (r) => ({ id: r.params.id, recurring: true }), meta: { title: 'Pravidelná faktúra', perm: 'invoices.read' } },
     { path: '/prijate', component: PurchaseList, meta: { title: 'Prijaté faktúry', perm: 'purchases.read' } },
     { path: '/prijate/nova', component: PurchaseEdit, meta: { title: 'Nová prijatá faktúra', perm: 'purchases.write' } },
     { path: '/prijate/:id(\\d+)', component: PurchaseEdit, props: true, meta: { title: 'Prijatá faktúra', perm: 'purchases.read' } },

@@ -92,6 +92,16 @@ func (s *Server) Handler() http.Handler {
 	need("POST /api/companies/{cid}/quotes/{id}/copy", auth.PermInvoicesWrite, s.quoteAction((*Server).copyQuote))
 	need("POST /api/companies/{cid}/quotes/{id}/invoice", auth.PermInvoicesWrite, s.invoiceQuote)
 
+	need("GET /api/companies/{cid}/recurring", auth.PermInvoicesRead, s.listRecurring)
+	need("GET /api/companies/{cid}/recurring/{id}", auth.PermInvoicesRead, s.getRecurring)
+	need("POST /api/companies/{cid}/recurring", auth.PermInvoicesWrite, s.saveRecurring)
+	need("POST /api/companies/{cid}/recurring/preview", auth.PermInvoicesWrite, s.previewRecurring)
+	need("PUT /api/companies/{cid}/recurring/{id}", auth.PermInvoicesWrite, s.saveRecurring)
+	need("DELETE /api/companies/{cid}/recurring/{id}", auth.PermInvoicesWrite, s.deleteRecurring)
+	need("POST /api/companies/{cid}/recurring/{id}/pause", auth.PermInvoicesWrite, s.setRecurringActive(false))
+	need("POST /api/companies/{cid}/recurring/{id}/resume", auth.PermInvoicesWrite, s.setRecurringActive(true))
+	need("POST /api/companies/{cid}/recurring/{id}/generate", auth.PermInvoicesWrite, s.generateRecurring)
+
 	need("GET /api/companies/{cid}/purchases", auth.PermPurchasesRead, s.listPurchases)
 	need("GET /api/companies/{cid}/purchases/{id}", auth.PermPurchasesRead, s.getPurchase)
 	need("POST /api/companies/{cid}/purchases", auth.PermPurchasesWrite, s.savePurchase)

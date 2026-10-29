@@ -17,6 +17,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/purchase"
 	"github.com/palo-krnac/fiscus/backend/internal/quote"
+	"github.com/palo-krnac/fiscus/backend/internal/recurring"
 )
 
 // ErrNotFound — záznam neexistuje (alebo patrí inej firme).
@@ -147,6 +148,13 @@ type Store interface {
 	GetQuote(ctx context.Context, companyID, id int64) (quote.Quote, error)
 	// SaveQuote vloží (ID == 0) alebo prepíše ponuku. Nastaví ID.
 	SaveQuote(ctx context.Context, companyID int64, q *quote.Quote) error
+
+	// ListRecurring vráti šablóny pravidelnej fakturácie firmy zoradené podľa ID.
+	ListRecurring(ctx context.Context, companyID int64) ([]recurring.Template, error)
+	GetRecurring(ctx context.Context, companyID, id int64) (recurring.Template, error)
+	// SaveRecurring vloží (ID == 0) alebo prepíše šablónu. Nastaví ID.
+	SaveRecurring(ctx context.Context, companyID int64, t *recurring.Template) error
+	DeleteRecurring(ctx context.Context, companyID, id int64) error
 
 	// ---- používatelia a prístupy ----
 	CreateUser(ctx context.Context, u auth.User) (auth.User, error) // ErrDuplicate pri rovnakom e-maile

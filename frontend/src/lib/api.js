@@ -177,6 +177,15 @@ export const api = {
       : request('POST', `/api/companies/${cid}/quotes`, q),
   previewQuote: (cid, q) => request('POST', `/api/companies/${cid}/quotes/preview`, q),
   quoteAction: (cid, id, action) => request('POST', `/api/companies/${cid}/quotes/${id}/${action}`),
+  recurringList: (cid) => request('GET', `/api/companies/${cid}/recurring`),
+  recurring: (cid, id) => request('GET', `/api/companies/${cid}/recurring/${id}`),
+  saveRecurring: (cid, t) =>
+    t.id
+      ? request('PUT', `/api/companies/${cid}/recurring/${t.id}`, t)
+      : request('POST', `/api/companies/${cid}/recurring`, t),
+  previewRecurring: (cid, t) => request('POST', `/api/companies/${cid}/recurring/preview`, t),
+  recurringAction: (cid, id, action) => request('POST', `/api/companies/${cid}/recurring/${id}/${action}`),
+  deleteRecurring: (cid, id) => request('DELETE', `/api/companies/${cid}/recurring/${id}`),
   payPurchase: (cid, id) => request('POST', `/api/companies/${cid}/purchases/${id}/pay`),
   unpayPurchase: (cid, id) => request('POST', `/api/companies/${cid}/purchases/${id}/unpay`),
   deletePurchase: (cid, id) => request('DELETE', `/api/companies/${cid}/purchases/${id}`),
