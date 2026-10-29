@@ -50,6 +50,9 @@ type App struct {
 	BackupSetup *BackupSetup
 	// ECBURL je adresa kurzov ECB ("" = nesťahovať); FetchRates ju v testoch nahradí.
 	ECBURL     string
+	// ECBRateURL je séria základnej úrokovej sadzby ECB (CSV) pre úrok
+	// z omeškania ("" = nesťahovať, sadzby sa zadávajú ručne).
+	ECBRateURL string
 	FetchRates func(ctx context.Context, url string) ([]fx.Rate, error)
 	// AIBaseURL je adresa Claude API ("" = api.anthropic.com; v testoch falošný server).
 	AIBaseURL string

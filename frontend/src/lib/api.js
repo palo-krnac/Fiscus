@@ -270,6 +270,7 @@ export const api = {
   legal: () => request('GET', '/api/legal'),
   saveLegal: (p) => request('PUT', '/api/legal', p),
   resetLegal: () => request('POST', '/api/legal/reset'),
+  updateECBRates: () => request('POST', '/api/legal/ecb'),
   reminders: (cid, year) => request('GET', `/api/companies/${cid}/reminders` + (year ? `?year=${year}` : '')),
   reminder: (cid, id) => request('GET', `/api/companies/${cid}/reminders/${id}`),
   previewReminder: (cid, req) => request('POST', `/api/companies/${cid}/reminders/preview`, req),
