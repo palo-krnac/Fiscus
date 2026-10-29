@@ -55,6 +55,22 @@ export async function request(method, path, body, fetchImpl = globalThis.fetch) 
   return data
 }
 
+/** Stiahne súbor ako Blob s menom z hlavičky Content-Disposition. */
+export async function download(path, fallbackName, fetchImpl = globalThis.fetch) {
+  const res = await fetchImpl(path, { credentials: 'same-origin' })
+  if (!res.ok) {
+    let data = null
+    try {
+      data = await res.json()
+    } catch {
+      /* telo nie je JSON */
+    }
+    throw new ApiError(res.status, data?.error ?? `Chyba servera (${res.status})`, data?.fields ?? [])
+  }
+  const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? fallbackName
+  return { blob: await res.blob(), name }
+}
+
 const inv = (cid) => `/api/companies/${cid}/invoices`
 
 /** Query string z filtra (prázdne hodnoty vynechá). */
@@ -110,20 +126,10 @@ export const api = {
 
   vat: (cid, period, excess) => request('GET', `/api/companies/${cid}/vat` + query({ period, excess })),
   /** XML pre eDane ako Blob (kind: 'dph' | 'kv'). */
-  async vatXML(cid, kind, period, excess, fetchImpl = globalThis.fetch) {
-    const res = await fetchImpl(`/api/companies/${cid}/vat/${kind}.xml` + query({ period, excess }), { credentials: 'same-origin' })
-    if (!res.ok) {
-      let msg = `Chyba servera (${res.status})`
-      try {
-        msg = (await res.json()).error ?? msg
-      } catch {
-        /* telo nie je JSON */
-      }
-      throw new ApiError(res.status, msg)
-    }
-    const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? `${kind}.xml`
-    return { blob: await res.blob(), name }
-  },
+  vatXML: (cid, kind, period, excess, fetchImpl = globalThis.fetch) =>
+    download(`/api/companies/${cid}/vat/${kind}.xml` + query({ period, excess }), `${kind}.xml`, fetchImpl),
+  /** E-faktúra (UBL, Peppol BIS 3.0) ako Blob; chýbajúce údaje sú v ApiError.fields. */
+  einvoice: (cid, id, fetchImpl = globalThis.fetch) => download(`/api/companies/${cid}/invoices/${id}/ubl`, 'e-faktura.xml', fetchImpl),
 
   codes: () => request('GET', '/api/codes'),
   companies: () => request('GET', '/api/companies'),
@@ -219,6 +225,7 @@ export const api = {
   aiSettings: () => request('GET', '/api/ai/settings'),
   saveAISettings: (s) => request('PUT', '/api/ai/settings', s),
   // PDF alebo fotka prijatej faktúry → koncept na kontrolu (Claude API)
+  importUBL: (cid, file) => request('POST', `/api/companies/${cid}/purchases/import-ubl${query({ name: file.name })}`, file),
   extractPurchase: (cid, file) => request('POST', `/api/companies/${cid}/purchases/extract${query({ name: file.name })}`, file),
   legal: () => request('GET', '/api/legal'),
   saveLegal: (p) => request('PUT', '/api/legal', p),

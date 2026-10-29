@@ -42,6 +42,14 @@ func icdph(n int) string {
 
 type customer struct{ name, city, ico, icdph string }
 
+// dic: platiteľ má DIČ v IČ DPH, ostatným sa zostaví z IČO (ukážkové údaje).
+func (c customer) dic() string {
+	if c.icdph != "" {
+		return strings.TrimPrefix(c.icdph, "SK")
+	}
+	return "10" + c.ico
+}
+
 var customers = []customer{
 	{"Elektro Hron s.r.o.", "Banská Bystrica", ico("4612345"), icdph(2120461234)},
 	{"Stavmont Zvolen, a.s.", "Zvolen", ico("3687412"), icdph(2120368741)},
@@ -85,7 +93,7 @@ func Seed(ctx context.Context, a *app.App) (store.Company, error) {
 		if i%3 == 0 {
 			due = 30
 		}
-		ct, err := a.SaveContact(ctx, c.ID, store.Contact{Name: cu.name, City: cu.city, ICO: cu.ico, ICDPH: cu.icdph, Country: "SK", DueDays: due})
+		ct, err := a.SaveContact(ctx, c.ID, store.Contact{Name: cu.name, City: cu.city, ICO: cu.ico, DIC: cu.dic(), ICDPH: cu.icdph, Country: "SK", DueDays: due})
 		if err != nil {
 			return c, err
 		}
@@ -106,7 +114,7 @@ func Seed(ctx context.Context, a *app.App) (store.Company, error) {
 		cu := customers[ci]
 		issue := today.AddDays(-i*4 - 1)
 		inv := invoice.Invoice{
-			Customer:     invoice.Party{Name: cu.name, City: cu.city, Country: "SK", ICO: cu.ico, ICDPH: cu.icdph},
+			Customer:     invoice.Party{Name: cu.name, City: cu.city, Country: "SK", ICO: cu.ico, DIC: cu.dic(), ICDPH: cu.icdph},
 			ContactID:    contactIDs[ci],
 			IssueDate:    issue,
 			DeliveryDate: issue,
@@ -248,7 +256,7 @@ func seedAdvances(ctx context.Context, a *app.App, c store.Company, contactIDs [
 		cu := customers[ci]
 		issue := today.AddDays(-day)
 		d, err := a.SaveDraft(ctx, c.ID, invoice.Invoice{Kind: invoice.KindProforma,
-			Customer:  invoice.Party{Name: cu.name, City: cu.city, Country: "SK", ICO: cu.ico, ICDPH: cu.icdph},
+			Customer:  invoice.Party{Name: cu.name, City: cu.city, Country: "SK", ICO: cu.ico, DIC: cu.dic(), ICDPH: cu.icdph},
 			ContactID: contactIDs[ci], IssueDate: issue, DeliveryDate: issue, DueDate: issue.AddDays(7),
 			Lines: []invoice.Line{{Description: desc, Unit: "ks", Quantity: m.MustParse("1"), UnitPrice: m.MustParse(price), Rate: vat.Rate23}}})
 		if err != nil {
@@ -325,7 +333,7 @@ func seedRecurring(ctx context.Context, a *app.App, c store.Company, contactIDs 
 	}
 	party := func(ci int) invoice.Party {
 		cu := customers[ci]
-		return invoice.Party{Name: cu.name, City: cu.city, Country: "SK", ICO: cu.ico, ICDPH: cu.icdph}
+		return invoice.Party{Name: cu.name, City: cu.city, Country: "SK", ICO: cu.ico, DIC: cu.dic(), ICDPH: cu.icdph}
 	}
 	plan := []recurring.Template{
 		{Name: "Servisný paušál – údržba PLC", Active: true, Interval: recurring.Monthly, NextDate: today, AutoIssue: true,
@@ -369,7 +377,7 @@ func seedQuotes(ctx context.Context, a *app.App, c store.Company, contactIDs []i
 		cu := customers[p.ci]
 		day := today.AddDays(-p.day)
 		q := quote.Quote{
-			Customer:  invoice.Party{Name: cu.name, City: cu.city, Country: "SK", ICO: cu.ico, ICDPH: cu.icdph},
+			Customer:  invoice.Party{Name: cu.name, City: cu.city, Country: "SK", ICO: cu.ico, DIC: cu.dic(), ICDPH: cu.icdph},
 			ContactID: contactIDs[p.ci], IssueDate: day, ValidUntil: day.AddDays(p.valid), Note: p.note,
 		}
 		for _, li := range p.lines {
@@ -486,7 +494,7 @@ func seedDomesticRC(ctx context.Context, a *app.App, c store.Company) error {
 	day := a.Today().AddDays(-9)
 	cu := customers[1]
 	d, err := a.SaveDraft(ctx, c.ID, invoice.Invoice{
-		Customer:  invoice.Party{Name: cu.name, City: cu.city, Country: "SK", ICO: cu.ico, ICDPH: cu.icdph},
+		Customer:  invoice.Party{Name: cu.name, City: cu.city, Country: "SK", ICO: cu.ico, DIC: cu.dic(), ICDPH: cu.icdph},
 		IssueDate: day, DeliveryDate: day, DueDate: day.AddDays(30),
 		Lines: []invoice.Line{
 			{Description: "Programovanie riadiaceho systému vetrania", Unit: "hod", Quantity: m.MustParse("16"), UnitPrice: m.MustParse("45"), Rate: vat.Rate23},

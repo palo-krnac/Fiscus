@@ -14,6 +14,7 @@ import (
 type Document struct {
 	Name string // názov súboru, napr. „Faktura-2026001.pdf“
 	Data []byte
+	Type string // MIME typ; prázdny = application/pdf
 }
 
 // supplier vráti údaje dodávateľa pre tlač: firmu a logo (ak je nahrané).

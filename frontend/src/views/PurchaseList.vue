@@ -33,10 +33,27 @@ onMounted(async () => {
     aiReady.value = false
   }
 })
+// e-faktúra (XML) sa načíta bez AI
+const xmlInput = ref(null)
+async function readEInvoice(e) {
+  const file = e.target.files?.[0]
+  e.target.value = ''
+  if (!file) return
+  reading.value = true
+  try {
+    setPurchaseDraft({ ...(await api.importUBL(session.companyId, file)), source: 'ubl' })
+    router.push('/prijate/nova')
+  } catch (err) {
+    toast.add({ severity: 'error', summary: 'E-faktúru sa nepodarilo načítať', detail: err.message, life: 8000 })
+  } finally {
+    reading.value = false
+  }
+}
 async function readDocument(e) {
   const file = e.target.files?.[0]
   e.target.value = ''
   if (!file) return
+  if (/\.xml$/i.test(file.name) || file.type.includes('xml')) return readEInvoice({ target: { files: [file], value: '' } })
   reading.value = true
   try {
     setPurchaseDraft(await api.extractPurchase(session.companyId, file))
@@ -184,6 +201,9 @@ onBeforeUnmount(() => {
       <Select v-model="year" :options="years" option-label="label" option-value="value" size="small" aria-label="Rok" />
       <div class="spacer" />
       <template v-if="can('purchases.write')">
+        <input ref="xmlInput" type="file" accept=".xml,application/xml,text/xml" hidden @change="readEInvoice" />
+        <Button icon="pi pi-file-import" label="E-faktúra" aria-label="Načítať e-faktúru XML" class="ai-btn" severity="secondary" outlined size="small" :loading="reading"
+          v-tooltip.bottom="'Načítať prijatú e-faktúru (XML, UBL / Peppol) — údaje skontrolujete pred uložením'" @click="xmlInput.click()" />
         <input ref="pdfInput" type="file" accept="application/pdf,image/png,image/jpeg,image/webp" hidden @change="readDocument" />
         <Button icon="pi pi-sparkles" label="Z PDF" aria-label="Načítať z PDF" class="ai-btn" severity="secondary" outlined size="small" :loading="reading" :disabled="!aiReady"
           v-tooltip.bottom="aiReady ? 'Prečítať PDF alebo fotku faktúry cez Claude (AI) — údaje skontrolujete pred uložením' : 'Čítanie dokladov zapne správca v časti Prístup pre AI'"

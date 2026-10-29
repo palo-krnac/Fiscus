@@ -301,9 +301,10 @@ const set = (obj, key) => (v) => {
     <div class="body">
       <div class="form">
         <div v-if="aiNotes" class="ai-note">
-          <i class="pi pi-sparkles" />
+          <i class="pi" :class="aiNotes.source === 'ubl' ? 'pi-file-import' : 'pi-sparkles'" />
           <div>
-            <strong>Údaje prečítala AI z dokladu — pred zaevidovaním ich skontrolujte.</strong>
+            <strong v-if="aiNotes.source === 'ubl'">Údaje sú z e-faktúry — pred zaevidovaním ich skontrolujte.</strong>
+            <strong v-else>Údaje prečítala AI z dokladu — pred zaevidovaním ich skontrolujte.</strong>
             <ul v-if="aiNotes.warnings?.length">
               <li v-for="w in aiNotes.warnings" :key="w">{{ w }}</li>
             </ul>

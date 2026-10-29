@@ -109,6 +109,7 @@ func (s *Server) Handler() http.Handler {
 	need("GET /api/companies/{cid}/invoices/{id}/email", auth.PermInvoicesRead, s.mailDoc(app.MailInvoice))
 	need("POST /api/companies/{cid}/invoices/{id}/email", auth.PermInvoicesWrite, s.mailDoc(app.MailInvoice))
 	need("GET /api/companies/{cid}/invoices/{id}/pdf", auth.PermInvoicesRead, s.pdfHandler((*app.App).InvoicePDF, fail))
+	need("GET /api/companies/{cid}/invoices/{id}/ubl", auth.PermInvoicesRead, s.pdfHandler((*app.App).InvoiceUBL, failUBL))
 	need("POST /api/companies/{cid}/invoices", auth.PermInvoicesWrite, s.saveInvoice)
 	need("POST /api/companies/{cid}/invoices/preview", auth.PermInvoicesWrite, s.preview)
 	need("PUT /api/companies/{cid}/invoices/{id}", auth.PermInvoicesWrite, s.saveInvoice)
@@ -160,6 +161,7 @@ func (s *Server) Handler() http.Handler {
 	need("POST /api/companies/{cid}/items", auth.PermInvoicesWrite, s.saveItem)
 	need("POST /api/companies/{cid}/items/import", auth.PermInvoicesWrite, s.importItems)
 	need("POST /api/companies/{cid}/purchases/extract", auth.PermPurchasesWrite, s.extractPurchase)
+	need("POST /api/companies/{cid}/purchases/import-ubl", auth.PermPurchasesWrite, s.importUBL)
 	need("PUT /api/companies/{cid}/items/{id}", auth.PermInvoicesWrite, s.saveItem)
 	need("DELETE /api/companies/{cid}/items/{id}", auth.PermInvoicesWrite, s.deleteItem)
 
