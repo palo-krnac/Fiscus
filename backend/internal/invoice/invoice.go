@@ -86,6 +86,10 @@ type Line struct {
 	UnitPrice   money.Dec `json:"unitPrice"`
 	Rate        vat.Rate  `json:"vatRate"`
 	Amount      money.Dec `json:"amount"` // vypočítané: množstvo × cena
+	// Reverse: tuzemské prenesenie daňovej povinnosti pri položke (§ 69 ods. 12);
+	// Commodity je kód colného sadzobníka (plodiny, kovy) pre kontrolný výkaz.
+	Reverse   DomesticRC `json:"reverse,omitempty"`
+	Commodity string     `json:"commodity,omitempty"`
 }
 
 // Invoice je vydaná faktúra.
@@ -157,7 +161,7 @@ func ToEUR(s vat.Summary, rate money.Dec) vat.Summary {
 	out := vat.Summary{Rates: make([]vat.RateSummary, len(s.Rates))}
 	for i, r := range s.Rates {
 		base, tax := r.Base.DivCents(rate), r.VAT.DivCents(rate)
-		out.Rates[i] = vat.RateSummary{Rate: r.Rate, Base: base, VAT: tax, Total: base.Add(tax)}
+		out.Rates[i] = vat.RateSummary{Rate: r.Rate, Base: base, VAT: tax, Total: base.Add(tax), Reverse: r.Reverse}
 		out.Base, out.VAT = out.Base.Add(base), out.VAT.Add(tax)
 	}
 	out.Total = out.Base.Add(out.VAT)
@@ -178,7 +182,7 @@ func (inv *Invoice) Recalculate() error {
 	lines := make([]vat.Line, len(inv.Lines))
 	for i := range inv.Lines {
 		l := &inv.Lines[i]
-		lines[i] = vat.Line{Quantity: l.Quantity, UnitPrice: l.UnitPrice, Rate: l.Rate}
+		lines[i] = vat.Line{Quantity: l.Quantity, UnitPrice: l.UnitPrice, Rate: l.Rate, Reverse: l.Reverse != ""}
 		l.Amount = vat.LineAmount(lines[i])
 	}
 	s, err := vat.Calculate(lines, inv.PriceMode, inv.ReverseCharge || inv.NonVATPayer)
@@ -248,7 +252,7 @@ func (inv *Invoice) Validate() error {
 		if l.Quantity.IsZero() {
 			add(fmt.Sprintf("lines[%d].quantity", i), "Množstvo nesmie byť nula")
 		}
-		if rateDate := inv.RateDate(); !inv.ReverseCharge && !inv.NonVATPayer && !rateDate.IsZero() && !l.Rate.ValidOn(rateDate.String()) {
+		if rateDate := inv.RateDate(); !inv.ReverseCharge && l.Reverse == "" && !inv.NonVATPayer && !rateDate.IsZero() && !l.Rate.ValidOn(rateDate.String()) {
 			add(fmt.Sprintf("lines[%d].vatRate", i),
 				fmt.Sprintf("Sadzba %d %% neplatí k dátumu dodania %s", l.Rate, rateDate.Display()))
 		}
@@ -270,6 +274,7 @@ func (inv *Invoice) Validate() error {
 	if inv.DeliveryDate.IsZero() {
 		add("deliveryDate", "Zadajte dátum dodania")
 	}
+	errs = append(errs, inv.validateDomesticRC()...)
 	errs = append(errs, inv.validateCorrection()...)
 	errs = append(errs, inv.validateAdvance()...)
 	if inv.DueDate.IsZero() {

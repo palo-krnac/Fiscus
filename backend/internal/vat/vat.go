@@ -157,6 +157,9 @@ type Line struct {
 	Quantity  money.Dec
 	UnitPrice money.Dec
 	Rate      Rate
+	// Reverse: tuzemské prenesenie daňovej povinnosti pri tejto položke
+	// (§ 69 ods. 12) — bez DPH, v rekapitulácii samostatný riadok.
+	Reverse bool
 }
 
 // RateSummary je jeden riadok rekapitulácie DPH.
@@ -165,7 +168,18 @@ type RateSummary struct {
 	Base  money.Dec `json:"base"`
 	VAT   money.Dec `json:"vat"`
 	Total money.Dec `json:"total"`
+	// Reverse: riadok položiek s prenesením daňovej povinnosti (daň platí odberateľ).
+	Reverse bool `json:"reverse,omitempty"`
 }
+
+// Key je kľúč riadku rekapitulácie: sadzba a prenesenie.
+type Key struct {
+	Rate    Rate
+	Reverse bool
+}
+
+// Key vráti kľúč riadku rekapitulácie.
+func (r RateSummary) Key() Key { return Key{r.Rate, r.Reverse} }
 
 // Summary je výsledok výpočtu dokladu.
 type Summary struct {
@@ -183,33 +197,46 @@ func LineAmount(l Line) money.Dec { return l.Quantity.Mul(l.UnitPrice).RoundCent
 // reverseCharge = prenesenie daňovej povinnosti (§ 69 ods. 12 zákona o DPH):
 // faktúra sa vystaví bez DPH, daň priznáva odberateľ.
 func Calculate(lines []Line, mode PriceMode, reverseCharge bool) (Summary, error) {
-	sums := map[Rate]money.Dec{}
+	sums := map[Key]money.Dec{}
 	for i, l := range lines {
 		if !l.Rate.Known() {
 			return Summary{}, fmt.Errorf("položka %d: neplatná sadzba DPH %d %%", i+1, l.Rate)
 		}
-		r := l.Rate
-		if reverseCharge {
-			r = Rate0
+		k := Key{Rate: l.Rate}
+		switch {
+		case reverseCharge:
+			k.Rate = Rate0
+		case l.Reverse:
+			k = Key{Rate0, true} // bez DPH, daň priznáva odberateľ
 		}
-		sums[r] = sums[r].Add(LineAmount(l))
+		sums[k] = sums[k].Add(LineAmount(l))
 	}
 
-	rates := make([]Rate, 0, len(sums))
-	for r := range sums {
-		rates = append(rates, r)
+	keys := make([]Key, 0, len(sums))
+	for k := range sums {
+		keys = append(keys, k)
 	}
-	sort.Slice(rates, func(i, j int) bool { return rates[i] > rates[j] })
+	// sadzby zostupne, prenesenie na konci
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].Reverse != keys[j].Reverse {
+			return !keys[i].Reverse
+		}
+		return keys[i].Rate > keys[j].Rate
+	})
 
 	var out Summary
 	hundred := money.FromInt(100)
-	for _, r := range rates {
-		amount := sums[r]
+	for _, k := range keys {
+		amount := sums[k]
+		r := k.Rate
 		rate := money.FromInt(int64(r))
 		var rs RateSummary
-		rs.Rate = r
-		switch mode {
-		case PriceGross:
+		rs.Rate, rs.Reverse = r, k.Reverse
+		switch {
+		case k.Reverse:
+			// cena je bez DPH aj pri cenách s DPH — daň nevzniká u dodávateľa
+			rs.Base, rs.Total = amount, amount
+		case mode == PriceGross:
 			// DPH = suma × sadzba / (100 + sadzba)
 			rs.VAT = amount.MulRatio(rate, hundred.Add(rate)).RoundCents()
 			rs.Total = amount

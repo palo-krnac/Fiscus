@@ -82,6 +82,20 @@ func Run(t *testing.T, newStore Factory) {
 			got.Lines[0].UnitPrice.String() != "99.90" || got.DueDate.String() != "2026-10-15" {
 			t.Fatalf("načítaná faktúra sa líši: %+v", got)
 		}
+		// položka s tuzemským prenesením a kódom colného sadzobníka
+		got.Lines = append(got.Lines, invoice.Line{Description: "Oceľ", Quantity: m.MustParse("2"), Unit: "t", UnitPrice: m.MustParse("2600"),
+			Rate: vat.Rate23, Reverse: invoice.RCMetals, Commodity: "7308"})
+		if err := got.Recalculate(); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.SaveInvoice(ctx, c.ID, &got); err != nil {
+			t.Fatal(err)
+		}
+		rc, _ := s.GetInvoice(ctx, c.ID, inv.ID)
+		if l := rc.Lines[len(rc.Lines)-1]; l.Reverse != invoice.RCMetals || l.Commodity != "7308" || !rc.Summary.Rates[len(rc.Summary.Rates)-1].Reverse {
+			t.Fatalf("prenesenie pri položke sa neuložilo: %+v %+v", l, rc.Summary.Rates)
+		}
+		got = rc
 		// zmena v načítanej kópii nesmie zmeniť uložené dáta
 		got.Customer.Name = "Iný"
 		again, _ := s.GetInvoice(ctx, c.ID, inv.ID)

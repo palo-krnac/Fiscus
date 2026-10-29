@@ -56,7 +56,7 @@ var (
 // NeedsReceipt vráti true, ak sa k úhrade zálohovej faktúry vyhotovuje daňový
 // doklad k prijatej platbe: platiteľ DPH, tuzemský odberateľ, bez prenesenia.
 func (inv *Invoice) NeedsReceipt() bool {
-	return inv.Kind == KindProforma && !inv.NonVATPayer && !inv.ReverseCharge && !party.Foreign(inv.Customer.Country) && !inv.Foreign()
+	return inv.Kind == KindProforma && !inv.NonVATPayer && !inv.AnyReverse() && !party.Foreign(inv.Customer.Country) && !inv.Foreign()
 }
 
 // NewAdvanceReceipt vyhotoví daňový doklad k prijatej platbe za uhradenú
@@ -114,7 +114,7 @@ func NewFinalInvoice(proforma Invoice, receipt *Invoice, issue Date, dueDays int
 	if proforma.Advance != nil && proforma.Advance.FinalID != 0 {
 		return Invoice{}, ErrAlreadySettled
 	}
-	if proforma.ReverseCharge || party.Foreign(proforma.Customer.Country) || proforma.Foreign() {
+	if proforma.AnyReverse() || party.Foreign(proforma.Customer.Country) || proforma.Foreign() {
 		return Invoice{}, ErrForeignAdvance
 	}
 	d := Deduction{Number: proforma.Number, Date: proforma.PaidDate}
@@ -155,21 +155,21 @@ func (inv *Invoice) applyDeductions() {
 	full := inv.Summary
 	full.Rates = append([]vat.RateSummary(nil), full.Rates...)
 	inv.Advance.Supply = &full
-	byRate := map[vat.Rate]vat.RateSummary{}
-	order := []vat.Rate{}
+	byRate := map[vat.Key]vat.RateSummary{}
+	order := []vat.Key{}
 	for _, r := range full.Rates {
-		byRate[r.Rate] = r
-		order = append(order, r.Rate)
+		byRate[r.Key()] = r
+		order = append(order, r.Key())
 	}
 	for _, d := range inv.Advance.Deductions {
 		for _, r := range d.Rates {
-			cur, ok := byRate[r.Rate]
+			cur, ok := byRate[r.Key()]
 			if !ok {
-				order = append(order, r.Rate)
-				cur.Rate = r.Rate
+				order = append(order, r.Key())
+				cur.Rate, cur.Reverse = r.Rate, r.Reverse
 			}
 			cur.Base, cur.VAT, cur.Total = cur.Base.Sub(r.Base), cur.VAT.Sub(r.VAT), cur.Total.Sub(r.Total)
-			byRate[r.Rate] = cur
+			byRate[r.Key()] = cur
 		}
 	}
 	s := vat.Summary{Rates: []vat.RateSummary{}}

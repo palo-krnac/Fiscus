@@ -357,3 +357,84 @@ func TestForeignCurrencyPurchase(t *testing.T) {
 		t.Fatalf("upozornenia: %+v", ret.Warnings)
 	}
 }
+
+func TestDomesticReverseA2(t *testing.T) {
+	p, _ := ParsePeriod("2026-10")
+	line := func(desc, q, unit, price string, k invoice.DomesticRC, code string) invoice.Line {
+		return invoice.Line{Description: desc, Quantity: m(q), Unit: unit, UnitPrice: m(price), Rate: 23, Reverse: k, Commodity: code}
+	}
+	build := func(id int64, num string, lines ...invoice.Line) invoice.Invoice {
+		i := invoice.Invoice{ID: id, Number: num, Kind: invoice.KindInvoice, Status: invoice.StatusIssued,
+			IssueDate: d("2026-10-12"), DeliveryDate: d("2026-10-12"),
+			Customer: invoice.Party{Name: "Stavby s.r.o.", ICDPH: "sk2020372640", Country: "SK"}, Lines: lines}
+		if err := i.Recalculate(); err != nil {
+			t.Fatal(err)
+		}
+		return i
+	}
+	steel := build(1, "FA 1",
+		line("Projekt", "1", "ks", "200", "", ""),
+		line("Montáž rozvádzača v budove", "1", "ks", "1500", invoice.RCConstruction, ""),
+		line("Elektroinštalácia", "1", "ks", "500", invoice.RCConstruction, ""),
+		line("Nosníky", "2", "t", "2400", invoice.RCMetals, "7216 33"),
+		line("Profily", "500", "kg", "2", invoice.RCMetals, "7216 10"),
+		line("Plech", "1", "t", "900", invoice.RCMetals, "7208"),
+		line("Šrot", "3", "t", "300", invoice.RCScrap, ""),
+	)
+	credit := build(2, "DB1", line("Montáž", "-1", "ks", "100", invoice.RCConstruction, ""))
+	credit.Kind = invoice.KindCreditNote
+	ret := Compute(Input{Period: p, Invoices: []invoice.Invoice{steel, credit}})
+
+	// bežná DPH len z projektu; položky s prenesením nejdú do r. 01–04 ani do r. 13
+	if ret.Rows["r03"].String() != "200.00" || ret.Rows["r04"].String() != "46.00" || !ret.Rows["r13"].IsZero() {
+		t.Fatalf("riadky: r03=%s r04=%s r13=%s", ret.Rows["r03"], ret.Rows["r04"], ret.Rows["r13"])
+	}
+	if len(ret.KV.A1) != 1 || ret.KV.A1[0].Base.String() != "200.00" {
+		t.Fatalf("A.1: %+v", ret.KV.A1)
+	}
+	type row struct{ code, goods, base, qty, unit string }
+	var got []row
+	for _, a := range ret.KV.A2 {
+		q := ""
+		if a.Quantity != nil {
+			q = a.Quantity.String()
+		}
+		if a.Partner != "SK2020372640" || a.Number != "FA1" {
+			t.Errorf("hlavička A.2: %+v", a)
+		}
+		got = append(got, row{a.Code, a.Goods, a.Base.String(), q, a.Unit})
+	}
+	want := []row{
+		{"", "", "2000.00", "", ""},          // stavebné práce spolu, bez množstva
+		{"7216", "", "5800.00", "2.00", "t"}, // rovnaký kód: sčíta sa (kg iná jednotka → upozornenie)
+		{"7208", "", "900.00", "1.00", "t"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("A.2: %+v", got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("A.2[%d] = %+v, chcem %+v", i, got[i], want[i])
+		}
+	}
+	msgs := ""
+	for _, w := range ret.Warnings {
+		msgs += w.Message + "\n"
+	}
+	if !strings.Contains(msgs, "rôzne merné jednotky") || !strings.Contains(msgs, "Dobropis k dodaniu s prenesením") {
+		t.Fatalf("upozornenia: %s", msgs)
+	}
+
+	out := KVXML(ret, Taxpayer{Name: "Demo", City: "Zvolen", ICDPH: "SK2120000003"})
+	for _, s := range []string{
+		`<A2 Odb="SK2020372640" F="FA1" Den="2026-10-12" Z="2000.00"/>`,
+		`<A2 Odb="SK2020372640" F="FA1" Den="2026-10-12" Z="5800.00" TK="7216" Mn="2.00" MJ="t"/>`,
+	} {
+		if !strings.Contains(string(out), s) {
+			t.Errorf("XML bez %s:\n%s", s, out)
+		}
+	}
+	if strings.Index(string(out), "<A2") < strings.Index(string(out), "<A1") {
+		t.Error("A2 má byť za A1")
+	}
+}

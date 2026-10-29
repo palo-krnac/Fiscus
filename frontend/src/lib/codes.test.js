@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { EU, countries, isForeign, previewNumber, ratesOn, supplyHint, vatExemptionNote } from './codes.js'
+import { EU, countries, domesticRCOptions, domesticReverseNote, isForeign, needsCommodity, previewNumber, ratesOn, supplyHint, vatExemptionNote } from './codes.js'
 
 const periods = [
   { from: '2023-01-01', to: '2024-12-31', rates: [20, 10, 5, 0] },
@@ -58,5 +58,27 @@ describe('text o oslobodení na faktúre', () => {
     const note = vatExemptionNote(inv)
     if (part) expect(note).toContain(part)
     else expect(note).toBe('')
+  })
+})
+
+describe('tuzemské prenesenie', () => {
+  const kinds = [
+    { code: 'scrap', letter: 'a', label: 'Kovový odpad a šrot' },
+    { code: 'metals', letter: 'g', label: 'Železo a oceľ' },
+    { code: 'construction', letter: 'j', label: 'Stavebné práce' },
+  ]
+  it.each([
+    [[], ''],
+    [[{ reverse: '' }], ''],
+    [[{ reverse: 'construction' }], 'písm. j) zákona'],
+    [[{ reverse: 'construction' }, {}, { reverse: 'metals' }], 'písm. g), j) zákona'],
+  ])('%j', (lines, want) => {
+    const got = domesticReverseNote(lines, kinds)
+    expect(!!got).toBe(!!want)
+    expect(got).toContain(want)
+  })
+  it('možnosti a kód', () => {
+    expect(domesticRCOptions(kinds).map((o) => o.label)).toEqual(['— bežná DPH', 'a) Kovový odpad a šrot', 'g) Železo a oceľ', 'j) Stavebné práce'])
+    expect(needsCommodity('metals') && needsCommodity('crops') && !needsCommodity('construction')).toBe(true)
   })
 })

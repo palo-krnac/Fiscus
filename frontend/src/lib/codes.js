@@ -9,6 +9,7 @@ export const codes = reactive({
   defaultUnits: [],
   defaultFormats: {},
   currencies: [],
+  domesticRCs: [],
 })
 
 export async function loadCodes() {
@@ -97,4 +98,19 @@ export function vatExemptionNote(inv) {
   return eu
     ? 'Prenesenie daňovej povinnosti – daň platí príjemca služby (reverse charge, čl. 196 smernice 2006/112/ES).'
     : 'Miesto dodania služby je mimo územia SR (§ 15 ods. 1 zákona o DPH).'
+}
+
+/** Druhy tuzemského prenesenia (§ 69 ods. 12) na výber pri položke. */
+export function domesticRCOptions(kinds = codes.domesticRCs) {
+  return [{ code: '', label: '— bežná DPH' }, ...kinds.map((k) => ({ code: k.code, label: `${k.letter}) ${k.label}` }))]
+}
+
+/** Druh prenesenia s kódom colného sadzobníka v KV (plodiny, kovy). */
+export const needsCommodity = (code) => code === 'crops' || code === 'metals'
+
+/** Povinný text pri položkách s tuzemským prenesením — rovnaký ako invoice.DomesticReverseNote v Go. */
+export function domesticReverseNote(lines = [], kinds = codes.domesticRCs) {
+  const letters = kinds.filter((k) => lines.some((l) => l.reverse === k.code)).map((k) => `${k.letter})`)
+  if (!letters.length) return ''
+  return `PDP – prenesenie daňovej povinnosti podľa § 69 ods. 12 písm. ${letters.join(', ')} zákona o DPH: daň z týchto položiek odvedie odberateľ.`
 }

@@ -2,6 +2,7 @@ package demo
 
 import (
 	"context"
+	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"testing"
 
 	"github.com/palo-krnac/fiscus/backend/internal/app"
@@ -20,9 +21,15 @@ func TestSeed(t *testing.T) {
 	}
 	list, _ := a.Store.ListInvoices(context.Background(), c.ID, store.InvoiceFilter{})
 	// + koncept z ponuky, dnešná pravidelná faktúra, 2 zálohové faktúry,
-	// doklad k prijatej platbe a koncept vyúčtovania
-	if len(list) != 49 {
-		t.Fatalf("%d faktúr", len(list))
+	// doklad k prijatej platbe, koncept vyúčtovania a faktúra s prenesením pri položkách
+	rc := 0
+	for _, inv := range list {
+		if inv.DomesticReverse() && inv.Status == invoice.StatusIssued {
+			rc++
+		}
+	}
+	if len(list) != 50 || rc != 1 {
+		t.Fatalf("%d faktúr, s prenesením %d", len(list), rc)
 	}
 	rec, _ := a.Recurring(context.Background(), c.ID)
 	if len(rec) != 3 || rec[0].Generated != 1 || rec[0].History[0].Number == "" || rec[2].Active {

@@ -12,7 +12,7 @@ import InputIcon from 'primevue/inputicon'
 import { useToast } from 'primevue/usetoast'
 import { api } from '../lib/api.js'
 import { codes } from '../lib/codes.js'
-import { formatAmount, formatDate } from '../lib/format.js'
+import { formatAmount, formatDate, formatQuantity } from '../lib/format.js'
 import { session } from '../lib/session.js'
 import { defaultPeriod, dueDate, periodOptions } from '../lib/vat.js'
 import { matches, searchTerms } from '../lib/search.js'
@@ -106,9 +106,10 @@ const kvSections = computed(() => {
   const f = (list, section) =>
     list
       .map((x) => ({ ...x, section }))
-      .filter((x) => matches(terms, [x.partner, x.name, x.number, x.original, x.base, x.vat, x.baseDiff]))
+      .filter((x) => matches(terms, [x.partner, x.name, x.number, x.original, x.base, x.vat, x.baseDiff, x.label, x.code, x.goods]))
   return [
     { code: 'A.1', title: 'Vydané faktúry platiteľom DPH', rows: f(kv.a1, 'A.1'), kind: 'invoice' },
+    { code: 'A.2', title: 'Vydané faktúry – prenesenie daňovej povinnosti (§ 69 ods. 12)', rows: f(kv.a2 ?? [], 'A.2'), kind: 'invoice', a2: true },
     { code: 'B.1', title: 'Prijaté faktúry – prenesenie daňovej povinnosti', rows: f(kv.b1, 'B.1'), kind: 'purchase' },
     { code: 'B.2', title: 'Prijaté faktúry s odpočtom DPH', rows: f(kv.b2, 'B.2'), kind: 'purchase' },
     { code: 'C.1', title: 'Vydané opravné faktúry (dobropisy) platiteľom', rows: f(kv.c1, 'C.1'), kind: 'invoice', correction: true },
@@ -278,8 +279,15 @@ async function downloadXML(which) {
                   <th v-if="s.correction">Pôvodná</th>
                   <th v-else>Dodanie</th>
                   <th class="num">Základ</th>
-                  <th class="num">Daň</th>
-                  <th class="num">%</th>
+                  <template v-if="s.a2">
+                    <th>Plnenie</th>
+                    <th>Kód / druh</th>
+                    <th class="num">Množstvo</th>
+                  </template>
+                  <template v-else>
+                    <th class="num">Daň</th>
+                    <th class="num">%</th>
+                  </template>
                   <th v-if="s.kind === 'purchase'" class="num">Odpočet</th>
                 </tr>
               </thead>
@@ -291,8 +299,15 @@ async function downloadXML(which) {
                   <td v-if="s.correction" class="mono">{{ l.original || '—' }}</td>
                   <td v-else>{{ formatDate(l.date) }}</td>
                   <td class="num">{{ formatAmount(l.base ?? l.baseDiff) }}</td>
-                  <td class="num">{{ formatAmount(l.vat ?? l.vatDiff) }}</td>
-                  <td class="num">{{ l.rate }}</td>
+                  <template v-if="s.a2">
+                    <td>{{ l.label }}</td>
+                    <td class="mono">{{ l.code || l.goods || '—' }}</td>
+                    <td class="num">{{ l.quantity ? `${formatQuantity(l.quantity)} ${l.unit}` : '—' }}</td>
+                  </template>
+                  <template v-else>
+                    <td class="num">{{ formatAmount(l.vat ?? l.vatDiff) }}</td>
+                    <td class="num">{{ l.rate }}</td>
+                  </template>
                   <td v-if="s.kind === 'purchase'" class="num">{{ formatAmount(l.deducted) }}</td>
                 </tr>
               </tbody>

@@ -89,9 +89,12 @@ var schemaV21 string
 //go:embed schema_v22.sql
 var schemaV22 string
 
+//go:embed schema_v23.sql
+var schemaV23 string
+
 // migrations[i] prevedie schému z verzie i na i+1. Existujúce migrácie sa
 // nikdy nemenia — zmena schémy je vždy nová migrácia na konci.
-var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4, schemaV5, schemaV6, schemaV7, schemaV8, schemaV9, schemaV10, schemaV11, schemaV12, schemaV13, schemaV14, schemaV15, schemaV16, schemaV17, schemaV18, schemaV19, schemaV20, schemaV21, schemaV22}
+var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4, schemaV5, schemaV6, schemaV7, schemaV8, schemaV9, schemaV10, schemaV11, schemaV12, schemaV13, schemaV14, schemaV15, schemaV16, schemaV17, schemaV18, schemaV19, schemaV20, schemaV21, schemaV22, schemaV23}
 
 // Store je SQLite úložisko.
 type Store struct{ db *sql.DB }
@@ -414,7 +417,7 @@ type fxData struct {
 
 func (s *Store) loadLines(ctx context.Context, inv *invoice.Invoice) error {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT description, quantity, unit, unit_price, vat_rate, amount
+		`SELECT description, quantity, unit, unit_price, vat_rate, amount, reverse, commodity
 		 FROM invoice_lines WHERE invoice_id = ? ORDER BY position`, inv.ID)
 	if err != nil {
 		return err
@@ -425,7 +428,7 @@ func (s *Store) loadLines(ctx context.Context, inv *invoice.Invoice) error {
 		var l invoice.Line
 		var q, p, a int64
 		var r int
-		if err := rows.Scan(&l.Description, &q, &l.Unit, &p, &r, &a); err != nil {
+		if err := rows.Scan(&l.Description, &q, &l.Unit, &p, &r, &a, &l.Reverse, &l.Commodity); err != nil {
 			return err
 		}
 		l.Quantity, l.UnitPrice, l.Amount, l.Rate = money.FromRaw(q), money.FromRaw(p), money.FromRaw(a), vat.Rate(r)
@@ -572,9 +575,9 @@ func (s *Store) SaveInvoice(ctx context.Context, companyID int64, inv *invoice.I
 	}
 	for i, l := range inv.Lines {
 		if _, err := tx.ExecContext(ctx, `INSERT INTO invoice_lines
-			(invoice_id, position, description, quantity, unit, unit_price, vat_rate, amount)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-			inv.ID, i, l.Description, l.Quantity.Raw(), l.Unit, l.UnitPrice.Raw(), int(l.Rate), l.Amount.Raw()); err != nil {
+			(invoice_id, position, description, quantity, unit, unit_price, vat_rate, amount, reverse, commodity)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			inv.ID, i, l.Description, l.Quantity.Raw(), l.Unit, l.UnitPrice.Raw(), int(l.Rate), l.Amount.Raw(), string(l.Reverse), l.Commodity); err != nil {
 			return err
 		}
 	}

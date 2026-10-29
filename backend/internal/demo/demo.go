@@ -217,6 +217,9 @@ func Seed(ctx context.Context, a *app.App) (store.Company, error) {
 	if err := seedAdvances(ctx, a, c, contactIDs); err != nil {
 		return c, fmt.Errorf("demo zálohy: %w", err)
 	}
+	if err := seedDomesticRC(ctx, a, c); err != nil {
+		return c, fmt.Errorf("demo prenesenie: %w", err)
+	}
 	if err := seedForeign(ctx, a, c); err != nil {
 		return c, fmt.Errorf("demo cudzia mena: %w", err)
 	}
@@ -475,4 +478,25 @@ func SeedUsers(ctx context.Context, a *app.App, companyID int64) error {
 		}
 	}
 	return nil
+}
+
+// seedDomesticRC vystaví stavebnej firme faktúru s tuzemským prenesením
+// daňovej povinnosti pri položkách (stavebné práce, oceľová konštrukcia).
+func seedDomesticRC(ctx context.Context, a *app.App, c store.Company) error {
+	day := a.Today().AddDays(-9)
+	cu := customers[1]
+	d, err := a.SaveDraft(ctx, c.ID, invoice.Invoice{
+		Customer:  invoice.Party{Name: cu.name, City: cu.city, Country: "SK", ICO: cu.ico, ICDPH: cu.icdph},
+		IssueDate: day, DeliveryDate: day, DueDate: day.AddDays(30),
+		Lines: []invoice.Line{
+			{Description: "Programovanie riadiaceho systému vetrania", Unit: "hod", Quantity: m.MustParse("16"), UnitPrice: m.MustParse("45"), Rate: vat.Rate23},
+			{Description: "Montáž rozvádzača a elektroinštalácia v hale", Unit: "ks", Quantity: m.MustParse("1"), UnitPrice: m.MustParse("3200"), Rate: vat.Rate23, Reverse: invoice.RCConstruction},
+			{Description: "Oceľová nosná konštrukcia káblových trás", Unit: "t", Quantity: m.MustParse("2.4"), UnitPrice: m.MustParse("2300"), Rate: vat.Rate23, Reverse: invoice.RCMetals, Commodity: "7308"},
+		},
+	})
+	if err != nil {
+		return err
+	}
+	_, err = a.Issue(ctx, c.ID, d.ID)
+	return err
 }

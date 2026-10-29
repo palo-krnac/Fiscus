@@ -350,6 +350,8 @@ func (s *sheet) lines(inv invoice.Invoice) {
 			r := fmt.Sprintf("%d %%", l.Rate)
 			if inv.ReverseCharge {
 				r = "—"
+			} else if l.Reverse != "" {
+				r = "PDP" // prenesenie daňovej povinnosti (vysvetlené v poznámke)
 			}
 			cells = append(cells, cellText{r, s.f.Regular, ink})
 		}
@@ -439,7 +441,7 @@ func (s *sheet) totals(v view, deducted bool, sup Supplier) {
 		}}
 		t.head()
 		for _, r := range inv.Summary.Rates {
-			t.row([]cellText{{fmt.Sprintf("%d %%", r.Rate), s.f.Regular, ink}, {amount(r.Base), s.f.Regular, ink},
+			t.row([]cellText{{rateLabel(r), s.f.Regular, ink}, {amount(r.Base), s.f.Regular, ink},
 				{amount(r.VAT), s.f.Regular, ink}, {amount(r.Total), s.f.Regular, ink}}, pdf.MM(1.2), true)
 		}
 		s.p.Line(x, s.y, right, s.y, 0.75, ink)
@@ -505,7 +507,7 @@ func (s *sheet) localTotals(inv invoice.Invoice, x, w float64) {
 	}}
 	t.head()
 	for _, r := range l.Rates {
-		t.row([]cellText{{fmt.Sprintf("%d %%", r.Rate), s.f.Regular, ink}, {amount(r.Base), s.f.Regular, ink},
+		t.row([]cellText{{rateLabel(r), s.f.Regular, ink}, {amount(r.Base), s.f.Regular, ink},
 			{amount(r.VAT), s.f.Regular, ink}, {amount(r.Total), s.f.Regular, ink}}, pdf.MM(1), true)
 	}
 	t.row([]cellText{{"Spolu €", s.f.Semibold, ink}, {amount(l.Base), s.f.Semibold, ink},
@@ -525,6 +527,9 @@ func (s *sheet) notes(v view) {
 	} else if t := invoice.ExemptionNote(inv.ReverseCharge, inv.Customer, inv.SupplyKind); t != "" {
 		ns = append(ns, note{t, muted})
 	}
+	if t := invoice.DomesticReverseNote(inv.Lines); t != "" && !inv.NonVATPayer {
+		ns = append(ns, note{t, muted})
+	}
 	if inv.Note != "" {
 		ns = append(ns, note{inv.Note, ink})
 	}
@@ -540,4 +545,12 @@ func (s *sheet) notes(v view) {
 		}
 		s.y += pdf.MM(1.5)
 	}
+}
+
+// rateLabel je sadzba v rekapitulácii; riadok s prenesením daňovej povinnosti má „PDP“.
+func rateLabel(r vat.RateSummary) string {
+	if r.Reverse {
+		return "PDP"
+	}
+	return fmt.Sprintf("%d %%", r.Rate)
 }

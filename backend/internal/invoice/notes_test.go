@@ -49,3 +49,25 @@ func TestTitleAndPayment(t *testing.T) {
 		t.Error("PaymentLabel")
 	}
 }
+
+func TestDomesticReverseNote(t *testing.T) {
+	tests := []struct {
+		kinds []DomesticRC
+		want  string
+	}{
+		{nil, ""},
+		{[]DomesticRC{"", ""}, ""},
+		{[]DomesticRC{RCConstruction}, "písm. j) zákona"},
+		{[]DomesticRC{RCConstruction, "", RCMetals, RCConstruction}, "písm. g), j) zákona"},
+	}
+	for _, tt := range tests {
+		var lines []Line
+		for _, k := range tt.kinds {
+			lines = append(lines, Line{Reverse: k})
+		}
+		got := DomesticReverseNote(lines)
+		if (tt.want == "") != (got == "") || !strings.Contains(got, tt.want) {
+			t.Errorf("%v: %q", tt.kinds, got)
+		}
+	}
+}

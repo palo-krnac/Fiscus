@@ -11,7 +11,7 @@ import DatePicker from 'primevue/datepicker'
 import Dialog from 'primevue/dialog'
 import SelectButton from 'primevue/selectbutton'
 import Select from 'primevue/select'
-import { codes, ratesOn, supplyKinds, isForeign, supplyHint } from '../lib/codes.js'
+import { codes, ratesOn, supplyKinds, isForeign, supplyHint, domesticRCOptions, needsCommodity } from '../lib/codes.js'
 import Checkbox from 'primevue/checkbox'
 import AutoComplete from 'primevue/autocomplete'
 import IcoInput from '../components/IcoInput.vue'
@@ -175,9 +175,11 @@ async function load() {
     loadError.value = e.message
   }
 }
+// po otvorení: ukážka textov šablóny; pri koncepte s prenesením hneď kontroly (hranica 5 000 €)
+const recalcOnOpen = () => inv.value && (isRecurring.value || (editable.value && lines.value.some((l) => l.reverse)))
 onMounted(async () => {
   await load()
-  if (isRecurring.value && inv.value) recalc() // ukážka textov ďalšej faktúry
+  if (recalcOnOpen()) recalc()
 })
 // prechod medzi dokladmi v tom istom editore (napr. faktúra → nový dobropis)
 watch(
@@ -190,7 +192,7 @@ watch(
     showErrors.value = false
     errors.value = {}
     previewErrors.value = {}
-    load().then(() => isRecurring.value && inv.value && recalc())
+    load().then(() => recalcOnOpen() && recalc())
   },
 )
 
@@ -277,6 +279,23 @@ const priceModes = [
   { label: 'Ceny s DPH', value: 'gross' },
 ]
 
+// ---- tuzemské prenesenie daňovej povinnosti pri položkách (§ 69 ods. 12) ----
+const domesticCustomer = computed(() => !nonVat.value && !isForeign(inv.value?.customer?.country))
+const rcOn = ref(false)
+watch(lines, (ls) => {
+  if (ls.some((l) => l.reverse)) rcOn.value = true
+})
+const showRC = computed(() => domesticCustomer.value && (rcOn.value || lines.value.some((l) => l.reverse)))
+function setRC(on) {
+  rcOn.value = on
+  if (!on) {
+    lines.value = lines.value.map((l) => ({ ...l, reverse: '', commodity: '' }))
+    changed()
+  }
+}
+const rcOptions = computed(() => domesticRCOptions())
+const rcLabel = (code) => (code ? rcOptions.value.find((o) => o.code === code)?.label ?? code : '—')
+
 // ---- položky ----
 const gridApi = shallowRef(null)
 const lineRowId = (p) => String(p.data._key)
@@ -301,8 +320,26 @@ const lineCols = computed(() => [
   {
     field: 'vatRate', headerName: 'DPH', width: 74, type: 'rightAligned', hide: nonVat.value,
     cellEditor: 'agSelectCellEditor', cellEditorParams: () => ({ values: ratesOn(isQuote.value ? inv.value?.issueDate : isRecurring.value ? inv.value?.nextDate : inv.value?.deliveryDate) }),
-    valueFormatter: (p) => `${p.value} %`,
+    valueFormatter: (p) => (p.data.reverse ? 'PDP' : `${p.value} %`),
     valueParser: (p) => Number(p.newValue),
+  },
+  {
+    field: 'reverse', headerName: 'Prenesenie', width: 150, hide: !showRC.value,
+    headerTooltip: 'Tuzemské prenesenie daňovej povinnosti (§ 69 ods. 12) — daň z položky odvedie odberateľ',
+    cellEditor: 'agSelectCellEditor',
+    cellEditorParams: () => ({ values: rcOptions.value.map((o) => o.code) }),
+    refData: Object.fromEntries(rcOptions.value.map((o) => [o.code, o.label])),
+    valueFormatter: (p) => rcLabel(p.value),
+    valueSetter: (p) => {
+      p.data.reverse = p.newValue || ''
+      if (!needsCommodity(p.data.reverse)) p.data.commodity = ''
+      return true
+    },
+  },
+  {
+    field: 'commodity', headerName: 'Kód SCS', width: 92, hide: !showRC.value || !lines.value.some((l) => needsCommodity(l.reverse)),
+    headerTooltip: '4-miestny kód Spoločného colného sadzobníka pre kontrolný výkaz (plodiny, železo a oceľ)',
+    editable: (p) => editable.value && needsCommodity(p.data.reverse),
   },
   {
     field: 'amount', headerName: 'Suma', width: 116, type: 'rightAligned', editable: false,
@@ -322,11 +359,17 @@ const lineErrors = computed(() => {
   const src = { ...previewErrors.value, ...errors.value }
   return Object.entries(src)
     .filter(([f]) => f.startsWith('lines['))
-    .filter(([f]) => showErrors.value || f.endsWith('.vatRate'))
+    .filter(([f]) => showErrors.value || f.endsWith('.vatRate') || f.endsWith('.reverse'))
     .map(([f, msg]) => `Položka ${Number(f.match(/\d+/)[0]) + 1}: ${msg}`)
 })
 
 const lineDefaults = computed(() => ({ editable: editable.value, sortable: false, resizable: true, suppressMovable: true }))
+
+function onLineChanged(e) {
+  // zmena druhu prenesenia mení stĺpce (kód SCS) — nový zoznam prekreslí mriežku
+  if (e.colDef.field === 'reverse') lines.value = [...lines.value]
+  changed()
+}
 
 function onLineCell(e) {
   if (e.colDef.colId === 'del' && editable.value) {
@@ -997,11 +1040,16 @@ const customerFields = reactive([
               size="small"
               @update:model-value="upd(inv, 'priceMode')($event)"
             />
-            <label class="check">
+            <label v-if="!domesticCustomer || inv.reverseCharge" class="check">
               <Checkbox :model-value="inv.reverseCharge" binary :disabled="!editable" input-id="rc" @update:model-value="upd(inv, 'reverseCharge')($event)" />
               <span>Prenesenie daňovej povinnosti</span>
             </label>
+            <label v-if="domesticCustomer" class="check">
+              <Checkbox :model-value="showRC" binary :disabled="!editable" input-id="rc-lines" @update:model-value="setRC" />
+              <span>Prenesenie pri položkách <small class="muted">(§ 69 ods. 12 – stavebné práce, oceľ…)</small></span>
+            </label>
           </div>
+          <small v-if="fieldError('reverseCharge')" class="err">{{ fieldError('reverseCharge') }}</small>
           <small v-if="fieldError('customer.icdph') && inv.reverseCharge" class="err">{{ fieldError('customer.icdph') }}</small>
           <div v-if="isForeign(inv.customer.country)" class="supply">
             <span class="supply-label">Druh plnenia</span>
@@ -1035,7 +1083,7 @@ const customerFields = reactive([
               :stop-editing-when-cells-lose-focus="true"
               :enter-navigates-vertically-after-edit="true"
               @grid-ready="(e) => (gridApi = e.api)"
-              @cell-value-changed="changed"
+              @cell-value-changed="onLineChanged"
               @cell-clicked="onLineCell"
             />
           </div>
@@ -1104,8 +1152,8 @@ const customerFields = reactive([
             </tr>
           </thead>
           <tbody>
-            <tr v-for="r in inv.summary.rates" :key="r.rate">
-              <td>{{ r.rate }} %</td>
+            <tr v-for="r in inv.summary.rates" :key="`${r.rate}${r.reverse ? 'p' : ''}`">
+              <td :title="r.reverse ? 'Prenesenie daňovej povinnosti – daň odvedie odberateľ' : undefined">{{ r.reverse ? 'PDP' : `${r.rate} %` }}</td>
               <td class="num">{{ formatAmount(r.base) }}</td>
               <td class="num">{{ formatAmount(r.vat) }}</td>
             </tr>
