@@ -155,3 +155,56 @@ func TestJournalNonVATPayerAndPerms(t *testing.T) {
 		t.Fatal("cudzia firma")
 	}
 }
+
+func TestJournalBalancesAndOpenItems(t *testing.T) {
+	a, c := newApp(t, edition.Desktop)
+	acc := "SK3112000000198742637541"
+	// pokladnica: vklad v minulom roku (počiatočný stav) a výdavok v tomto
+	if _, err := a.CreateCash(ctx, c.ID, cash.Document{Kind: cash.In, Date: invoice.MustDate("2025-12-20"), Amount: m.MustParse("300"), Purpose: "Vklad"}); err != nil {
+		t.Fatal(err)
+	}
+	_, _ = a.CreateCash(ctx, c.ID, cash.Document{Kind: cash.Out, Date: invoice.MustDate("2026-01-10"), Amount: m.MustParse("20"), Purpose: "Známky"})
+	_, _, _ = a.Store.SaveBankTransactions(ctx, c.ID, []bank.Transaction{{Account: acc, Date: invoice.MustDate("2026-02-01"),
+		Amount: m.MustParse("50"), Currency: "EUR", Direction: bank.In, Fingerprint: "z", Status: bank.StatusOpen}})
+	if err := a.SetJournalOpening(ctx, c.ID, 2026, map[string]m.Dec{"sk31 1200 0000 1987 4263 7541": m.MustParse("1000.10")}); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.SetJournalOpening(ctx, c.ID, 2026, map[string]m.Dec{acc: m.MustParse("1.001")}); err == nil {
+		t.Fatal("zlomky centov")
+	}
+	book, err := a.Journal(ctx, c.ID, 2026)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cashB, bankB journal.Balance
+	for _, b := range book.Balances {
+		if b.Means == journal.Cash {
+			cashB = b
+		} else if b.Account == acc {
+			bankB = b
+		}
+	}
+	if cashB.Opening.String() != "300.00" || cashB.Closing.String() != "280.00" || bankB.Opening.String() != "1000.10" || bankB.Closing.String() != "1050.10" {
+		t.Fatalf("stavy: %+v", book.Balances)
+	}
+
+	// kniha pohľadávok a záväzkov
+	d, _ := a.SaveDraft(ctx, c.ID, validDraft())
+	inv, _ := a.Issue(ctx, c.ID, d.ID) // 492 €
+	pu, _, err := a.SavePurchase(ctx, c.ID, validPurchase())
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, err := a.OpenItemsAt(ctx, c.ID, invoice.MustDate("2026-12-31"))
+	if err != nil || len(items.Receivables) != 1 || items.Receivables[0].ID != inv.ID || items.ReceivablesTotal.String() != "492.00" ||
+		len(items.Payables) != 1 || items.Payables[0].ID != pu.ID {
+		t.Fatalf("%+v %v", items, err)
+	}
+	_, _ = a.MarkPaid(ctx, c.ID, inv.ID, invoice.MustDate("2026-11-05"))
+	if items, _ = a.OpenItemsAt(ctx, c.ID, invoice.MustDate("2026-12-31")); len(items.Receivables) != 0 {
+		t.Fatal("uhradená")
+	}
+	if items, _ = a.OpenItemsAt(ctx, c.ID, invoice.MustDate("2026-11-01")); len(items.Receivables) != 1 {
+		t.Fatal("k dňu pred úhradou")
+	}
+}

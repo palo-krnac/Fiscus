@@ -26,6 +26,7 @@ package journal
 import (
 	"errors"
 	"fmt"
+	"sort"
 
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/money"
@@ -236,4 +237,80 @@ func Sum(entries []Entry) Totals {
 	}
 	t.Result = t.TaxInc.Sub(t.TaxExp)
 	return t
+}
+
+// Balance je stav pokladnice alebo bankového účtu za obdobie.
+type Balance struct {
+	Means   Means     `json:"means"`
+	Account string    `json:"account"`
+	Opening money.Dec `json:"opening"`
+	In      money.Dec `json:"in"`
+	Out     money.Dec `json:"out"`
+	Closing money.Dec `json:"closing"`
+}
+
+// Balances spočíta stavy: pokladnica (počiatočný stav cash) a každý bankový
+// účet z pohybov alebo zo zoznamu accounts (počiatočné stavy bank).
+func Balances(entries []Entry, cash money.Dec, bank map[string]money.Dec, accounts []string) []Balance {
+	byAcc := map[string]*Balance{}
+	var order []string
+	get := func(means Means, acc string) *Balance {
+		k := string(means) + "|" + acc
+		if b, ok := byAcc[k]; ok {
+			return b
+		}
+		b := &Balance{Means: means, Account: acc}
+		if means == Cash {
+			b.Opening = cash
+		} else {
+			b.Opening = bank[acc]
+		}
+		byAcc[k] = b
+		order = append(order, k)
+		return b
+	}
+	get(Cash, "Pokladnica")
+	for _, a := range accounts {
+		get(Bank, a)
+	}
+	keys := make([]string, 0, len(bank))
+	for a := range bank {
+		keys = append(keys, a)
+	}
+	sort.Strings(keys)
+	for _, a := range keys {
+		get(Bank, a)
+	}
+	for _, e := range entries {
+		acc := e.Account
+		if e.Means == Bank {
+			acc = normAcc(acc)
+		}
+		b := get(e.Means, acc)
+		if e.Amount.Sign() >= 0 {
+			b.In = b.In.Add(e.Amount)
+		} else {
+			b.Out = b.Out.Add(e.Amount.Neg())
+		}
+	}
+	out := make([]Balance, 0, len(order))
+	for _, k := range order {
+		b := byAcc[k]
+		b.Closing = b.Opening.Add(b.In).Sub(b.Out)
+		out = append(out, *b)
+	}
+	return out
+}
+
+func normAcc(s string) string {
+	out := make([]rune, 0, len(s))
+	for _, r := range s {
+		if r != ' ' {
+			if r >= 'a' && r <= 'z' {
+				r -= 'a' - 'A'
+			}
+			out = append(out, r)
+		}
+	}
+	return string(out)
 }

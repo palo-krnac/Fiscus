@@ -130,6 +130,8 @@ export const api = {
 
   journal: (cid, year) => request('GET', `/api/companies/${cid}/journal` + query({ year })),
   classifyJournal: (cid, key, lines, note) => request('PUT', `/api/companies/${cid}/journal/${encodeURIComponent(key)}`, { lines, note }),
+  setJournalOpening: (cid, year, bank) => request('PUT', `/api/companies/${cid}/journal/opening`, { year, bank }),
+  openItems: (cid, date) => request('GET', `/api/companies/${cid}/open-items` + query({ date })),
   resetJournal: (cid, key) => request('DELETE', `/api/companies/${cid}/journal/${encodeURIComponent(key)}`),
   cashBook: (cid, year) => request('GET', `/api/companies/${cid}/cash` + query({ year })),
   cash: (cid, id) => request('GET', `/api/companies/${cid}/cash/${id}`),

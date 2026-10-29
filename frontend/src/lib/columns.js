@@ -222,6 +222,24 @@ export function journalExportColumns(cols = codes.journalColumns ?? []) {
   ]
 }
 
+/** Kniha pohľadávok alebo záväzkov k dňu. */
+export function openItemColumns(payables = false) {
+  return [
+    t('Číslo', (r) => r.number, 14),
+    t('Druh', (r) => (r.kind === 'purchase' ? 'prijatá faktúra' : kindLabel(r.kind)), 18),
+    t(payables ? 'Dodávateľ' : 'Odberateľ', (r) => r.partner, 30),
+    t('IČO', (r) => r.ico, 11),
+    date(payables ? 'Doručená' : 'Vystavená', (r) => r.issueDate),
+    date('Splatná', (r) => r.dueDate),
+    t('Mena', (r) => r.currency, 6),
+    money('Suma', (r) => r.total),
+    money('Uhradené', (r) => r.paid),
+    money('Zostáva', (r) => r.remaining),
+    money('Zostáva €', (r) => r.remainingEur),
+    { header: 'Dni po splatnosti', value: (r) => r.daysOverdue || '', type: 'number', width: 10 },
+  ]
+}
+
 export const backupColumns = [
   t('Záloha', (r) => r.name, 32),
   t('Čas', (r) => new Date(r.time).toLocaleString('sk-SK'), 20),

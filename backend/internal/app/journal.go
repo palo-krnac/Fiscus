@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -13,6 +14,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/bank"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/journal"
+	"github.com/palo-krnac/fiscus/backend/internal/money"
 	"github.com/palo-krnac/fiscus/backend/internal/purchase"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 )
@@ -29,6 +31,9 @@ type JournalBook struct {
 	Columns  []journal.ColumnInfo `json:"columns"`
 	Entries  []journal.Entry      `json:"entries"`
 	Totals   journal.Totals       `json:"totals"`
+	// Balances sú stavy pokladnice a účtov: počiatočný stav, príjmy, výdavky
+	// a konečný stav (§ 4 ods. 10 — záznamy nadväzujú na zostatky).
+	Balances []journal.Balance `json:"balances"`
 }
 
 // Journal zostaví peňažný denník za rok.
@@ -69,7 +74,88 @@ func (a *App) Journal(ctx context.Context, companyID int64, year int) (JournalBo
 		}
 		return entries[i].Key < entries[j].Key
 	})
-	return JournalBook{Year: year, VATPayer: company.VATPayer, Columns: journal.Columns, Entries: entries, Totals: journal.Sum(entries)}, nil
+	opening, err := a.journalOpening(ctx, companyID, year)
+	if err != nil {
+		return JournalBook{}, err
+	}
+	cashOpen, err := a.cashOpening(ctx, companyID, year)
+	if err != nil {
+		return JournalBook{}, err
+	}
+	accounts := []string{}
+	if iban := normIBAN(company.IBAN); iban != "" {
+		accounts = append(accounts, iban)
+	}
+	return JournalBook{Year: year, VATPayer: company.VATPayer, Columns: journal.Columns, Entries: entries, Totals: journal.Sum(entries),
+		Balances: journal.Balances(entries, cashOpen, opening, accounts)}, nil
+}
+
+func normIBAN(s string) string { return strings.ToUpper(strings.ReplaceAll(s, " ", "")) }
+
+// journalOpeningKey je nastavenie s počiatočnými stavmi účtov firmy za rok.
+func journalOpeningKey(companyID int64, year int) string {
+	return fmt.Sprintf("journal.opening.%d.%d", companyID, year)
+}
+
+// journalOpening vráti počiatočné stavy bankových účtov (IBAN → suma).
+func (a *App) journalOpening(ctx context.Context, companyID int64, year int) (map[string]money.Dec, error) {
+	out := map[string]money.Dec{}
+	v, err := a.Store.GetSetting(ctx, journalOpeningKey(companyID, year))
+	if errors.Is(err, store.ErrNotFound) {
+		return out, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal([]byte(v), &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// cashOpening je počiatočný stav pokladnice: súčet dokladov pred rokom.
+func (a *App) cashOpening(ctx context.Context, companyID int64, year int) (money.Dec, error) {
+	docs, err := a.Store.ListCashDocuments(ctx, companyID, 0)
+	if err != nil {
+		return money.Zero, err
+	}
+	sum := money.Zero
+	for _, d := range docs {
+		if !d.Cancelled && d.Date.Year() < year {
+			sum = sum.Add(d.Signed())
+		}
+	}
+	return sum, nil
+}
+
+// SetJournalOpening uloží počiatočné stavy bankových účtov za rok.
+func (a *App) SetJournalOpening(ctx context.Context, companyID int64, year int, bank map[string]money.Dec) error {
+	if err := a.Require(ctx, companyID, auth.PermLedgerWrite); err != nil {
+		return err
+	}
+	if year < 2000 || year > 2100 {
+		return mfaFieldErr("year", "Neplatný rok")
+	}
+	clean := map[string]money.Dec{}
+	for k, v := range bank {
+		k = normIBAN(k)
+		if k == "" {
+			continue
+		}
+		if !v.Equal(v.RoundCents()) {
+			return mfaFieldErr("bank", "Stav účtu "+k+" musí byť v centoch")
+		}
+		clean[k] = v
+	}
+	b, err := json.Marshal(clean)
+	if err != nil {
+		return err
+	}
+	if err := a.Store.SetSetting(ctx, journalOpeningKey(companyID, year), string(b)); err != nil {
+		return err
+	}
+	a.record(ctx, companyID, audit.CatLedger, "opening", "journal", 0, fmt.Sprintf("Počiatočné stavy účtov k 1. 1. %d", year), nil, clean)
+	return nil
 }
 
 // journalSources načíta pohyby peňazí roka (bez rozpisu).
@@ -239,4 +325,35 @@ func (a *App) ClassifyJournal(ctx context.Context, companyID int64, key string, 
 	a.record(ctx, companyID, audit.CatLedger, "classify", "journal", 0,
 		fmt.Sprintf("Peňažný denník: pohyb %s z %s (%s €) → %s", key, e.Date.Display(), e.Amount.Display(), strings.Join(parts, ", ")), nil, o)
 	return nil
+}
+
+// OpenItems je kniha pohľadávok a záväzkov k dňu.
+type OpenItems struct {
+	Date             invoice.Date       `json:"date"`
+	Receivables      []journal.OpenItem `json:"receivables"`
+	Payables         []journal.OpenItem `json:"payables"`
+	ReceivablesTotal money.Dec          `json:"receivablesTotal"` // v eurách
+	PayablesTotal    money.Dec          `json:"payablesTotal"`
+}
+
+// OpenItemsAt vráti neuhradené pohľadávky a záväzky k dňu (prázdny = dnes).
+func (a *App) OpenItemsAt(ctx context.Context, companyID int64, at invoice.Date) (OpenItems, error) {
+	if err := a.Require(ctx, companyID, auth.PermLedgerRead); err != nil {
+		return OpenItems{}, err
+	}
+	if at.IsZero() {
+		at = a.Today()
+	}
+	invs, err := a.Store.ListInvoices(ctx, companyID, store.InvoiceFilter{})
+	if err != nil {
+		return OpenItems{}, err
+	}
+	purs, err := a.Store.ListPurchases(ctx, companyID, store.PurchaseFilter{})
+	if err != nil {
+		return OpenItems{}, err
+	}
+	rec, pay := journal.Receivables(invs, at), journal.Payables(purs, at)
+	sort.SliceStable(rec, func(i, j int) bool { return rec[i].DueDate.Before(rec[j].DueDate) })
+	sort.SliceStable(pay, func(i, j int) bool { return pay[i].DueDate.Before(pay[j].DueDate) })
+	return OpenItems{Date: at, Receivables: rec, Payables: pay, ReceivablesTotal: journal.SumEUR(rec), PayablesTotal: journal.SumEUR(pay)}, nil
 }

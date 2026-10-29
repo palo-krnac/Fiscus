@@ -196,6 +196,29 @@ async function reset() {
   }
 }
 
+// ---- počiatočné stavy účtov ----
+const openingEdit = ref({})
+const openingBusy = ref(false)
+watch(
+  () => book.value.balances,
+  (bs) => {
+    openingEdit.value = Object.fromEntries((bs ?? []).filter((b) => b.means === 'bank').map((b) => [b.account, String(b.opening)]))
+  },
+)
+async function saveOpening() {
+  openingBusy.value = true
+  try {
+    const bank = Object.fromEntries(Object.entries(openingEdit.value).map(([k, v]) => [k, String(v).replace(',', '.').trim() || '0']))
+    await api.setJournalOpening(session.companyId, year.value, bank)
+    toast.add({ severity: 'success', summary: 'Počiatočné stavy uložené', life: 2000 })
+    await load()
+  } catch (e) {
+    toast.add({ severity: 'error', summary: 'Stavy sa neuložili', detail: e.fields?.[0]?.message ?? e.message, life: 5000 })
+  } finally {
+    openingBusy.value = false
+  }
+}
+
 const docLink = (d) => (d.kind === 'invoice' ? `/faktury/${d.id}` : `/prijate/${d.id}`)
 </script>
 
@@ -254,6 +277,30 @@ const docLink = (d) => (d.kind === 'invoice' ? `/faktury/${d.id}` : `/prijate/${
           <tr class="result"><td /><td>Rozdiel príjmov a výdavkov zahrnovaných do základu dane</td><td class="num"><span class="grand">{{ formatAmount(book.totals.result) }}</span></td></tr>
         </tfoot>
       </table>
+      <h2>Stavy pokladnice a účtov</h2>
+      <table class="balances">
+        <thead>
+          <tr><th>Pokladnica / účet</th><th class="num">Stav 1. 1. {{ year }}</th><th class="num">Príjmy</th><th class="num">Výdavky</th><th class="num">Konečný stav</th></tr>
+        </thead>
+        <tbody>
+          <tr v-for="b in book.balances ?? []" :key="b.means + b.account">
+            <td>{{ b.means === 'cash' ? 'Pokladnica' : b.account }}</td>
+            <td class="num">
+              <InputText v-if="b.means === 'bank' && canWrite" v-model="openingEdit[b.account]" size="small" class="num opening" inputmode="decimal"
+                :aria-label="`Stav účtu ${b.account} k 1. 1. ${year}`" />
+              <template v-else>{{ formatAmount(b.opening) }}</template>
+            </td>
+            <td class="num">{{ formatAmount(b.in) }}</td>
+            <td class="num">{{ formatAmount(b.out) }}</td>
+            <td class="num"><strong>{{ formatAmount(b.closing) }}</strong></td>
+          </tr>
+        </tbody>
+      </table>
+      <div v-if="canWrite" class="balance-actions">
+        <span class="muted">Stav pokladnice vyplýva z pokladničných dokladov; stav účtu zadajte podľa výpisu k 1. 1.</span>
+        <Button label="Uložiť stavy účtov" icon="pi pi-check" size="small" severity="secondary" outlined :loading="openingBusy" @click="saveOpening" />
+      </div>
+
       <p class="muted">
         Členenie podľa opatrenia MF SR č. MF/27076/2007-74, § 4 ods. 6: d – príjmy a e – výdavky zahrnované do základu dane,
         f a g – mimo základu dane, c – priebežné položky.
@@ -421,6 +468,22 @@ const docLink = (d) => (d.kind === 'invoice' ? `/faktury/${d.id}` : `/prijate/${
   border: 1px solid var(--rule);
   padding: 4px 14px 12px;
   overflow: auto;
+}
+.sums h2 {
+  font-size: var(--fs-lg);
+  margin: 18px 0 4px;
+}
+.balances .opening {
+  width: 9rem;
+}
+.balance-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  max-width: 720px;
+  margin-top: 6px;
+  flex-wrap: wrap;
 }
 .sums table {
   width: 100%;
