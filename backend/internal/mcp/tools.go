@@ -13,6 +13,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/money"
 	"github.com/palo-krnac/fiscus/backend/internal/purchase"
+	"github.com/palo-krnac/fiscus/backend/internal/quote"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 	"github.com/palo-krnac/fiscus/backend/internal/vat"
 )
@@ -286,6 +287,61 @@ func (s *Server) allTools() []Tool {
 					return nil, err
 				}
 				return a.Store.GetInvoice(c.ctx, cid, p.ID)
+			},
+		},
+		{
+			Name: "list_quotes", Title: "Cenové ponuky",
+			Description: "Cenové ponuky (nie sú daňový doklad). Stav: draft (koncept), issued (odoslaná), accepted (prijatá), rejected (odmietnutá), invoiced (vyfakturovaná), expired (odoslaná po platnosti). Ponuku vytvára a vystavuje používateľ vo Fiškuse.",
+			Props: map[string]any{"company_id": pCompany, "year": pYear, "query": pQuery, "limit": pLimit,
+				"status": map[string]any{"type": "string", "enum": []string{"draft", "issued", "accepted", "rejected", "invoiced", "expired"}}},
+			Run: func(c *callCtx, args json.RawMessage) (any, error) {
+				var p struct {
+					CompanyID int64  `json:"company_id"`
+					Year      int    `json:"year"`
+					Status    string `json:"status"`
+					Query     string `json:"query"`
+					Limit     int    `json:"limit"`
+				}
+				if err := parse(args, &p); err != nil {
+					return nil, err
+				}
+				cid, err := c.company(p.CompanyID, auth.PermInvoicesRead)
+				if err != nil {
+					return nil, err
+				}
+				list, err := a.Quotes(c.ctx, cid, p.Year)
+				if err != nil {
+					return nil, err
+				}
+				type row struct {
+					ID            int64        `json:"id"`
+					Number        string       `json:"number"`
+					Status        quote.Status `json:"status"`
+					Customer      string       `json:"customer"`
+					IssueDate     invoice.Date `json:"issue_date"`
+					ValidUntil    invoice.Date `json:"valid_until"`
+					Expired       bool         `json:"expired"`
+					Base          money.Dec    `json:"base"`
+					Total         money.Dec    `json:"total"`
+					InvoiceNumber string       `json:"invoice_number,omitempty"`
+				}
+				today := a.Today()
+				out := []row{}
+				for _, q := range list {
+					exp := q.Expired(today)
+					if (p.Status == "expired" && !exp) || (p.Status != "" && p.Status != "expired" && string(q.Status) != p.Status) {
+						continue
+					}
+					if !store.Matches(p.Query, q.Number, q.Customer.Name, q.Customer.ICO, q.Note) {
+						continue
+					}
+					out = append(out, row{q.ID, q.Number, q.Status, q.Customer.Name, q.IssueDate, q.ValidUntil, exp,
+						q.Summary.Base, q.Summary.Total, q.InvoiceNumber})
+					if len(out) >= limit(p.Limit) {
+						break
+					}
+				}
+				return map[string]any{"quotes": out, "count": len(out)}, nil
 			},
 		},
 		{

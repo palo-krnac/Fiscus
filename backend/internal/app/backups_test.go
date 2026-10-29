@@ -17,7 +17,9 @@ import (
 
 type fakeDB struct{}
 
-func (fakeDB) Snapshot(_ context.Context, dst string) error { return os.WriteFile(dst, []byte("DB:obsah"), 0o600) }
+func (fakeDB) Snapshot(_ context.Context, dst string) error {
+	return os.WriteFile(dst, []byte("DB:obsah"), 0o600)
+}
 func (fakeDB) Verify(_ context.Context, path string) error {
 	b, err := os.ReadFile(path)
 	if err != nil || !bytes.HasPrefix(b, []byte("DB:")) {

@@ -19,8 +19,19 @@ func TestSeed(t *testing.T) {
 		t.Fatal(err)
 	}
 	list, _ := a.Store.ListInvoices(context.Background(), c.ID, store.InvoiceFilter{})
-	if len(list) != 42 {
+	if len(list) != 43 { // vrátane konceptu faktúry z prijatej ponuky
 		t.Fatalf("%d faktúr", len(list))
+	}
+	quotes, _ := a.Quotes(context.Background(), c.ID, 0)
+	states := map[string]int{}
+	for _, q := range quotes {
+		states[string(q.Status)]++
+		if q.Expired(a.Today()) {
+			states["expired"]++
+		}
+	}
+	if len(quotes) != 6 || states["invoiced"] != 1 || states["rejected"] != 1 || states["draft"] != 1 || states["expired"] != 1 {
+		t.Fatalf("ponuky: %d %v", len(quotes), states)
 	}
 	if p, _ := a.Store.ListPurchases(context.Background(), c.ID, store.PurchaseFilter{}); len(p) != 6 {
 		t.Fatalf("%d prijatých faktúr", len(p))

@@ -176,7 +176,7 @@ func validateCompany(c store.Company) error {
 	if c.DefaultDueDays < 0 || c.DefaultDueDays > 365 {
 		add("defaultDueDays", "Splatnosť musí byť 0 až 365 dní")
 	}
-	for _, k := range []string{string(invoice.KindInvoice), string(invoice.KindCreditNote), string(invoice.KindProforma), PurchaseFormatKey, CashInFormatKey, CashOutFormatKey} {
+	for _, k := range []string{string(invoice.KindInvoice), string(invoice.KindCreditNote), string(invoice.KindProforma), PurchaseFormatKey, CashInFormatKey, CashOutFormatKey, QuoteFormatKey} {
 		if err := invoice.ValidateFormat(c.NumberFormats[k]); err != nil {
 			add("numberFormats."+k, err.Error())
 		}

@@ -81,6 +81,17 @@ func (s *Server) Handler() http.Handler {
 	need("POST /api/companies/{cid}/invoices/{id}/cancel", auth.PermInvoicesWrite, s.cancel)
 	need("POST /api/companies/{cid}/invoices/{id}/credit-note", auth.PermInvoicesWrite, s.creditNote)
 
+	need("GET /api/companies/{cid}/quotes", auth.PermInvoicesRead, s.listQuotes)
+	need("GET /api/companies/{cid}/quotes/{id}", auth.PermInvoicesRead, s.getQuote)
+	need("POST /api/companies/{cid}/quotes", auth.PermInvoicesWrite, s.saveQuote)
+	need("POST /api/companies/{cid}/quotes/preview", auth.PermInvoicesWrite, s.previewQuote)
+	need("PUT /api/companies/{cid}/quotes/{id}", auth.PermInvoicesWrite, s.saveQuote)
+	need("POST /api/companies/{cid}/quotes/{id}/issue", auth.PermInvoicesWrite, s.quoteAction((*Server).issueQuote))
+	need("POST /api/companies/{cid}/quotes/{id}/accept", auth.PermInvoicesWrite, s.quoteAction((*Server).acceptQuote))
+	need("POST /api/companies/{cid}/quotes/{id}/reject", auth.PermInvoicesWrite, s.quoteAction((*Server).rejectQuote))
+	need("POST /api/companies/{cid}/quotes/{id}/copy", auth.PermInvoicesWrite, s.quoteAction((*Server).copyQuote))
+	need("POST /api/companies/{cid}/quotes/{id}/invoice", auth.PermInvoicesWrite, s.invoiceQuote)
+
 	need("GET /api/companies/{cid}/purchases", auth.PermPurchasesRead, s.listPurchases)
 	need("GET /api/companies/{cid}/purchases/{id}", auth.PermPurchasesRead, s.getPurchase)
 	need("POST /api/companies/{cid}/purchases", auth.PermPurchasesWrite, s.savePurchase)

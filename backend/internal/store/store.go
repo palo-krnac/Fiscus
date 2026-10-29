@@ -16,6 +16,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/auth"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/purchase"
+	"github.com/palo-krnac/fiscus/backend/internal/quote"
 )
 
 // ErrNotFound — záznam neexistuje (alebo patrí inej firme).
@@ -140,6 +141,12 @@ type Store interface {
 	GetCashDocument(ctx context.Context, companyID, id int64) (cash.Document, error)
 	// SaveCashDocument vloží (ID == 0) alebo prepíše doklad. Nastaví ID.
 	SaveCashDocument(ctx context.Context, companyID int64, d *cash.Document) error
+
+	// ListQuotes vráti cenové ponuky (year 0 = všetky, podľa dátumu ponuky), najnovšie prvé.
+	ListQuotes(ctx context.Context, companyID int64, year int) ([]quote.Quote, error)
+	GetQuote(ctx context.Context, companyID, id int64) (quote.Quote, error)
+	// SaveQuote vloží (ID == 0) alebo prepíše ponuku. Nastaví ID.
+	SaveQuote(ctx context.Context, companyID int64, q *quote.Quote) error
 
 	// ---- používatelia a prístupy ----
 	CreateUser(ctx context.Context, u auth.User) (auth.User, error) // ErrDuplicate pri rovnakom e-maile

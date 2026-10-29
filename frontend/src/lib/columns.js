@@ -2,6 +2,7 @@
 import { codes, countryName, paymentLabel } from './codes.js'
 import { purchaseStatusOf, statusOf } from './format.js'
 import { actionLabel, channelLabel } from './audit.js'
+import { quoteStatusOf } from './quotes.js'
 
 const t = (header, value, width) => ({ header, value, width })
 const money = (header, value) => ({ header, value, type: 'money', width: 14 })
@@ -186,4 +187,21 @@ export const backupColumns = [
   t('Záloha', (r) => r.name, 32),
   t('Čas', (r) => new Date(r.time).toLocaleString('sk-SK'), 20),
   { header: 'Veľkosť (kB)', value: (r) => Math.round(r.size / 1024), type: 'number', width: 12 },
+]
+
+export const quoteColumns = [
+  t('Číslo', (r) => r.number || 'koncept', 14),
+  t('Odberateľ', (r) => r.customer?.name, 32),
+  t('IČO', (r) => r.customer?.ico, 11),
+  t('IČ DPH', (r) => r.customer?.icdph, 14),
+  t('Obec', (r) => r.customer?.city, 16),
+  date('Dátum ponuky', (r) => r.issueDate),
+  date('Platná do', (r) => r.validUntil),
+  money('Základ', (r) => r.summary?.base),
+  money('DPH', (r) => r.summary?.vat),
+  money('Spolu', (r) => r.summary?.total),
+  t('Mena', (r) => r.currency || 'EUR', 6),
+  t('Stav', (r) => quoteStatusOf(r).label, 16),
+  t('Faktúra', (r) => (r.invoiceId ? r.invoiceNumber || 'koncept' : ''), 14),
+  t('Poznámka', (r) => r.note, 30),
 ]

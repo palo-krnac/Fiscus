@@ -13,6 +13,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	m "github.com/palo-krnac/fiscus/backend/internal/money"
 	"github.com/palo-krnac/fiscus/backend/internal/purchase"
+	"github.com/palo-krnac/fiscus/backend/internal/quote"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 	"github.com/palo-krnac/fiscus/backend/internal/vat"
 )
@@ -197,7 +198,57 @@ func Seed(ctx context.Context, a *app.App) (store.Company, error) {
 	if err := seedBank(ctx, a, c); err != nil {
 		return c, fmt.Errorf("demo výpis: %w", err)
 	}
+	if err := seedQuotes(ctx, a, c, contactIDs); err != nil {
+		return c, fmt.Errorf("demo ponuky: %w", err)
+	}
 	return c, nil
+}
+
+// seedQuotes pripraví cenové ponuky vo všetkých stavoch.
+func seedQuotes(ctx context.Context, a *app.App, c store.Company, contactIDs []int64) error {
+	today := a.Today()
+	type action func(context.Context, int64, int64) (quote.Quote, error)
+	plan := []struct {
+		ci, day, valid int
+		lines          []int
+		note           string
+		then           []action
+	}{
+		{2, 40, 30, []int{0, 3}, "", []action{a.IssueQuote, a.AcceptQuote}}, // vyfakturuje sa nižšie
+		{4, 35, 14, []int{1}, "", []action{a.IssueQuote, a.RejectQuote}},
+		{1, 25, 14, []int{2, 5}, "", []action{a.IssueQuote}}, // po platnosti
+		{6, 9, 30, []int{0, 1, 4}, "Cena platí pri objednávke do 30 dní. Termín realizácie do 3 týždňov od objednávky.", []action{a.IssueQuote}},
+		{3, 5, 30, []int{3}, "", []action{a.IssueQuote, a.AcceptQuote}},
+		{0, 0, 30, []int{2, 4}, "", nil}, // koncept
+	}
+	var first int64
+	for _, p := range plan {
+		cu := customers[p.ci]
+		day := today.AddDays(-p.day)
+		q := quote.Quote{
+			Customer:  invoice.Party{Name: cu.name, City: cu.city, Country: "SK", ICO: cu.ico, ICDPH: cu.icdph},
+			ContactID: contactIDs[p.ci], IssueDate: day, ValidUntil: day.AddDays(p.valid), Note: p.note,
+		}
+		for _, li := range p.lines {
+			it := items[li%len(items)]
+			q.Lines = append(q.Lines, invoice.Line{Description: it.desc, Unit: it.unit,
+				Quantity: m.MustParse(it.qty), UnitPrice: m.MustParse(it.price), Rate: it.rate})
+		}
+		saved, err := a.SaveQuote(ctx, c.ID, q)
+		if err != nil {
+			return err
+		}
+		for _, step := range p.then {
+			if _, err := step(ctx, c.ID, saved.ID); err != nil {
+				return err
+			}
+		}
+		if first == 0 {
+			first = saved.ID
+		}
+	}
+	_, err := a.InvoiceQuote(ctx, c.ID, first)
+	return err
 }
 
 // seedBank naimportuje ukážkový výpis: dve presné úhrady (spárujú sa samé),
