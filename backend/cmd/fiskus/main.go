@@ -25,6 +25,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/backup"
 	"github.com/palo-krnac/fiscus/backend/internal/demo"
 	"github.com/palo-krnac/fiscus/backend/internal/edition"
+	"github.com/palo-krnac/fiscus/backend/internal/fx"
 	"github.com/palo-krnac/fiscus/backend/internal/mcp"
 	"github.com/palo-krnac/fiscus/backend/internal/registry"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
@@ -47,6 +48,7 @@ func main() {
 	backupDir := flag.String("backup-dir", "", "priečinok na automatické zálohy (heslo v FISKUS_BACKUP_PASSWORD)")
 	demoData := flag.Bool("demo", false, "spustiť s ukážkovými dátami v pamäti")
 	rpoURL := flag.String("rpo-url", registry.DefaultBaseURL, "adresa API Registra právnických osôb; prázdne = vypnuté")
+	ecbURL := flag.String("ecb-url", fx.ECB90, "adresa kurzov ECB (posledných 90 dní); prázdne = vypnuté, kurzy sa zadávajú ručne")
 	restoreFile := flag.String("restore", "", "pred spustením obnoviť databázu zo zálohy (.fbk); pôvodná sa premenuje na .pred-obnovou")
 	licensePath := flag.String("license", "", "súbor s licenčným kľúčom (server, viac firiem); predvolene fiskus.license vedľa databázy")
 	adminEmail := flag.String("admin-email", "", "e-mail prvého správcu (server); heslo v FISKUS_ADMIN_PASSWORD")
@@ -79,6 +81,7 @@ func main() {
 	defer st.Close()
 
 	a := app.New(st, caps)
+	a.ECBURL = *ecbURL
 	a.Backups, a.BackupsOff = backups, backupsOff
 	if err := a.LoadLegal(context.Background()); err != nil {
 		log.Fatalf("legislatíva: %v", err)
@@ -136,6 +139,7 @@ func main() {
 
 	runCtx, stopRecurring := context.WithCancel(context.Background())
 	go recurringLoop(runCtx, a)
+	go ratesLoop(runCtx, a)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
@@ -174,6 +178,29 @@ func setupLicense(a *app.App, path, dbPath string) {
 		log.Printf("licencia: %s, platná do %s", st.Customer, st.Expires.Format("2. 1. 2006"))
 		if st.Warning != "" {
 			log.Printf("licencia: %s", st.Warning)
+		}
+	}
+}
+
+// ratesLoop sťahuje kurzy ECB: krátko po štarte a potom každých 6 hodín
+// (ECB ich vyhlasuje v pracovné dni okolo 16:00 SEČ).
+func ratesLoop(ctx context.Context, a *app.App) {
+	if a.ECBURL == "" {
+		return
+	}
+	t := time.NewTimer(10 * time.Second)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if res, err := a.UpdateRates(ctx); err != nil {
+				log.Printf("kurzy ECB: %v", err)
+			} else {
+				log.Printf("kurzy ECB: %d kurzov, posledné k %s", res.Count, res.Latest)
+			}
+			t.Reset(6 * time.Hour)
 		}
 	}
 }

@@ -206,6 +206,10 @@ export const api = {
       ? request('PUT', `/api/companies/${cid}/items/${it.id}`, it)
       : request('POST', `/api/companies/${cid}/items`, it),
   deleteItem: (cid, id) => request('DELETE', `/api/companies/${cid}/items/${id}`),
+  rates: (f = {}) => request('GET', `/api/rates${query(f)}`),
+  saveRate: (r) => request('PUT', '/api/rates', r),
+  updateRates: () => request('POST', '/api/rates/update'),
+  deleteRate: (currency, date) => request('DELETE', `/api/rates/${currency}/${date}`),
   legal: () => request('GET', '/api/legal'),
   saveLegal: (p) => request('PUT', '/api/legal', p),
   resetLegal: () => request('POST', '/api/legal/reset'),

@@ -15,6 +15,7 @@ import { fiskusGridTheme, skGridLocale, gridRows } from '../lib/grid.js'
 import { matches, searchTerms } from '../lib/search.js'
 import { invoiceColumns } from '../lib/columns.js'
 import { kindBadge } from '../lib/advance.js'
+import { eurSummary, isForeignCurrency } from '../lib/fx.js'
 import ExportButton from '../components/ExportButton.vue'
 
 const router = useRouter()
@@ -66,12 +67,13 @@ const visibleRows = computed(() => {
   return rows.value.filter((r) => {
     if (!matchesView(r)) return false
     const c = r.customer ?? {}
-    return matches(terms, [r.number, r.variableSymbol, c.name, c.ico, c.dic, c.icdph, c.city, r.note, r.summary?.total, statusOf(r).label])
+    return matches(terms, [r.number, r.variableSymbol, c.name, c.ico, c.dic, c.icdph, c.city, r.note, r.summary?.total, r.currency, statusOf(r).label])
   })
 })
 
 // Súhrn za rok — nezávisle od filtra zobrazenia.
-const sum = (list) => list.reduce((acc, r) => acc + Number(r.summary.total), 0)
+// sumy v eurách (faktúry v cudzej mene prepočítané kurzom zo servera)
+const sum = (list) => list.reduce((acc, r) => acc + Number(eurSummary(r).total), 0)
 const ledger = computed(() => {
   // zálohová faktúra nie je výnos — fakturované sú faktúry, dobropisy a doklady k prijatej platbe
   const counted = rows.value.filter((r) => (r.status === 'issued' || r.status === 'paid') && r.kind !== 'proforma')
@@ -88,7 +90,7 @@ const ledger = computed(() => {
 
 const totalsRow = computed(() => {
   const list = visibleRows.value.filter((r) => r.status !== 'cancelled' && r.status !== 'draft' && r.kind !== 'proforma')
-  const add = (k) => list.reduce((a, r) => a + Number(r.summary[k]), 0).toFixed(2)
+  const add = (k) => list.reduce((a, r) => a + Number(eurSummary(r)[k]), 0).toFixed(2)
   return [{
     number: `Spolu ${list.length}`,
     customer: { name: '' },
@@ -100,7 +102,7 @@ const totalsRow = computed(() => {
 const amountCol = (field, header, extra = {}) => ({
   colId: field,
   headerName: header,
-  valueGetter: (p) => Number(p.data.summary[field]),
+  valueGetter: (p) => Number(eurSummary(p.data)[field]),
   valueFormatter: (p) => formatAmount(p.value),
   type: 'rightAligned',
   width: 116,
@@ -116,7 +118,11 @@ const columnDefs = [
       if (p.data._totals) return p.value
       const num = p.value || 'koncept'
       const badge = kindBadge(p.data.kind)
-      return badge ? `${num}<span class="kind-badge">${badge}</span>` : num
+      // cudzia mena: sumy v zozname sú v eurách, mena dokladu je pri čísle
+      const cur = isForeignCurrency(p.data.currency)
+        ? `<span class="kind-badge cur" title="${formatAmount(p.data.summary.total)} ${p.data.currency}">${p.data.currency}</span>`
+        : ''
+      return (badge ? `${num}<span class="kind-badge">${badge}</span>` : num) + cur
     },
     width: 178,
     cellClass: (p) => (p.data._totals ? '' : p.value ? 'cell-number' : 'cell-draft'),
@@ -368,6 +374,10 @@ onBeforeUnmount(() => {
 .grid :deep(.cell-draft) {
   color: var(--tone-draft);
   font-style: italic;
+}
+.grid :deep(.kind-badge.cur) {
+  color: var(--blue);
+  border-color: var(--blue);
 }
 .grid :deep(.cell-total) {
   font-weight: 600;

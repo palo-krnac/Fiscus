@@ -317,3 +317,23 @@ func TestKVXML(t *testing.T) {
 		t.Error("prázdny D2 sa nemá uvádzať")
 	}
 }
+
+func TestForeignCurrencyInvoice(t *testing.T) {
+	p, _ := ParsePeriod("2026-10")
+	czk := inv(1, "FA1", "2026-10-10", "SK2020372640", map[vat.Rate]string{23: "2512.30"})
+	czk.Currency, czk.FXRate = "CZK", m("25.123")
+	local := invoice.ToEUR(czk.Summary, czk.FXRate)
+	czk.Local = &local
+	noRate := inv(2, "FA2", "2026-10-11", "", map[vat.Rate]string{23: "100"})
+	noRate.Currency = "USD"
+	ret := Compute(Input{Period: p, Invoices: []invoice.Invoice{czk, noRate}})
+	if ret.Rows["r03"].String() != "100.00" || ret.Rows["r04"].String() != "23.00" {
+		t.Fatalf("riadky v eurách: r03=%s r04=%s", ret.Rows["r03"], ret.Rows["r04"])
+	}
+	if len(ret.KV.A1) != 1 || ret.KV.A1[0].Base.String() != "100.00" {
+		t.Fatalf("KV A.1: %+v", ret.KV.A1)
+	}
+	if len(ret.Warnings) != 1 || !strings.Contains(ret.Warnings[0].Message, "nemá kurz") {
+		t.Fatalf("upozornenia: %+v", ret.Warnings)
+	}
+}

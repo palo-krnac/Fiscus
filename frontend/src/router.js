@@ -20,6 +20,7 @@ import QuoteList from './views/QuoteList.vue'
 import RecurringList from './views/RecurringList.vue'
 import Reminders from './views/Reminders.vue'
 import Emails from './views/Emails.vue'
+import Rates from './views/Rates.vue'
 import ReminderPrint from './views/ReminderPrint.vue'
 import Legal from './views/Legal.vue'
 import Catalog from './views/Catalog.vue'
@@ -73,6 +74,7 @@ export const modules = [
       { path: '/audit', label: 'Audit', icon: 'pi-shield', ready: true, perm: 'audit.read' },
       { path: '/ai', label: 'Prístup pre AI', icon: 'pi-sparkles', ready: true },
       { path: '/zalohy', label: 'Zálohy', icon: 'pi-history', ready: true, superAdmin: true },
+      { path: '/kurzy', label: 'Kurzy mien', icon: 'pi-euro', ready: true, perm: 'invoices.read' },
       { path: '/legislativa', label: 'Legislatíva', icon: 'pi-verified', ready: true, superAdmin: true },
       { path: '/nastavenia', label: 'Nastavenia', icon: 'pi-cog', ready: true, perm: 'settings.write' },
       { path: '/firmy', label: 'Firmy a licencia', icon: 'pi-building', ready: true, superAdmin: true, serverOnly: true },
@@ -118,6 +120,7 @@ export const router = createRouter({
     { path: '/nastavenia', component: Settings, meta: { title: 'Nastavenia', perm: 'settings.write' } },
     { path: '/pouzivatelia', component: Users, meta: { title: 'Používatelia', perm: 'users.manage' } },
     { path: '/ai', component: AiAccess, meta: { title: 'Prístup pre AI', noCompany: true } },
+    { path: '/kurzy', component: Rates, meta: { title: 'Kurzy mien', perm: 'invoices.read' } },
     { path: '/legislativa', component: Legal, meta: { title: 'Legislatíva', superAdmin: true, noCompany: true } },
     { path: '/zalohy', component: Backups, meta: { title: 'Zálohy', superAdmin: true, noCompany: true } },
     { path: '/pokladna', component: Cash, meta: { title: 'Pokladňa', perm: 'cash.read' } },

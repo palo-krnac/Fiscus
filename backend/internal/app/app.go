@@ -16,6 +16,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/audit"
 	"github.com/palo-krnac/fiscus/backend/internal/auth"
 	"github.com/palo-krnac/fiscus/backend/internal/edition"
+	"github.com/palo-krnac/fiscus/backend/internal/fx"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/legal"
 	"github.com/palo-krnac/fiscus/backend/internal/license"
@@ -41,6 +42,9 @@ type App struct {
 	// Backups spravuje šifrované zálohy (nil = vypnuté, dôvod v BackupsOff).
 	Backups    *backup.Manager
 	BackupsOff string
+	// ECBURL je adresa kurzov ECB ("" = nesťahovať); FetchRates ju v testoch nahradí.
+	ECBURL     string
+	FetchRates func(ctx context.Context, url string) ([]fx.Rate, error)
 	// Mailer posiela e-maily (nil = SMTP podľa nastavenia firmy).
 	Mailer  mail.Sender
 	lic     atomic.Pointer[license.License]
@@ -233,6 +237,9 @@ func (a *App) Preview(ctx context.Context, companyID int64, inv invoice.Invoice)
 	if err := a.applyCompany(ctx, companyID, &inv); err != nil {
 		return inv, err
 	}
+	if err := a.applyRate(ctx, &inv); err != nil {
+		return inv, err
+	}
 	err := inv.Recalculate()
 	return inv, err
 }
@@ -350,6 +357,9 @@ func (a *App) saveDraft(ctx context.Context, companyID int64, inv invoice.Invoic
 	if inv.DueDate.IsZero() {
 		inv.DueDate = inv.IssueDate.AddDays(a.dueDays(ctx, companyID, inv))
 	}
+	if err := a.applyRate(ctx, &inv); err != nil {
+		return inv, err
+	}
 	if err := inv.Recalculate(); err != nil {
 		return inv, err
 	}
@@ -369,6 +379,9 @@ func (a *App) Issue(ctx context.Context, companyID, id int64) (invoice.Invoice, 
 	}
 	// Validovať pred pridelením čísla, aby v rade nevznikali diery.
 	if err := a.applyCompany(ctx, companyID, &inv); err != nil {
+		return inv, err
+	}
+	if err := a.applyRate(ctx, &inv); err != nil {
 		return inv, err
 	}
 	if err := inv.Recalculate(); err != nil {

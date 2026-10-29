@@ -108,6 +108,17 @@ func (d Dec) MulRatio(num, den Dec) Dec {
 	return Dec{roundHalfAway(n, big.NewInt(den.v)).Int64()}
 }
 
+// DivCents vydelí d číslom den a výsledok zaokrúhli na centy jediným
+// zaokrúhlením (polovica od nuly). Používa sa na prepočet cudzej meny na eurá.
+func (d Dec) DivCents(den Dec) Dec {
+	if den.v == 0 {
+		panic("money: delenie nulou")
+	}
+	const step = unit / 100
+	n := new(big.Int).Mul(big.NewInt(d.v), big.NewInt(100))
+	return Dec{roundHalfAway(n, big.NewInt(den.v)).Int64() * step}
+}
+
 // RoundCents zaokrúhli na 2 desatinné miesta (centy), polovica od nuly.
 func (d Dec) RoundCents() Dec {
 	const step = unit / 100

@@ -62,14 +62,16 @@ func NewCreditNote(orig Invoice, issueDate Date) (Invoice, error) {
 		return Invoice{}, ErrNotCreditable
 	}
 	cn := Invoice{
-		Kind:          KindCreditNote,
-		Status:        StatusDraft,
-		Customer:      orig.Customer,
-		ContactID:     orig.ContactID,
-		IssueDate:     issueDate,
-		DeliveryDate:  issueDate, // dátum vzniku dôvodu opravy
-		DueDate:       issueDate.AddDays(14),
-		Currency:      orig.Currency,
+		Kind:         KindCreditNote,
+		Status:       StatusDraft,
+		Customer:     orig.Customer,
+		ContactID:    orig.ContactID,
+		IssueDate:    issueDate,
+		DeliveryDate: issueDate, // dátum vzniku dôvodu opravy
+		DueDate:      issueDate.AddDays(14),
+		Currency:     orig.Currency,
+		// oprava základu dane sa prepočíta kurzom pôvodnej faktúry
+		FXRate: orig.FXRate, FXDate: orig.FXDate, FXManual: orig.Foreign(),
 		PriceMode:     orig.PriceMode,
 		ReverseCharge: orig.ReverseCharge,
 		SupplyKind:    orig.SupplyKind,

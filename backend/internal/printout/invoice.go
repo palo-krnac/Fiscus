@@ -472,6 +472,44 @@ func (s *sheet) totals(v view, deducted bool, sup Supplier) {
 	s.p.Line(right-tw, uy, right, uy, 0.75, ink)
 	s.p.Line(right-tw, uy+2.25, right, uy+2.25, 0.75, ink)
 	s.y = uy + 3
+	s.localTotals(inv, x, w)
+}
+
+// rateText opíše kurz faktúry v cudzej mene.
+func rateText(inv invoice.Invoice) string {
+	t := "Kurz: 1 EUR = " + quantity(inv.FXRate) + " " + inv.Currency
+	if inv.FXManual || inv.FXDate.IsZero() {
+		return t + " (dohodnutý)"
+	}
+	return t + " (ECB " + inv.FXDate.Display() + ")"
+}
+
+// localTotals: pri cudzej mene kurz a rekapitulácia DPH v eurách (§ 26).
+func (s *sheet) localTotals(inv invoice.Invoice, x, w float64) {
+	if !inv.Foreign() || inv.Local == nil {
+		return
+	}
+	l := inv.Local
+	s.y += pdf.MM(5)
+	s.ensure(lh(8.5) + float64(len(l.Rates)+2)*(lh(9)+pdf.MM(2.4)))
+	s.text(x, s.y, s.f.Regular, 8.5, muted, rateText(inv))
+	s.y += lh(8.5) + pdf.MM(1)
+	if inv.NonVATPayer {
+		s.text(x, s.y, s.f.Regular, 9, ink, "Spolu v eurách")
+		s.textRight(right, s.y, s.f.Semibold, 9, ink, moneyText(l.Total, ""))
+		s.y += lh(9)
+		return
+	}
+	t := &table{s: s, x: x, size: 9, cols: []column{
+		{"V eurách", w - pdf.MM(72), false}, {"Základ", pdf.MM(26), true}, {"DPH", pdf.MM(22), true}, {"Spolu", pdf.MM(24), true},
+	}}
+	t.head()
+	for _, r := range l.Rates {
+		t.row([]cellText{{fmt.Sprintf("%d %%", r.Rate), s.f.Regular, ink}, {amount(r.Base), s.f.Regular, ink},
+			{amount(r.VAT), s.f.Regular, ink}, {amount(r.Total), s.f.Regular, ink}}, pdf.MM(1), true)
+	}
+	t.row([]cellText{{"Spolu €", s.f.Semibold, ink}, {amount(l.Base), s.f.Semibold, ink},
+		{amount(l.VAT), s.f.Semibold, ink}, {amount(l.Total), s.f.Semibold, ink}}, pdf.MM(1), false)
 }
 
 // notes: povinné texty a poznámka používateľa.

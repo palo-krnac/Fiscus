@@ -170,13 +170,15 @@ func Compute(in Input) Return {
 			continue
 		}
 		c := inv.Customer
+		// sumy v eurách (faktúra v cudzej mene je prepočítaná kurzom ECB)
+		sum, ok := inv.TaxSummary()
 		switch {
 		case inv.Kind == invoice.KindProforma:
 			continue
-		case inv.Currency != "" && inv.Currency != "EUR":
-			warn(inv.Number, "invoice", inv.ID, "Faktúra v mene "+inv.Currency+" — prepočet na eurá zatiaľ nie je podporovaný, doplňte ručne")
+		case !ok:
+			warn(inv.Number, "invoice", inv.ID, "Faktúra v mene "+inv.Currency+" nemá kurz — doplňte ho, inak nejde do priznania")
 			continue
-		case foreign(c.Country) && inv.Summary.VAT.IsZero():
+		case foreign(c.Country) && sum.VAT.IsZero():
 			if msg := ret.addForeignSale(inv); msg != "" {
 				warn(inv.Number, "invoice", inv.ID, msg)
 			} else {
@@ -189,7 +191,7 @@ func Compute(in Input) Return {
 		}
 		payer := isSKPayer(c.ICDPH)
 		ret.Invoices++
-		for _, r := range inv.Summary.Rates {
+		for _, r := range sum.Rates {
 			if r.Rate == 0 {
 				// oslobodené plnenie: iba riadok 13, do KV sa neuvádza
 				if !credit {
@@ -359,7 +361,8 @@ func Compute(in Input) Return {
 func (ret *Return) addForeignSale(inv invoice.Invoice) string {
 	c := inv.Customer
 	eu := party.IsEU(c.Country)
-	base := inv.Summary.Base
+	sum, _ := inv.TaxSummary()
+	base := sum.Base
 	add := func(row string) { ret.Rows[row] = ret.Rows[row].Add(base) }
 	switch inv.SupplyKind {
 	case "":

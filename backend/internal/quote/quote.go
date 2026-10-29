@@ -89,6 +89,8 @@ func (q *Quote) Validate() error {
 			switch {
 			case f.Field == "deliveryDate", f.Field == "dueDate":
 				continue // platnosť kontrolujeme nižšie
+			case f.Field == "fxRate":
+				continue // ponuka nie je daňový doklad — kurz sa určí až na faktúre
 			case f.Field == "lines":
 				f.Message = "Ponuka musí mať aspoň jednu položku"
 			case strings.HasSuffix(f.Field, ".vatRate"):
