@@ -27,11 +27,14 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] Cenová ponuka: vlastný číselný rad (CP), platnosť, stavy odoslaná / prijatá / odmietnutá / po platnosti, kópia ako nová verzia, tlač, jedným klikom koncept faktúry; nezapočíta sa do DPH
 - [x] Pravidelná fakturácia: šablóna faktúry s intervalom (mesačne, štvrťročne, polročne, ročne), koncom, splatnosťou a texty {obdobie} / {mesiac} / {rok} / {minule_obdobie}; Fiškus faktúru vytvorí a vystaví sám (pri štarte a každú hodinu), dobehnuté staršie obdobia ostanú ako koncepty; pozastavenie, faktúra hneď, história
 - [x] Pravidelná fakturácia: automatické odoslanie vystavenej faktúry e-mailom
-- [ ] Pravidelná fakturácia: upozornenie na koncepty na kontrolu
+- [x] Pravidelná fakturácia: upozornenie na koncepty na kontrolu
 - [x] Zálohová faktúra (nie je daňový doklad), po úhrade automaticky daňový doklad k prijatej platbe (dátum dodania = deň prijatia platby, § 19 ods. 4), vyúčtovacia faktúra s presným odpočtom zálohy po sadzbách; do DPH a KV iba zostatok, pri 100 % zálohe sa vyúčtovanie do KV neuvádza
 - [x] Zálohy: čiastočná úhrada zálohy (daňový doklad ku každej platbe, sadzby v pomere zálohy), vyúčtovanie s odpočtom všetkých dokladov k platbám aj po čiastočnej úhrade; vyúčtovaná záloha sa nevymáha
 - [x] Zálohy: viac zálohových faktúr toho istého odberateľa na jedno vyúčtovanie (pridanie a odobratie v koncepte)
-- [ ] Zálohy: zálohy do zahraničia a s prenesením daňovej povinnosti, dodanie do 15 dní od platby bez dokladu k platbe
+- [x] Zálohy do zahraničia: tovar do EÚ, vývoz a služba mimo EÚ bez dokladu k platbe (záloha znižuje iba úhradu, DPH a súhrnný výkaz z vyúčtovania); služba do EÚ s dokladom k platbe s prenesením (súhrnný výkaz v období platby)
+- [x] Zálohy s tuzemským prenesením pri službách (stavebné práce): doklad k platbe bez DPH v KV A.2, vyúčtovanie iba so zostatkom
+- [x] Zálohy: dodanie do 15 dní od platby bez dokladu k platbe — kontrola lehoty a obdobia DPH pri vyúčtovaní, dodatočný doklad k platbe jedným klikom
+- [ ] Zálohy v cudzej mene, s prenesením pri tovare (množstvo v A.2)
 - [ ] Cenová ponuka: prijatie zákazníkom cez odkaz, objednávka
 - [x] Prijaté faktúry: evidencia z rekapitulácie DPH dodávateľa, odpočet / bez odpočtu, prenesenie, kontrola duplicít, úhrady
 - [x] AI vyťaženie prijatých faktúr z PDF a fotky (Claude API; AI iba navrhuje, používateľ skontroluje)

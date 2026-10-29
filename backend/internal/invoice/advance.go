@@ -31,6 +31,9 @@ type Advance struct {
 	// na vyúčtovacej faktúre: odpočítané zálohy a celá dodávka pred odpočtom
 	Deductions []Deduction  `json:"deductions,omitempty"`
 	Supply     *vat.Summary `json:"supply,omitempty"`
+	// Prepaid je súčet záloh bez daňového dokladu k platbe (Deduction.Untaxed):
+	// neznižujú základ dane, iba sumu na úhradu (dopĺňa program).
+	Prepaid money.Dec `json:"prepaid"`
 }
 
 // ReceiptRef je daňový doklad k jednej prijatej platbe zálohy.
@@ -66,6 +69,7 @@ func (inv *Invoice) AddReceipt(r ReceiptRef) {
 	if inv.Advance.ReceiptID == 0 {
 		inv.Advance.ReceiptID, inv.Advance.ReceiptNumber = r.ID, r.Number
 	}
+	inv.SyncPaid()
 }
 
 // Settled: zálohová faktúra je vyúčtovaná (vystavená vyúčtovacia faktúra) —
@@ -84,7 +88,19 @@ type Deduction struct {
 	Date           Date              `json:"date"`                // deň prijatia platby
 	Rates          []vat.RateSummary `json:"rates"`
 	Total          money.Dec         `json:"total"`
+	// Untaxed: k platbe sa nevyhotovil daňový doklad — odpočíta sa iba
+	// z úhrady, DPH je z celej dodávky (UntaxedForeign, UntaxedWithin15).
+	Untaxed string `json:"untaxed,omitempty"`
 }
+
+// Dôvody odpočtu zálohy bez daňového dokladu k platbe.
+const (
+	// UntaxedForeign: tovar do EÚ, vývoz, služba mimo EÚ — platba vopred
+	// nezakladá daňovú povinnosť v tuzemsku.
+	UntaxedForeign = "foreign"
+	// UntaxedWithin15: dodanie do 15 dní od platby, faktúra k dodaniu (§ 73).
+	UntaxedWithin15 = "within15"
+)
 
 var (
 	// ErrNotAdvance — operácia patrí iba zálohovej faktúre.
@@ -93,16 +109,120 @@ var (
 	ErrAdvanceNotPaid = errors.New("zálohová faktúra ešte nie je uhradená")
 	// ErrAlreadySettled — záloha už bola vyúčtovaná.
 	ErrAlreadySettled = errors.New("zálohová faktúra už je vyúčtovaná")
-	// ErrForeignAdvance — pri zahraničí a prenesení daňovej povinnosti sa
-	// záloha zatiaľ vyúčtuje ručne (pri dodaní tovaru do EÚ záloha nezakladá
-	// daňovú povinnosť, celé plnenie sa vykazuje pri dodaní).
-	ErrForeignAdvance = errors.New("zálohu zahraničnému odberateľovi, v cudzej mene alebo s prenesením daňovej povinnosti zatiaľ vyúčtujte ručne")
+	// ErrForeignAdvance — zálohu v cudzej mene zatiaľ treba vyúčtovať ručne.
+	ErrForeignAdvance = errors.New("zálohu v cudzej mene zatiaľ vyúčtujte ručne")
 )
 
-// NeedsReceipt vráti true, ak sa k úhrade zálohovej faktúry vyhotovuje daňový
-// doklad k prijatej platbe: platiteľ DPH, tuzemský odberateľ, bez prenesenia.
+// AdvanceMode určuje, čo sa stane s prijatou platbou zálohy.
+type AdvanceMode string
+
+const (
+	// AdvanceReceipt: daňová povinnosť dňom prijatia platby (§ 19 ods. 4),
+	// vyhotoví sa doklad k prijatej platbe — tuzemsko (aj s prenesením pri
+	// službách, napr. stavebné práce: KV A.2) a služby do EÚ (súhrnný výkaz).
+	AdvanceReceipt AdvanceMode = "receipt"
+	// AdvanceUntaxed: platba vopred nezakladá daňovú povinnosť — tovar do
+	// EÚ (§ 43), vývoz (§ 47), služba s miestom dodania mimo EÚ. Celé plnenie
+	// sa vykazuje pri dodaní, záloha sa odpočíta iba z úhrady.
+	AdvanceUntaxed AdvanceMode = "untaxed"
+	// AdvanceWithin15: dodanie do 15 dní od platby — namiesto dokladu
+	// k platbe rovno faktúra k dodaniu v tom istom zdaňovacom období.
+	AdvanceWithin15 AdvanceMode = "within15"
+	// AdvanceNonVAT: neplatiteľ DPH — odpočíta sa uhradená suma.
+	AdvanceNonVAT AdvanceMode = "nonvat"
+	// AdvanceManual: Fiškus zálohu nevie vyúčtovať (dôvod v druhej hodnote).
+	AdvanceManual AdvanceMode = "manual"
+)
+
+// AdvanceMode vráti spôsob spracovania platby zálohovej faktúry a pri
+// AdvanceManual dôvod.
+func (inv *Invoice) AdvanceMode() (AdvanceMode, string) {
+	if inv.NonVATPayer {
+		return AdvanceNonVAT, ""
+	}
+	if inv.Foreign() {
+		return AdvanceManual, ErrForeignAdvance.Error()
+	}
+	mode := AdvanceReceipt
+	if party.Foreign(inv.Customer.Country) {
+		switch {
+		case inv.SupplyKind == SupplyGoods:
+			return AdvanceUntaxed, ""
+		case inv.SupplyKind == SupplyServices && !party.IsEU(inv.Customer.Country):
+			return AdvanceUntaxed, ""
+		case inv.SupplyKind == "":
+			return AdvanceManual, "Pri zahraničnom odberateľovi vyberte, či ide o tovar alebo službu"
+		}
+		// služba do EÚ: doklad k platbe s prenesením, súhrnný výkaz v období platby
+	} else {
+		if inv.ReverseCharge {
+			return AdvanceManual, "Pri odberateľovi v tuzemsku vyberte prenesenie pri položkách (§ 69 ods. 12)"
+		}
+		kinds := map[DomesticRC]bool{}
+		for _, l := range inv.Lines {
+			if l.Reverse == "" {
+				continue
+			}
+			if l.Reverse.Goods() {
+				return AdvanceManual, "Zálohu s prenesením daňovej povinnosti pri tovare (množstvo v KV A.2) zatiaľ vyúčtujte ručne"
+			}
+			kinds[l.Reverse] = true
+		}
+		if len(kinds) > 1 {
+			return AdvanceManual, "Zálohu s viacerými druhmi prenesenia daňovej povinnosti zatiaľ vyúčtujte ručne"
+		}
+	}
+	if inv.Within15 {
+		mode = AdvanceWithin15
+	}
+	return mode, ""
+}
+
+// NeedsReceipt vráti true, ak sa k úhrade zálohovej faktúry hneď vyhotovuje
+// daňový doklad k prijatej platbe.
 func (inv *Invoice) NeedsReceipt() bool {
-	return inv.Kind == KindProforma && !inv.NonVATPayer && !inv.AnyReverse() && !party.Foreign(inv.Customer.Country) && !inv.Foreign()
+	if inv.Kind != KindProforma {
+		return false
+	}
+	mode, _ := inv.AdvanceMode()
+	return mode == AdvanceReceipt
+}
+
+// CanIssueReceipt: k platbe zálohy možno doklad vyhotoviť (aj dodatočne,
+// keď sa dodanie do 15 dní nestihlo).
+func (inv *Invoice) CanIssueReceipt() bool {
+	if inv.Kind != KindProforma {
+		return false
+	}
+	mode, _ := inv.AdvanceMode()
+	return mode == AdvanceReceipt || mode == AdvanceWithin15
+}
+
+// UncoveredPayments vráti platby zálohovej faktúry, ku ktorým nie je daňový
+// doklad (párujú sa podľa dňa a sumy).
+func (inv *Invoice) UncoveredPayments() []Payment {
+	pays := inv.Payments
+	if len(pays) == 0 && inv.Status == StatusPaid {
+		pays = []Payment{{Date: inv.PaidDate, Amount: inv.Summary.Total}}
+	}
+	used := make([]bool, len(inv.AllReceipts()))
+	var out []Payment
+	for _, p := range pays {
+		if p.Amount.Sign() <= 0 {
+			continue
+		}
+		found := false
+		for i, r := range inv.AllReceipts() {
+			if !used[i] && r.Date == p.Date && r.Amount.Equal(p.Amount) {
+				used[i], found = true, true
+				break
+			}
+		}
+		if !found {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // NewAdvanceReceipt vyhotoví daňový doklad k prijatej platbe (aj čiastočnej)
@@ -116,8 +236,11 @@ func NewAdvanceReceipt(proforma Invoice, amount money.Dec, paid, issue Date) (In
 	if amount.Sign() <= 0 || paid.IsZero() {
 		return Invoice{}, ErrAdvanceNotPaid
 	}
-	if !proforma.NeedsReceipt() {
-		return Invoice{}, ErrForeignAdvance
+	if mode, why := proforma.AdvanceMode(); mode != AdvanceReceipt && mode != AdvanceWithin15 {
+		if why == "" {
+			why = "k tejto zálohe sa daňový doklad k prijatej platbe nevyhotovuje"
+		}
+		return Invoice{}, errors.New(why)
 	}
 	r := Invoice{
 		Kind: KindAdvanceReceipt, Status: StatusDraft,
@@ -125,16 +248,28 @@ func NewAdvanceReceipt(proforma Invoice, amount money.Dec, paid, issue Date) (In
 		IssueDate: issue, DeliveryDate: paid, DueDate: issue, // už uhradené
 		Currency: proforma.Currency, PriceMode: vat.PriceGross, PaymentMethod: proforma.PaymentMethod,
 		VariableSymbol: proforma.VariableSymbol,
-		Subject:        proforma.Subject,
-		Note:           "Daňový doklad k prijatej platbe k zálohovej faktúre " + proforma.Number + ".",
-		Advance:        &Advance{ProformaID: proforma.ID, ProformaNumber: proforma.Number},
+		// služba do EÚ: prenesenie daňovej povinnosti na odberateľa
+		ReverseCharge: proforma.ReverseCharge, SupplyKind: proforma.SupplyKind,
+		Subject: proforma.Subject,
+		Note:    "Daňový doklad k prijatej platbe k zálohovej faktúre " + proforma.Number + ".",
+		Advance: &Advance{ProformaID: proforma.ID, ProformaNumber: proforma.Number},
 	}
 	what := "Prijatá platba k zálohovej faktúre " + proforma.Number
 	if len(proforma.Lines) > 0 && proforma.Lines[0].Description != "" {
 		what += " – " + proforma.Lines[0].Description
 	}
+	var rc DomesticRC // tuzemské prenesenie: druh plnenia (jediný, nie tovar)
+	for _, l := range proforma.Lines {
+		if l.Reverse != "" {
+			rc = l.Reverse
+		}
+	}
 	for _, part := range splitByRates(proforma.Summary, amount) {
-		r.Lines = append(r.Lines, Line{Description: what, Quantity: money.FromInt(1), Unit: "", UnitPrice: part.Total, Rate: part.Rate})
+		l := Line{Description: what, Quantity: money.FromInt(1), Unit: "", UnitPrice: part.Total, Rate: part.Rate}
+		if part.Reverse {
+			l.Reverse = rc
+		}
+		r.Lines = append(r.Lines, l)
 	}
 	if len(r.Lines) == 0 {
 		return Invoice{}, errors.New("zálohová faktúra nemá sumu")
@@ -188,7 +323,8 @@ func NewFinalInvoice(proforma Invoice, receipts []Invoice, issue Date, dueDays i
 		IssueDate: issue, DeliveryDate: issue, DueDate: issue.AddDays(dueDays),
 		Currency: proforma.Currency, PriceMode: proforma.PriceMode, SupplyKind: proforma.SupplyKind,
 		NonVATPayer: proforma.NonVATPayer, PaymentMethod: proforma.PaymentMethod,
-		Subject: proforma.Subject, Intro: proforma.Intro,
+		ReverseCharge: proforma.ReverseCharge,
+		Subject:       proforma.Subject, Intro: proforma.Intro,
 		Note:    "Vyúčtovanie zálohovej faktúry " + proforma.Number + ".",
 		Lines:   append([]Line(nil), proforma.Lines...),
 		Advance: &Advance{ProformaID: proforma.ID, ProformaNumber: proforma.Number, Deductions: deductions},
@@ -199,9 +335,10 @@ func NewFinalInvoice(proforma Invoice, receipts []Invoice, issue Date, dueDays i
 	return inv, nil
 }
 
-// advanceDeductions vráti odpočty zálohovej faktúry podľa dokladov k platbám
-// (neplatiteľ: uhradená suma). Záloha musí byť aspoň čiastočne uhradená,
-// ešte nevyúčtovaná a tuzemská.
+// advanceDeductions vráti odpočty zálohovej faktúry: podľa dokladov
+// k platbám, bez dokladu (iba z úhrady) pri zahraničí a dodaní do 15 dní,
+// neplatiteľ uhradenú sumu. Záloha musí byť aspoň čiastočne uhradená a
+// ešte nevyúčtovaná.
 func advanceDeductions(proforma Invoice, receipts []Invoice) ([]Deduction, error) {
 	paid := proforma.Paid()
 	if (proforma.Status != StatusPaid && proforma.Status != StatusIssued) || paid.Sign() <= 0 {
@@ -210,37 +347,53 @@ func advanceDeductions(proforma Invoice, receipts []Invoice) ([]Deduction, error
 	if proforma.Advance != nil && proforma.Advance.FinalID != 0 {
 		return nil, ErrAlreadySettled
 	}
-	if proforma.AnyReverse() || party.Foreign(proforma.Customer.Country) || proforma.Foreign() {
-		return nil, ErrForeignAdvance
+	mode, why := proforma.AdvanceMode()
+	ref := Deduction{ProformaID: proforma.ID, ProformaNumber: proforma.Number, Number: proforma.Number}
+	untaxed := func(reason string, pays []Payment) []Deduction {
+		var out []Deduction
+		for _, p := range pays {
+			d := ref
+			d.Date, d.Total, d.Untaxed = p.Date, p.Amount, reason
+			out = append(out, d)
+		}
+		return out
 	}
 	var deductions []Deduction
-	switch {
-	case len(receipts) > 0:
-		var covered money.Dec
-		for _, r := range receipts {
-			deductions = append(deductions, Deduction{ProformaID: proforma.ID, ProformaNumber: proforma.Number, ReceiptID: r.ID, Number: r.Number, Date: r.DeliveryDate,
-				Rates: append([]vat.RateSummary(nil), r.Summary.Rates...), Total: r.Summary.Total})
-			covered = covered.Add(r.Summary.Total)
-		}
-		if !covered.Equal(paid) {
-			return nil, fmt.Errorf("k platbám zálohy (%s €) chýba daňový doklad k prijatej platbe — doklady pokrývajú %s €", paid.Display(), covered.Display())
-		}
-	case proforma.NonVATPayer:
+	var covered money.Dec
+	for _, r := range receipts {
+		deductions = append(deductions, Deduction{ProformaID: proforma.ID, ProformaNumber: proforma.Number, ReceiptID: r.ID, Number: r.Number, Date: r.DeliveryDate,
+			Rates: append([]vat.RateSummary(nil), r.Summary.Rates...), Total: r.Summary.Total})
+		covered = covered.Add(r.Summary.Total)
+	}
+	switch mode {
+	case AdvanceManual:
+		return nil, errors.New(why)
+	case AdvanceUntaxed:
+		return untaxed(UntaxedForeign, proforma.UncoveredPayments()), nil
+	case AdvanceWithin15:
+		deductions = append(deductions, untaxed(UntaxedWithin15, proforma.UncoveredPayments())...)
+		return deductions, nil
+	case AdvanceNonVAT:
 		// neplatiteľ: odpočíta sa uhradená suma (bez DPH)
 		date := proforma.PaidDate
 		if date.IsZero() && len(proforma.Payments) > 0 {
 			date = proforma.Payments[len(proforma.Payments)-1].Date
 		}
-		d := Deduction{ProformaID: proforma.ID, ProformaNumber: proforma.Number, Number: proforma.Number, Date: date, Total: paid}
+		d := ref
+		d.Date, d.Total = date, paid
 		for _, r := range splitByRates(proforma.Summary, paid) {
 			if r.Base.IsZero() && r.VAT.IsZero() {
 				r.Base = r.Total // pri čiastočnej úhrade: neplatiteľ nemá DPH
 			}
 			d.Rates = append(d.Rates, r)
 		}
-		deductions = []Deduction{d}
-	default:
+		return []Deduction{d}, nil
+	}
+	if len(receipts) == 0 {
 		return nil, errors.New("chýba daňový doklad k prijatej platbe")
+	}
+	if !covered.Equal(paid) {
+		return nil, fmt.Errorf("k platbám zálohy (%s €) chýba daňový doklad k prijatej platbe — doklady pokrývajú %s €", paid.Display(), covered.Display())
 	}
 	return deductions, nil
 }
@@ -328,13 +481,57 @@ func (inv *Invoice) RemoveAdvance(proformaID int64) error {
 	return inv.Recalculate()
 }
 
+// RefreshAdvance prepočíta v koncepte vyúčtovania odpočty jednej zálohy
+// (napr. po dodatočnom vystavení dokladov k platbám).
+func (inv *Invoice) RefreshAdvance(proforma Invoice, receipts []Invoice) error {
+	if inv.Status != StatusDraft || inv.Advance == nil {
+		return errors.New("odpočty možno meniť iba v koncepte vyúčtovacej faktúry")
+	}
+	if proforma.Advance != nil {
+		a := *proforma.Advance
+		a.FinalID = 0 // záloha patrí práve tomuto vyúčtovaniu
+		proforma.Advance = &a
+	}
+	ds, err := advanceDeductions(proforma, receipts)
+	if err != nil {
+		return err
+	}
+	var out []Deduction
+	inserted := false
+	for _, d := range inv.Advance.Deductions {
+		if d.ProformaID != proforma.ID {
+			out = append(out, d)
+		} else if !inserted {
+			out, inserted = append(out, ds...), true
+		}
+	}
+	if !inserted {
+		return errors.New("záloha nie je vo vyúčtovaní")
+	}
+	inv.Advance.Deductions = out
+	return inv.Recalculate()
+}
+
 // applyDeductions odpočíta zálohy od rekapitulácie po sadzbách. Do DPH
 // a kontrolného výkazu ide iba zostatok; celá dodávka ostane v Advance.Supply.
 func (inv *Invoice) applyDeductions() {
 	if inv.Advance == nil || len(inv.Advance.Deductions) == 0 {
 		if inv.Advance != nil {
-			inv.Advance.Supply = nil
+			inv.Advance.Supply, inv.Advance.Prepaid = nil, money.Zero
 		}
+		return
+	}
+	inv.Advance.Prepaid = money.Zero
+	taxed := false
+	for _, d := range inv.Advance.Deductions {
+		if d.Untaxed != "" {
+			inv.Advance.Prepaid = inv.Advance.Prepaid.Add(d.Total)
+		} else {
+			taxed = true
+		}
+	}
+	if !taxed {
+		inv.Advance.Supply = nil // DPH z celej dodávky, záloha iba znižuje úhradu
 		return
 	}
 	full := inv.Summary
@@ -347,6 +544,9 @@ func (inv *Invoice) applyDeductions() {
 		order = append(order, r.Key())
 	}
 	for _, d := range inv.Advance.Deductions {
+		if d.Untaxed != "" {
+			continue
+		}
 		for _, r := range d.Rates {
 			cur, ok := byRate[r.Key()]
 			if !ok {
@@ -377,8 +577,36 @@ func (inv *Invoice) validateAdvance() []FieldError {
 	if inv.Kind != KindInvoice {
 		return []FieldError{{"advance", "Odpočet zálohy má iba vyúčtovacia faktúra"}}
 	}
-	if inv.Summary.Total.Sign() < 0 {
-		return []FieldError{{"lines", fmt.Sprintf("Záloha je vyššia ako vyúčtovanie o %s € — preplatok vráťte dobropisom", inv.Summary.Total.Neg().Display())}}
+	if due := inv.AmountDue(); due.Sign() < 0 {
+		return []FieldError{{"lines", fmt.Sprintf("Záloha je vyššia ako vyúčtovanie o %s € — preplatok vráťte dobropisom", due.Neg().Display())}}
 	}
 	return nil
+}
+
+// AmountDue je suma na úhradu faktúry: pri vyúčtovaní po odpočte záloh
+// bez daňového dokladu (pred vystavením; potom sú to úhrady).
+func (inv *Invoice) AmountDue() money.Dec {
+	if inv.Advance != nil {
+		return inv.Summary.Total.Sub(inv.Advance.Prepaid)
+	}
+	return inv.Summary.Total
+}
+
+// Within15Error skontroluje vyúčtovanie záloh s dodaním do 15 dní: dodanie
+// najneskôr 15. deň po prijatí platby. Rovnaké zdaňovacie obdobie overí
+// aplikácia (pozná obdobie firmy).
+func (inv *Invoice) Within15Error() string {
+	if inv.Advance == nil {
+		return ""
+	}
+	for _, d := range inv.Advance.Deductions {
+		if d.Untaxed != UntaxedWithin15 {
+			continue
+		}
+		if inv.DeliveryDate.Before(d.Date) || inv.DeliveryDate.After(d.Date.AddDays(15)) {
+			return fmt.Sprintf("Platba zálohy %s z %s: dodanie %s nie je do 15 dní od platby — vystavte k platbe daňový doklad (na zálohovej faktúre)",
+				d.Number, d.Date.Display(), inv.DeliveryDate.Display())
+		}
+	}
+	return ""
 }

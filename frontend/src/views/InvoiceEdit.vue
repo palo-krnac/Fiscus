@@ -31,7 +31,7 @@ import { quoteActions, quoteStatusOf, validDays as quoteValidDays } from '../lib
 import { firstOfNextMonth, intervals, placeholders, recurringStatusOf } from '../lib/recurring.js'
 import InputNumber from 'primevue/inputnumber'
 import { filterItems, itemFromLine, lineFromItem, sameNameItem } from '../lib/catalog.js'
-import { canCredit, canSettle, editorTitle, hasDeductions, receiptsOf, settledAdvances } from '../lib/advance.js'
+import { advanceModeText, canChooseWithin15, canCredit, canSettle, editorTitle, hasDeductions, receiptsOf, settledAdvances, within15Deadline } from '../lib/advance.js'
 import SendMailDialog from '../components/SendMailDialog.vue'
 import { currencyOptions, isForeignCurrency, rateHint, rateText } from '../lib/fx.js'
 
@@ -120,6 +120,7 @@ const errors = ref({}) // pole → správa
 const previewErrors = ref({})
 
 const canWrite = computed(() => can('invoices.write'))
+const todayISO = toISODate(new Date())
 // koncept; vystavenú faktúru tiež, kým nie je uhradená (amendable zo servera)
 const isDraftDoc = computed(() => !inv.value?.status || inv.value.status === 'draft')
 const amending = computed(() => !isDraftDoc.value && !isQuote.value && !isRecurring.value && !!inv.value?.amendable)
@@ -280,6 +281,14 @@ async function recalc() {
     if (mine !== seq) return // medzitým prišla novšia zmena
     inv.value.summary = out.summary
     inv.value.nonVatPayer = out.nonVatPayer
+    // režim zálohy a suma na úhradu po zálohách bez dokladu určuje server
+    inv.value.advanceMode = out.advanceMode
+    inv.value.advanceNote = out.advanceNote
+    inv.value.amountDue = out.amountDue
+    if (inv.value.advance && out.advance) {
+      inv.value.advance.prepaid = out.advance.prepaid
+      inv.value.advance.supply = out.advance.supply
+    }
     if (!isQuote.value && !isRecurring.value) {
       // kurz ECB a sumy v eurách určuje server
       inv.value.fxRate = out.fxRate
@@ -563,6 +572,20 @@ function issue() {
       }
     },
   })
+}
+
+async function issueReceipts() {
+  busy.value = true
+  try {
+    const p = await api.issueReceipts(session.companyId, inv.value.id)
+    inv.value = { ...inv.value, ...p }
+    const n = receiptsOf(p).at(-1)?.number
+    toast.add({ severity: 'success', summary: 'Doklad k platbe vystavený', detail: n ? `Daňový doklad ${n} — daň z platby patrí do obdobia platby.` : '', life: 5000 })
+  } catch (e) {
+    applyError(e)
+  } finally {
+    busy.value = false
+  }
 }
 
 async function settle() {
@@ -927,12 +950,25 @@ const customerFields = reactive([
           <span>
             <template v-if="inv.status === 'paid'">Uhradená {{ formatDate(inv.paidDate) }}.</template>
             <template v-else-if="Number(inv.paidAmount) > 0">Uhradená časť {{ formatMoney(inv.paidAmount, inv.currency) }}, zostáva {{ formatMoney(inv.balance, inv.currency) }}.</template>
-            <template v-else>Zálohová faktúra nie je daňový doklad. Ku každej prijatej platbe (aj čiastočnej) vznikne daňový doklad k prijatej platbe a zálohu potom vyúčtujete.</template>
+            <template v-else>{{ advanceModeText(inv) }}</template>
             <template v-if="receiptsOf(inv).length">
               {{ ' ' }}{{ receiptsOf(inv).length === 1 ? 'Daňový doklad' : 'Daňové doklady' }}
               <template v-for="(r, i) in receiptsOf(inv)" :key="r.id"><template v-if="i">, </template><RouterLink :to="`/faktury/${r.id}`">{{ r.number }}</RouterLink></template>.
             </template>
             <template v-if="inv.advance?.finalId">{{ ' ' }}Vyúčtovaná faktúrou <RouterLink :to="`/faktury/${inv.advance.finalId}`">{{ inv.advance.finalNumber || 'koncept' }}</RouterLink><template v-if="inv.advance.finalNumber && inv.status !== 'paid'"> — zvyšok zálohy sa už nevymáha, doplatok je na vyúčtovaní</template>.</template>
+          </span>
+        </p>
+        <p v-if="isProforma && inv.status !== 'draft' && inv.advanceMode && inv.advanceMode !== 'receipt' && Number(inv.paidAmount) > 0" class="advance-note">
+          <i class="pi pi-info-circle" /> <span>{{ advanceModeText(inv) }}</span>
+        </p>
+        <p v-for="pay in isProforma && !inv.advance?.finalNumber ? inv.uncoveredPayments ?? [] : []" :key="pay.date + pay.amount" class="advance-note uncovered"
+          :class="{ late: within15Deadline(pay.date) < todayISO }">
+          <i class="pi pi-clock" />
+          <span>
+            Platba {{ formatMoney(pay.amount, inv.currency) }} z {{ formatDate(pay.date) }} nemá daňový doklad —
+            <template v-if="within15Deadline(pay.date) < todayISO">lehota 15 dní uplynula {{ formatDate(within15Deadline(pay.date)) }}, vystavte doklad k platbe.</template>
+            <template v-else>vyúčtovanie s dodaním vystavte najneskôr {{ formatDate(within15Deadline(pay.date)) }} (v tom istom období DPH), inak doklad k platbe.</template>
+            <Button v-if="canWrite" label="Vystaviť doklad k platbe" icon="pi pi-file" size="small" text :disabled="busy" @click="issueReceipts" />
           </span>
         </p>
         <p v-if="isReceipt && inv.advance" class="advance-note">
@@ -1221,6 +1257,10 @@ const customerFields = reactive([
             <small v-if="fieldError('supplyKind')" class="err">{{ fieldError('supplyKind') }}</small>
             <small v-else class="supply-hint">{{ supplyHint('sale', inv.customer.country, inv.supplyKind) }}</small>
           </div>
+          <label v-if="canChooseWithin15(inv)" class="check within15">
+            <Checkbox :model-value="!!inv.within15" binary :disabled="!editable" input-id="w15" @update:model-value="upd(inv, 'within15')($event)" />
+            <span>Dodám do 15 dní od platby <small class="muted">— bez dokladu k platbe, rovno faktúra k dodaniu (§ 73)</small></span>
+          </label>
         </fieldset>
 
         <fieldset v-if="editable || inv.subject || inv.intro" class="block">
@@ -1317,7 +1357,7 @@ const customerFields = reactive([
       </div>
 
       <aside class="recap" aria-label="Rekapitulácia DPH">
-        <h2>{{ nonVat ? 'Súhrn' : deductions.length ? 'DPH po odpočte zálohy' : 'Rekapitulácia DPH' }}</h2>
+        <h2>{{ nonVat ? 'Súhrn' : inv.advance?.supply ? 'DPH po odpočte zálohy' : 'Rekapitulácia DPH' }}</h2>
         <table v-if="!nonVat">
           <thead>
             <tr>
@@ -1344,21 +1384,25 @@ const customerFields = reactive([
             </tr>
           </tfoot>
         </table>
-        <dl v-if="deductions.length && inv.advance.supply" class="deductions">
-          <dt>Dodávka spolu</dt>
-          <dd>{{ formatMoney(inv.advance.supply.total, inv.currency) }}</dd>
-          <template v-for="d in deductions" :key="d.number">
+        <dl v-if="deductions.length" class="deductions">
+          <template v-if="inv.advance.supply">
+            <dt>Dodávka spolu</dt>
+            <dd>{{ formatMoney(inv.advance.supply.total, inv.currency) }}</dd>
+          </template>
+          <template v-for="d in deductions" :key="d.number + d.date">
             <dt>
-              Odpočet zálohy
+              {{ d.untaxed ? 'Uhradená záloha' : 'Odpočet zálohy' }}
               <RouterLink v-if="d.receiptId" :to="`/faktury/${d.receiptId}`">{{ d.number }}</RouterLink>
               <template v-else>{{ d.number }}</template>
             </dt>
             <dd>−{{ formatMoney(d.total, inv.currency) }}</dd>
+            <dt v-if="d.untaxed" class="untaxed">neznižuje základ dane{{ d.untaxed === 'within15' ? ' (dodanie do 15 dní)' : '' }}</dt>
+            <dd v-if="d.untaxed" />
           </template>
         </dl>
         <div class="payable">
           <span>{{ isQuote ? 'Cena spolu' : isRecurring ? 'Suma faktúry' : isCredit ? 'Suma dobropisu' : isReceipt ? 'Prijatá platba' : isProforma ? 'Záloha na úhradu' : 'K úhrade' }}</span>
-          <strong class="num">{{ formatMoney(inv.summary.total, inv.currency) }}</strong>
+          <strong class="num">{{ formatMoney(inv.amountDue ?? inv.summary.total, inv.currency) }}</strong>
         </div>
         <div v-if="inv.local && !isQuote" class="local">
           <p class="rate-line">{{ rateText(inv) }}</p>
@@ -1439,7 +1483,7 @@ const customerFields = reactive([
         <label>
           <span>Suma ({{ inv.currency || 'EUR' }})</span>
           <InputNumber v-model="payDlg.amount" :min="0.01" :min-fraction-digits="2" :max-fraction-digits="2" locale="sk-SK" size="small" />
-          <small>Zostatok {{ formatMoney(balanceAbs, inv.currency) }}. Menšia suma = čiastočná úhrada.<template v-if="isProforma && !inv.nonVatPayer"> K prijatej sume vznikne daňový doklad k prijatej platbe.</template></small>
+          <small>Zostatok {{ formatMoney(balanceAbs, inv.currency) }}. Menšia suma = čiastočná úhrada.<template v-if="isProforma && inv.advanceMode === 'receipt'"> K prijatej sume vznikne daňový doklad k prijatej platbe.</template></small>
         </label>
       </div>
       <template #footer>
@@ -2048,6 +2092,29 @@ legend {
   padding-top: 8px;
   border-top: 1px solid var(--rule);
   font-size: var(--fs-sm);
+}
+.advance-note.uncovered {
+  border-left-color: var(--brass);
+}
+.advance-note.uncovered.late {
+  border-left-color: var(--tone-overdue);
+  color: var(--tone-overdue);
+}
+.advance-note.uncovered :deep(.p-button) {
+  padding: 0 4px;
+}
+.check.within15 {
+  display: flex;
+  margin-top: 10px;
+}
+.check.within15 small {
+  color: var(--ink-faint);
+  font-size: var(--fs-sm);
+}
+.deductions dt.untaxed {
+  font-size: var(--fs-xs);
+  color: var(--ink-faint);
+  margin-top: -4px;
 }
 .deductions dt {
   color: var(--ink-soft);

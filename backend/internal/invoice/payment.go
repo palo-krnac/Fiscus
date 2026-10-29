@@ -13,6 +13,9 @@ const (
 	PaymentCash   = "cash"   // pokladničný doklad
 	// PaymentCredit je zápočet dobropisu s pôvodnou faktúrou (Ref = ID druhého dokladu).
 	PaymentCredit = "credit_note"
+	// PaymentAdvance je záloha bez daňového dokladu k platbe odpočítaná vo
+	// vyúčtovaní (Ref = ID zálohovej faktúry) — peniaze prišli na zálohu.
+	PaymentAdvance = "advance"
 )
 
 // Payment je úhrada faktúry (aj čiastočná). Suma má rovnaké znamienko ako
@@ -53,7 +56,15 @@ func (inv *Invoice) PartlyPaid() bool { return inv.Status == StatusIssued && !in
 
 // SyncPaid prepočíta uhradenú sumu (po načítaní z úložiska).
 func (inv *Invoice) SyncPaid() {
+	inv.AdvanceKind, inv.AdvanceNote, inv.Uncovered = "", "", nil
+	if inv.Kind == KindProforma {
+		inv.AdvanceKind, inv.AdvanceNote = inv.AdvanceMode()
+		if inv.CanIssueReceipt() && !inv.Settled() {
+			inv.Uncovered = inv.UncoveredPayments()
+		}
+	}
 	inv.PaidAmount = inv.Paid()
+	inv.Due = inv.AmountDue()
 	inv.Balance = inv.Remaining()
 	inv.BalanceEUR = inv.Balance
 	if inv.Foreign() {

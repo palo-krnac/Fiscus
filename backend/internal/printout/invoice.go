@@ -383,6 +383,16 @@ func (s *sheet) deductions(inv invoice.Invoice, ds []invoice.Deduction) {
 	s.header = t.head
 	neg := func(d money.Dec) string { return "−" + amount(d) }
 	for _, d := range ds {
+		if d.Untaxed != "" {
+			// záloha bez dokladu k platbe: neznižuje základ dane, iba úhradu
+			cells := []cellText{{"Uhradená záloha " + d.Number + " (neznižuje základ dane)", s.f.Regular, ink}, {d.Date.Display(), s.f.Regular, ink}}
+			if !nonVat {
+				cells = append(cells, cellText{"", s.f.Regular, ink}, cellText{"", s.f.Regular, ink}, cellText{"", s.f.Regular, ink})
+			}
+			cells = append(cells, cellText{neg(d.Total), s.f.Regular, ink})
+			t.row(cells, pdf.MM(1.8), true)
+			continue
+		}
 		for i, rs := range d.Rates {
 			desc, date := "", ""
 			if i == 0 {
@@ -417,6 +427,9 @@ func (s *sheet) totals(v view, deducted bool, sup Supplier) {
 	if deducted && inv.Advance != nil && inv.Advance.Supply != nil {
 		h += lh(9.5) + pdf.MM(3)
 	}
+	if inv.Advance != nil && inv.Advance.Prepaid.Sign() > 0 {
+		h += lh(9.5) + pdf.MM(3)
+	}
 	code := ""
 	if !v.quote {
 		code = payCode(inv, sup.Company)
@@ -436,8 +449,8 @@ func (s *sheet) totals(v view, deducted bool, sup Supplier) {
 	}
 	if !inv.NonVATPayer {
 		first := "Sadzba DPH"
-		if deducted {
-			first = "Po odpočte zálohy"
+		if deducted && inv.Advance != nil && inv.Advance.Supply != nil {
+			first = "Po odpočte zálohy" // záloha s dokladom k platbe znížila základ
 		}
 		t := &table{s: s, x: x, size: 9.5, cols: []column{
 			{first, w - pdf.MM(72), false}, {"Základ", pdf.MM(26), true}, {"DPH", pdf.MM(22), true}, {"Spolu", pdf.MM(24), true},
@@ -458,6 +471,12 @@ func (s *sheet) totals(v view, deducted bool, sup Supplier) {
 		s.textRight(right, s.y, s.f.Regular, 9.5, muted, moneyText(inv.Advance.Supply.Total, inv.Currency))
 		s.y += lh(9.5)
 	}
+	if inv.Advance != nil && inv.Advance.Prepaid.Sign() > 0 {
+		s.y += pdf.MM(3)
+		s.text(x, s.y, s.f.Regular, 9.5, muted, "Uhradené zálohou")
+		s.textRight(right, s.y, s.f.Regular, 9.5, muted, "−"+moneyText(inv.Advance.Prepaid, inv.Currency))
+		s.y += lh(9.5)
+	}
 	label := "K úhrade"
 	switch {
 	case v.quote:
@@ -468,7 +487,7 @@ func (s *sheet) totals(v view, deducted bool, sup Supplier) {
 		label = "Prijatá platba"
 	}
 	s.y += pdf.MM(4)
-	total := moneyText(inv.Summary.Total, inv.Currency)
+	total := moneyText(inv.AmountDue(), inv.Currency)
 	s.text(x, s.y+pdf.MM(2.5), s.f.Regular, 10, muted, label)
 	s.p.TextRight(right, s.y+18*0.95, s.f.Bold, 18, ink, total)
 	// dvojité podčiarknutie ako v účtovnej knihe

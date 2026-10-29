@@ -31,6 +31,14 @@ func (s *Server) settleAdvance(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// issueMissingReceipts: POST /invoices/{id}/receipts — dodatočné daňové
+// doklady k platbám zálohy (dodanie do 15 dní sa nestihlo).
+func (s *Server) issueMissingReceipts(w http.ResponseWriter, r *http.Request) {
+	s.action(w, r, func(cid, id int64) (invoice.Invoice, error) {
+		return s.App.IssueMissingReceipts(r.Context(), cid, id)
+	})
+}
+
 // advanceCandidates: GET /invoices/{id}/advances — ďalšie zálohy odberateľa do vyúčtovania.
 func (s *Server) advanceCandidates(w http.ResponseWriter, r *http.Request) {
 	cid, ok := s.company(w, r)

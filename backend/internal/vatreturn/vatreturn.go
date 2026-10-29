@@ -500,8 +500,29 @@ func (ret *Return) addA2(inv invoice.Invoice, when invoice.Date, warn func(doc, 
 			g.qty = g.qty.Add(l.Quantity)
 		}
 	}
+	// vyúčtovanie zálohy: odpočíta sa základ z dokladov k platbám (v A.2 sú
+	// samostatne); záloha s prenesením je iba pri službách (jeden druh)
+	var deducted money.Dec
+	if inv.Advance != nil {
+		for _, d := range inv.Advance.Deductions {
+			if d.Untaxed != "" {
+				continue
+			}
+			for _, r := range d.Rates {
+				if r.Reverse {
+					deducted = deducted.Add(r.Base)
+				}
+			}
+		}
+	}
 	for _, key := range order {
 		g := groups[key]
+		if !g.goods && !deducted.IsZero() {
+			g.line.Base, deducted = g.line.Base.Sub(deducted), money.Zero
+			if g.line.Base.IsZero() {
+				continue // celé plnenie pokryla záloha
+			}
+		}
 		if inv.Foreign() {
 			g.line.Base = g.line.Base.DivCents(inv.FXRate)
 		}
