@@ -444,6 +444,13 @@ func TestCreditNoteFlow(t *testing.T) {
 	if issued.Number != "DB20260001" || issued.Summary.Total.String() != "-196.80" {
 		t.Fatalf("%s %s", issued.Number, issued.Summary.Total)
 	}
+	// zápočet: neuhradenej faktúre klesne zostatok, dobropis sa nevracia
+	if o, _ := a.Store.GetInvoice(ctx, c.ID, orig.ID); o.Status != invoice.StatusIssued || o.Remaining().String() != "295.20" {
+		t.Fatalf("faktúra po dobropise: %s zostáva %s", o.Status, o.Remaining())
+	}
+	if issued.Status != invoice.StatusPaid || !issued.Remaining().IsZero() {
+		t.Fatalf("dobropis po zápočte: %s %s", issued.Status, issued.Remaining())
+	}
 
 	// druhý dobropis nad zostatok neprejde
 	cn2, _ := a.CreateCreditNote(ctx, c.ID, orig.ID) // celých -492, zostáva 295.20
@@ -456,5 +463,20 @@ func TestCreditNoteFlow(t *testing.T) {
 	cn2, _ = a.SaveDraft(ctx, c.ID, cn2)
 	if _, err := a.Issue(ctx, c.ID, cn2.ID); err != nil {
 		t.Fatalf("dobropis na zostatok: %v", err)
+	}
+	o, _ := a.Store.GetInvoice(ctx, c.ID, orig.ID)
+	if o.Status != invoice.StatusPaid || len(o.Payments) != 2 || o.Payments[1].Source != invoice.PaymentCredit {
+		t.Fatalf("faktúra vyrovnaná dobropismi: %s %+v", o.Status, o.Payments)
+	}
+	// k uhradenej faktúre sa nezapočíta — dobropis ostane na vrátenie peňazí
+	d3, _ := a.SaveDraft(ctx, c.ID, validDraft())
+	paid, _ := a.Issue(ctx, c.ID, d3.ID)
+	_, _ = a.MarkPaid(ctx, c.ID, paid.ID, paid.IssueDate)
+	cn3, _ := a.CreateCreditNote(ctx, c.ID, paid.ID)
+	cn3.Correction.Reason = "Reklamácia"
+	cn3, _ = a.SaveDraft(ctx, c.ID, cn3)
+	cn3, err = a.Issue(ctx, c.ID, cn3.ID)
+	if err != nil || cn3.Status != invoice.StatusIssued || cn3.Remaining().String() != "-492.00" {
+		t.Fatalf("dobropis k uhradenej: %v %s %s", err, cn3.Status, cn3.Remaining())
 	}
 }

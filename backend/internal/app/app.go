@@ -336,6 +336,32 @@ func (a *App) CreateCreditNote(ctx context.Context, companyID, originalID int64)
 	return saved, err
 }
 
+// offsetCreditNote započíta vystavený dobropis s neuhradenou časťou pôvodnej
+// faktúry (pozri invoice.OffsetCreditNote) a uloží oba doklady.
+func (a *App) offsetCreditNote(ctx context.Context, companyID int64, cn *invoice.Invoice) error {
+	orig, err := a.Store.GetInvoice(ctx, companyID, cn.Correction.OriginalID)
+	if err != nil {
+		return err
+	}
+	amount, err := invoice.OffsetCreditNote(&orig, cn)
+	if err != nil || amount.IsZero() {
+		return err
+	}
+	if err := a.Store.SaveInvoice(ctx, companyID, &orig); err != nil {
+		return err
+	}
+	if err := a.Store.SaveInvoice(ctx, companyID, cn); err != nil {
+		return err
+	}
+	state := "zostáva uhradiť " + orig.Remaining().Display() + " €"
+	if orig.Status == invoice.StatusPaid {
+		state = "faktúra je vyrovnaná"
+	}
+	a.record(ctx, companyID, audit.CatInvoices, "pay", "invoice", orig.ID,
+		"Zápočet dobropisu "+cn.Number+" s faktúrou "+orig.Number+": "+amount.Display()+" €, "+state, nil, orig.Payments)
+	return nil
+}
+
 // creditNotesOf vráti dobropisy k danej faktúre.
 func (a *App) creditNotesOf(ctx context.Context, companyID, originalID int64) ([]invoice.Invoice, error) {
 	all, err := a.Store.ListInvoices(ctx, companyID, store.InvoiceFilter{})
@@ -439,6 +465,11 @@ func (a *App) Issue(ctx context.Context, companyID, id int64) (invoice.Invoice, 
 	}
 	a.record(ctx, companyID, audit.CatInvoices, "issue", "invoice", inv.ID,
 		what+inv.Number+" pre "+inv.Customer.Name+", "+inv.Summary.Total.Display()+" €", nil, inv)
+	if inv.Kind == invoice.KindCreditNote {
+		if err := a.offsetCreditNote(ctx, companyID, &inv); err != nil {
+			return inv, err
+		}
+	}
 	if adv := inv.Advance; adv != nil && len(adv.Deductions) > 0 {
 		if err := a.linkFinal(ctx, companyID, inv); err != nil {
 			return inv, err

@@ -23,7 +23,7 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [ ] DIČ a IČ DPH z registrov finančnej správy (vyžaduje API kľúč)
 - [x] Tlač a PDF faktúry (A4) s QR kódom **PAY by square**
 - [ ] Odoslanie faktúry e-mailom (PDF na serveri + SMTP)
-- [x] Dobropis (opravná faktúra) k vystavenej faktúre: celý aj čiastočný, kontrola limitu, sadzby k pôvodnému dodaniu
+- [x] Dobropis (opravná faktúra) k vystavenej faktúre: celý aj čiastočný, kontrola limitu, sadzby k pôvodnému dodaniu; zápočet s neuhradenou časťou faktúry (vyrovnaná dobropisom)
 - [x] Cenová ponuka: vlastný číselný rad (CP), platnosť, stavy odoslaná / prijatá / odmietnutá / po platnosti, kópia ako nová verzia, tlač, jedným klikom koncept faktúry; nezapočíta sa do DPH
 - [x] Pravidelná fakturácia: šablóna faktúry s intervalom (mesačne, štvrťročne, polročne, ročne), koncom, splatnosťou a texty {obdobie} / {mesiac} / {rok} / {minule_obdobie}; Fiškus faktúru vytvorí a vystaví sám (pri štarte a každú hodinu), dobehnuté staršie obdobia ostanú ako koncepty; pozastavenie, faktúra hneď, história
 - [ ] Pravidelná fakturácia: automatické odoslanie e-mailom, upozornenie na koncepty na kontrolu
