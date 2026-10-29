@@ -6,6 +6,7 @@ export const docKinds = {
   quote: { label: 'Cenová ponuka', url: 'quotes' },
   reminder: { label: 'Upomienka', url: 'reminders' },
   test: { label: 'Skúšobná správa', url: '' },
+  notice: { label: 'Upozornenie', url: '' },
 }
 
 export const docKindLabel = (k) => docKinds[k]?.label ?? k
@@ -19,6 +20,8 @@ export function docRoute(e) {
       return `/ponuky/${e.docId}`
     case 'reminder':
       return `/upomienky/${e.docId}/tlac`
+    case 'notice':
+      return '/pravidelne'
   }
   return null
 }

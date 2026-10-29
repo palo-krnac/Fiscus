@@ -215,6 +215,7 @@ export const api = {
   previewQuote: (cid, q) => request('POST', `/api/companies/${cid}/quotes/preview`, q),
   quoteAction: (cid, id, action) => request('POST', `/api/companies/${cid}/quotes/${id}/${action}`),
   recurringList: (cid) => request('GET', `/api/companies/${cid}/recurring`),
+  recurringDrafts: (cid) => request('GET', `/api/companies/${cid}/recurring/drafts`),
   recurring: (cid, id) => request('GET', `/api/companies/${cid}/recurring/${id}`),
   saveRecurring: (cid, t) =>
     t.id

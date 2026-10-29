@@ -27,6 +27,17 @@ func (s *Server) listRecurring(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, list)
 }
 
+// recurringDrafts: GET …/recurring/drafts — koncepty na kontrolu.
+func (s *Server) recurringDrafts(w http.ResponseWriter, r *http.Request) {
+	cid, _ := pathID(w, r, "cid")
+	list, err := s.App.RecurringDrafts(r.Context(), cid)
+	if err != nil {
+		failRecurring(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, list)
+}
+
 func (s *Server) getRecurring(w http.ResponseWriter, r *http.Request) {
 	cid, _ := pathID(w, r, "cid")
 	id, ok := pathID(w, r, "id")

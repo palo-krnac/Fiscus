@@ -249,6 +249,10 @@ onBeforeUnmount(() => {
           <FormField label="Odpovede posielať na" :span="2" :error="errors.replyTo" hint="Nepovinné, ak sa líši od odosielateľa">
             <InputText v-model="form.replyTo" size="small" inputmode="email" />
           </FormField>
+          <FormField label="Upozornenia na koncepty na" :span="2" :error="errors.notifyDrafts"
+            hint="Keď pravidelná fakturácia pripraví koncept na kontrolu, príde sem e-mail. Prázdne = neposielať.">
+            <InputText v-model="form.notifyDrafts" size="small" inputmode="email" placeholder="napr. uctovnictvo@firma.sk" :invalid="!!errors.notifyDrafts" />
+          </FormField>
           <label class="switch span2">
             <ToggleSwitch v-model="form.bccSelf" />
             <span>

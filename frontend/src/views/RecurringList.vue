@@ -16,6 +16,7 @@ import { matches, searchTerms } from '../lib/search.js'
 import { recurringColumns } from '../lib/columns.js'
 import { intervalLabel, monthlyAmount, recurringStatusOf } from '../lib/recurring.js'
 import ExportButton from '../components/ExportButton.vue'
+import { attention } from '../lib/attention.js'
 
 const router = useRouter()
 const view = ref('all')
@@ -29,6 +30,18 @@ const searchEl = ref(null)
 const rows = shallowRef([])
 const loading = ref(true)
 const loadError = ref(null)
+
+// koncepty z pravidelnej fakturácie, ktoré čakajú na kontrolu a vystavenie
+const drafts = ref([])
+async function loadDrafts() {
+  try {
+    drafts.value = await api.recurringDrafts(session.companyId)
+    attention['/pravidelne'] = drafts.value.length
+  } catch {
+    drafts.value = []
+  }
+}
+onMounted(loadDrafts)
 
 async function load() {
   loading.value = true
@@ -152,9 +165,24 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
+    <section v-if="drafts.length" class="review" aria-label="Koncepty na kontrolu">
+      <h2>Na kontrolu {{ drafts.length }} {{ drafts.length === 1 ? 'koncept' : drafts.length < 5 ? 'koncepty' : 'konceptov' }}</h2>
+      <ul>
+        <li v-for="d in drafts" :key="d.invoiceId">
+          <button class="draft" @click="router.push(`/faktury/${d.invoiceId}`)">
+            <span class="who">{{ d.customer }}</span>
+            <span class="what">{{ d.template }} · {{ d.period }}</span>
+            <span class="amt">{{ formatMoney(d.total, d.currency || 'EUR') }}</span>
+            <span v-if="d.reason" class="why">{{ d.reason }}</span>
+          </button>
+        </li>
+      </ul>
+    </section>
+
     <p class="explain">
       Fiškus vytvorí faktúru sám v deň ďalšej faktúry (pri spustení programu a potom každú hodinu). Ak program v ten deň nebežal,
-      faktúru dobehne neskôr. Dobehnuté faktúry z minulých mesiacov ostanú ako koncepty na kontrolu.
+      faktúru dobehne neskôr. Dobehnuté faktúry z minulých mesiacov ostanú ako koncepty na kontrolu — počet uvidíte pri položke v menu
+      a upozornenie e-mailom zapnete v časti E-maily → Nastavenie.
     </p>
 
     <div class="toolbar">
@@ -277,6 +305,69 @@ onBeforeUnmount(() => {
   width: 100%;
 }
 
+.review {
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--blue);
+  background: var(--sheet);
+  padding: 8px 12px 6px;
+}
+.review h2 {
+  font-size: var(--fs-md);
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+.review ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 168px;
+  overflow: auto;
+}
+.review li + li {
+  border-top: 1px solid var(--rule);
+}
+.draft {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.4fr) auto;
+  gap: 2px 16px;
+  width: 100%;
+  padding: 6px 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.draft:hover .who {
+  text-decoration: underline;
+}
+.draft .who {
+  font-weight: 600;
+  color: var(--blue-deep);
+}
+.draft .what {
+  color: var(--ink-soft);
+}
+.draft .amt {
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.draft .why {
+  grid-column: 1 / -1;
+  font-size: var(--fs-sm);
+  color: var(--ink-soft);
+}
+@media (max-width: 760px) {
+  .draft {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .draft .what {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
 .grid-wrap {
   flex: 1;
   min-height: 320px;
