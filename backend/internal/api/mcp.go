@@ -19,6 +19,9 @@ func (s *Server) mcpHandler(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusMethodNotAllowed, "MCP server prijíma iba POST", nil)
 		return
 	}
+	if s.Desktop != nil {
+		s.Desktop.Ping() // kým pracuje AI asistent, aplikácia sa neukončí
+	}
 	// ochrana proti DNS rebindingu: požiadavka z prehliadača musí byť z rovnakého pôvodu
 	if o := r.Header.Get("Origin"); o != "" {
 		if u, err := url.Parse(o); err != nil || u.Host != r.Host {

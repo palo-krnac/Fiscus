@@ -61,6 +61,7 @@ func main() {
 	licensePath := flag.String("license", "", "súbor s licenčným kľúčom (server, viac firiem); predvolene fiskus.license vedľa databázy")
 	adminEmail := flag.String("admin-email", "", "e-mail prvého správcu (server); heslo v FISKUS_ADMIN_PASSWORD")
 	showVersion := flag.Bool("version", false, "vypíše verziu a skončí")
+	openBrowser := flag.Bool("open", true, "aplikácia: otvoriť prehliadač po spustení (most fiskus-mcp spúšťa bez neho)")
 	appMode := flag.Bool("app", false, "aplikácia (spustenie z inštalátora): dáta v priečinku používateľa, otvorí prehliadač, skončí po zatvorení okna")
 	flag.Parse()
 	if *showVersion {
@@ -80,7 +81,9 @@ func main() {
 		}
 		if desktop.Running(context.Background(), *addr) {
 			// druhé spustenie: iba otvoriť okno bežiaceho programu
-			_ = desktop.Open("http://" + *addr)
+			if *openBrowser {
+				_ = desktop.Open("http://" + *addr)
+			}
 			return
 		}
 		dir, err := desktop.DataDir()
@@ -198,7 +201,7 @@ func main() {
 			log.Fatal(err)
 		}
 	}()
-	if *appMode {
+	if *appMode && *openBrowser {
 		if err := desktop.Open("http://" + *addr); err != nil {
 			log.Printf("prehliadač sa neotvoril (%v) — otvorte http://%s", err, *addr)
 		}

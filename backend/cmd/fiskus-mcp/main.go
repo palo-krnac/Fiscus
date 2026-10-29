@@ -1,8 +1,10 @@
 // fiskus-mcp prepojí AI asistenta, ktorý spúšťa MCP servery cez stdio
 // (napr. Claude Desktop), s bežiacim Fiškusom (POST /mcp).
 //
-//	FISKUS_API_KEY=fk_… fiskus-mcp -url http://127.0.0.1:8080/mcp
+//	FISKUS_API_KEY=fk_… fiskus-mcp [-url http://127.0.0.1:48080/mcp]
 //
+// Ak Fiškus z inštalátora nebeží, most ho spustí na pozadí (bez okna
+// prehliadača) — program vedľa mostu: fiskus.exe / fiskus.
 // Každý riadok zo vstupu je jedna správa JSON-RPC; odpoveď sa vypíše ako
 // jeden riadok na výstup. Kľúč je vhodnejšie zadať v premennej prostredia
 // než ako parameter (parametre vidno v zozname procesov).
@@ -11,17 +13,25 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"time"
+
+	"github.com/palo-krnac/fiscus/backend/internal/desktop"
 )
 
 func main() {
-	url := flag.String("url", "http://127.0.0.1:8080/mcp", "adresa MCP servera Fiškusa")
+	url := flag.String("url", "http://"+desktop.Addr+"/mcp", "adresa MCP servera Fiškusa")
+	autostart := flag.Bool("start", true, "spustiť Fiškus (aplikáciu vedľa mostu), ak nebeží")
 	key := flag.String("key", "", "API kľúč (radšej premenná FISKUS_API_KEY)")
 	flag.Parse()
 	if *key == "" {
@@ -30,6 +40,9 @@ func main() {
 	if *key == "" {
 		fmt.Fprintln(os.Stderr, "fiskus-mcp: chýba API kľúč — nastavte FISKUS_API_KEY (vytvoríte ho vo Fiškuse: Prístup pre AI)")
 		os.Exit(2)
+	}
+	if *autostart {
+		ensureRunning(*url)
 	}
 	if err := run(os.Stdin, os.Stdout, *url, *key, &http.Client{Timeout: 2 * time.Minute}); err != nil {
 		fmt.Fprintln(os.Stderr, "fiskus-mcp:", err)
@@ -102,4 +115,40 @@ func errorReply(msg []byte, err error) []byte {
 	}
 	b, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": req.ID, "error": map[string]any{"code": -32000, "message": err.Error()}})
 	return b
+}
+
+// ensureRunning spustí Fiškus z rovnakého priečinka, ak na lokálnej adrese
+// nebeží (aplikácia sa po zatvorení okna ukončuje). Chyby iba zapíše —
+// most potom odpovie, že Fiškus neodpovedá.
+func ensureRunning(mcpURL string) {
+	addr := strings.TrimSuffix(strings.TrimPrefix(mcpURL, "http://"), "/mcp")
+	if !strings.HasPrefix(addr, "127.0.0.1:") && !strings.HasPrefix(addr, "localhost:") {
+		return // vzdialený server sa nespúšťa
+	}
+	ctx := context.Background()
+	if desktop.Running(ctx, addr) {
+		return
+	}
+	self, err := os.Executable()
+	if err != nil {
+		return
+	}
+	name := "fiskus"
+	if runtime.GOOS == "windows" {
+		name = "fiskus.exe"
+	}
+	bin := filepath.Join(filepath.Dir(self), name)
+	if _, err := os.Stat(bin); err != nil {
+		fmt.Fprintf(os.Stderr, "fiskus-mcp: Fiškus nebeží a %s sa nenašiel — spustite ho ručne\n", bin)
+		return
+	}
+	cmd := exec.Command(bin, "-app", "-open=false", "-addr", addr)
+	if err := cmd.Start(); err != nil {
+		fmt.Fprintln(os.Stderr, "fiskus-mcp: spustenie Fiškusa:", err)
+		return
+	}
+	_ = cmd.Process.Release()
+	for i := 0; i < 30 && !desktop.Running(ctx, addr); i++ {
+		time.Sleep(500 * time.Millisecond)
+	}
 }
