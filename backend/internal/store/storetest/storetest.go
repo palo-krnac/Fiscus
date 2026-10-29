@@ -20,6 +20,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/purchase"
 	"github.com/palo-krnac/fiscus/backend/internal/quote"
 	"github.com/palo-krnac/fiscus/backend/internal/recurring"
+	"github.com/palo-krnac/fiscus/backend/internal/reminder"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 	"github.com/palo-krnac/fiscus/backend/internal/vat"
 )
@@ -433,6 +434,62 @@ func Run(t *testing.T, newStore Factory) {
 			t.Fatal(err)
 		}
 		if _, err := s.GetRecurring(ctx, a.ID, t1.ID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("po zmazaní")
+		}
+	})
+
+	t.Run("upomienky", func(t *testing.T) {
+		s := newStore(t)
+		a, _ := s.CreateCompany(ctx, store.Company{Name: "Alfa"})
+		b, _ := s.CreateCompany(ctx, store.Company{Name: "Beta"})
+		inv := invoice.Invoice{ID: 5, Number: "FA20260005", Kind: invoice.KindInvoice, Status: invoice.StatusIssued,
+			Customer: invoice.Party{Name: "Dlžník", ICO: "31322832"}, IssueDate: invoice.MustDate("2026-09-01"),
+			DueDate: invoice.MustDate("2026-09-15"), Summary: vat.Summary{Total: m.MustParse("100")}}
+		r1, err := reminder.Build([]invoice.Invoice{inv}, 1, reminder.Options{Date: invoice.MustDate("2026-10-01"),
+			PayBy: invoice.MustDate("2026-10-08"), Interest: reminder.InterestStatutory, ChargeFee: true, Note: "pozn."})
+		if err != nil {
+			t.Fatal(err)
+		}
+		r1.Number = "UP20260001"
+		r2 := r1
+		r2.Number, r2.Date, r2.Level = "UP20260002", invoice.MustDate("2026-10-20"), 2
+		r3 := r1
+		r3.Number, r3.Date = "UP20250001", invoice.MustDate("2025-12-01")
+		for _, x := range []*reminder.Reminder{&r1, &r2, &r3} {
+			if err := s.SaveReminder(ctx, a.ID, x); err != nil || x.ID == 0 || x.CompanyID != a.ID {
+				t.Fatalf("uloženie: %v", err)
+			}
+		}
+		got, err := s.GetReminder(ctx, a.ID, r1.ID)
+		if err != nil || !reflect.DeepEqual(got, r1) {
+			t.Fatalf("načítanie:\n got %+v\nwant %+v", got, r1)
+		}
+		if _, err := s.GetReminder(ctx, b.ID, r1.ID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("upomienka inej firmy")
+		}
+		if list, _ := s.ListReminders(ctx, a.ID, 2026); len(list) != 2 || list[0].ID != r2.ID {
+			t.Fatalf("zoznam: %+v", list)
+		}
+		if all, _ := s.ListReminders(ctx, a.ID, 0); len(all) != 3 {
+			t.Fatal("všetky roky")
+		}
+		if other, _ := s.ListReminders(ctx, b.ID, 0); len(other) != 0 {
+			t.Fatal("zoznam inej firmy")
+		}
+		got.Items[0].Amount = m.MustParse("1")
+		if g, _ := s.GetReminder(ctx, a.ID, r1.ID); !g.Items[0].Amount.Equal(m.MustParse("100")) {
+			t.Fatal("úložisko zdieľa položky s volajúcim")
+		}
+		if err := s.SaveReminder(ctx, b.ID, &r1); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("úprava upomienky inej firmy")
+		}
+		if err := s.DeleteReminder(ctx, b.ID, r1.ID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("zmazanie upomienky inej firmy")
+		}
+		if err := s.DeleteReminder(ctx, a.ID, r1.ID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.GetReminder(ctx, a.ID, r1.ID); !errors.Is(err, store.ErrNotFound) {
 			t.Fatal("po zmazaní")
 		}
 	})

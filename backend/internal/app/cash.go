@@ -18,9 +18,10 @@ import (
 
 // Číselné rady pokladničných dokladov.
 const (
-	CashInFormatKey  = "cash_in"
-	CashOutFormatKey = "cash_out"
-	QuoteFormatKey   = "quote"
+	CashInFormatKey   = "cash_in"
+	CashOutFormatKey  = "cash_out"
+	QuoteFormatKey    = "quote"
+	ReminderFormatKey = "reminder"
 )
 
 // ExtraFormats sú predvolené formáty radov mimo vydaných faktúr.
@@ -29,6 +30,7 @@ var ExtraFormats = map[string]string{
 	CashInFormatKey:   "PPD{RRRR}{NNNN}",
 	CashOutFormatKey:  "VPD{RRRR}{NNNN}",
 	QuoteFormatKey:    "CP{RRRR}{NNNN}",
+	ReminderFormatKey: "UP{RRRR}{NNNN}",
 }
 
 // CashBook je pokladničná kniha za rok so zostatkom.

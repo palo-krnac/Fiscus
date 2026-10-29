@@ -26,6 +26,9 @@ func TestSeed(t *testing.T) {
 	if len(rec) != 3 || rec[0].Generated != 1 || rec[0].History[0].Number == "" || rec[2].Active {
 		t.Fatalf("pravidelné: %+v", rec)
 	}
+	if rs, _ := a.Reminders(context.Background(), c.ID, 0); len(rs) != 1 || rs[0].Level != 1 || len(rs[0].Items) == 0 {
+		t.Fatalf("upomienky: %+v", rs)
+	}
 	quotes, _ := a.Quotes(context.Background(), c.ID, 0)
 	states := map[string]int{}
 	for _, q := range quotes {

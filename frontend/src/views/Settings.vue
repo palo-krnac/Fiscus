@@ -26,6 +26,7 @@ const seriesFields = [
   { kind: 'credit_note', label: 'Dobropisy' },
   { kind: 'proforma', label: 'Zálohové faktúry' },
   { kind: 'quote', label: 'Cenové ponuky' },
+  { kind: 'reminder', label: 'Upomienky' },
   { kind: 'purchase', label: 'Prijaté faktúry (interné číslo)' },
   { kind: 'cash_in', label: 'Príjmové pokladničné doklady' },
   { kind: 'cash_out', label: 'Výdavkové pokladničné doklady' },

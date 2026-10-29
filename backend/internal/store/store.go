@@ -18,6 +18,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/purchase"
 	"github.com/palo-krnac/fiscus/backend/internal/quote"
 	"github.com/palo-krnac/fiscus/backend/internal/recurring"
+	"github.com/palo-krnac/fiscus/backend/internal/reminder"
 )
 
 // ErrNotFound — záznam neexistuje (alebo patrí inej firme).
@@ -155,6 +156,13 @@ type Store interface {
 	// SaveRecurring vloží (ID == 0) alebo prepíše šablónu. Nastaví ID.
 	SaveRecurring(ctx context.Context, companyID int64, t *recurring.Template) error
 	DeleteRecurring(ctx context.Context, companyID, id int64) error
+
+	// ListReminders vráti upomienky (year 0 = všetky), najnovšie prvé.
+	ListReminders(ctx context.Context, companyID int64, year int) ([]reminder.Reminder, error)
+	GetReminder(ctx context.Context, companyID, id int64) (reminder.Reminder, error)
+	// SaveReminder vloží (ID == 0) alebo prepíše upomienku. Nastaví ID.
+	SaveReminder(ctx context.Context, companyID int64, r *reminder.Reminder) error
+	DeleteReminder(ctx context.Context, companyID, id int64) error
 
 	// ---- používatelia a prístupy ----
 	CreateUser(ctx context.Context, u auth.User) (auth.User, error) // ErrDuplicate pri rovnakom e-maile
