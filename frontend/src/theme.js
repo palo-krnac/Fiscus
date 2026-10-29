@@ -65,5 +65,8 @@ export const skLocale = {
   prevMonth: 'Predchádzajúci mesiac',
   nextMonth: 'Nasledujúci mesiac',
   emptyMessage: 'Žiadne výsledky',
+  searchMessage: '{0} výsledkov',
+  emptySearchMessage: 'Nič sa nenašlo',
+  emptySelectionMessage: 'Nič nie je vybrané',
   emptyFilterMessage: 'Žiadne výsledky',
 }

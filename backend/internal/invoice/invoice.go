@@ -70,9 +70,12 @@ type Invoice struct {
 	Currency       string        `json:"currency"`
 	PriceMode      vat.PriceMode `json:"priceMode"`
 	ReverseCharge  bool          `json:"reverseCharge"`
-	Note           string        `json:"note"`
-	Lines          []Line        `json:"lines"`
-	Summary        vat.Summary   `json:"summary"`
+	// NonVATPayer: dodávateľ nie je platiteľ DPH — faktúra je bez DPH.
+	NonVATPayer bool        `json:"nonVatPayer"`
+	ContactID   int64       `json:"contactId"` // odkaz do adresára (0 = zadané ručne)
+	Note        string      `json:"note"`
+	Lines       []Line      `json:"lines"`
+	Summary     vat.Summary `json:"summary"`
 }
 
 // Recalculate prepočíta sumy položiek a rekapituláciu DPH.
@@ -89,7 +92,7 @@ func (inv *Invoice) Recalculate() error {
 		lines[i] = vat.Line{Quantity: l.Quantity, UnitPrice: l.UnitPrice, Rate: l.Rate}
 		l.Amount = vat.LineAmount(lines[i])
 	}
-	s, err := vat.Calculate(lines, inv.PriceMode, inv.ReverseCharge)
+	s, err := vat.Calculate(lines, inv.PriceMode, inv.ReverseCharge || inv.NonVATPayer)
 	if err != nil {
 		return err
 	}

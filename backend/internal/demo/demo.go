@@ -53,17 +53,33 @@ var items = []item{
 func Seed(ctx context.Context, a *app.App) (store.Company, error) {
 	c, err := a.CreateCompany(ctx, store.Company{
 		Name: "Demo elektroservis", Street: "Námestie SNP 1", City: "Banská Bystrica", Zip: "974 01",
-		ICO: ico("5512345"), DIC: "1234567890", IBAN: "SK31 1200 0000 1987 4263 7541", VATPayer: true,
+		ICO: ico("5512345"), DIC: "2120000003", ICDPH: "SK2120000003", IBAN: "SK31 1200 0000 1987 4263 7541", VATPayer: true,
 	})
 	if err != nil {
 		return c, err
 	}
+	// adresár
+	contactIDs := make([]int64, len(customers))
+	for i, cu := range customers {
+		due := 0
+		if i%3 == 0 {
+			due = 30
+		}
+		ct, err := a.SaveContact(ctx, c.ID, store.Contact{Name: cu.name, City: cu.city, ICO: cu.ico, Country: "SK", DueDays: due})
+		if err != nil {
+			return c, err
+		}
+		contactIDs[i] = ct.ID
+	}
+
 	today := a.Today()
 	for i := 39; i >= 0; i-- { // od najstaršej, aby čísla rástli s dátumom
-		cu := customers[(i*5)%len(customers)]
+		ci := (i * 5) % len(customers)
+		cu := customers[ci]
 		issue := today.AddDays(-i*4 - 1)
 		inv := invoice.Invoice{
 			Customer:     invoice.Party{Name: cu.name, City: cu.city, Country: "SK", ICO: cu.ico},
+			ContactID:    contactIDs[ci],
 			IssueDate:    issue,
 			DeliveryDate: issue,
 			DueDate:      issue.AddDays(14),

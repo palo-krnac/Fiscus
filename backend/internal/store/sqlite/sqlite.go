@@ -13,7 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
+	"sort"
 
 	_ "modernc.org/sqlite"
 
@@ -26,8 +26,12 @@ import (
 //go:embed schema.sql
 var schemaV1 string
 
-// migrations[i] prevedie schému z verzie i na i+1.
-var migrations = []string{schemaV1}
+//go:embed schema_v2.sql
+var schemaV2 string
+
+// migrations[i] prevedie schému z verzie i na i+1. Existujúce migrácie sa
+// nikdy nemenia — zmena schémy je vždy nová migrácia na konci.
+var migrations = []string{schemaV1, schemaV2}
 
 // Store je SQLite úložisko.
 type Store struct{ db *sql.DB }
@@ -81,11 +85,12 @@ func (s *Store) Close() error { return s.db.Close() }
 
 // ---- firmy ----
 
-const companyCols = "id, name, street, city, zip, ico, dic, icdph, iban, vat_payer"
+const companyCols = "id, name, street, city, zip, ico, dic, icdph, iban, email, phone, vat_payer, default_due_days"
 
 func scanCompany(r interface{ Scan(...any) error }) (store.Company, error) {
 	var c store.Company
-	err := r.Scan(&c.ID, &c.Name, &c.Street, &c.City, &c.Zip, &c.ICO, &c.DIC, &c.ICDPH, &c.IBAN, &c.VATPayer)
+	err := r.Scan(&c.ID, &c.Name, &c.Street, &c.City, &c.Zip, &c.ICO, &c.DIC, &c.ICDPH, &c.IBAN,
+		&c.Email, &c.Phone, &c.VATPayer, &c.DefaultDueDays)
 	return c, err
 }
 
@@ -114,9 +119,9 @@ func (s *Store) CountCompanies(ctx context.Context) (int, error) {
 
 func (s *Store) CreateCompany(ctx context.Context, c store.Company) (store.Company, error) {
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO companies (name, street, city, zip, ico, dic, icdph, iban, vat_payer)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		c.Name, c.Street, c.City, c.Zip, c.ICO, c.DIC, c.ICDPH, c.IBAN, c.VATPayer)
+		`INSERT INTO companies (name, street, city, zip, ico, dic, icdph, iban, email, phone, vat_payer, default_due_days)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		c.Name, c.Street, c.City, c.Zip, c.ICO, c.DIC, c.ICDPH, c.IBAN, c.Email, c.Phone, c.VATPayer, c.DefaultDueDays)
 	if err != nil {
 		return c, err
 	}
@@ -132,13 +137,114 @@ func (s *Store) GetCompany(ctx context.Context, id int64) (store.Company, error)
 	return c, err
 }
 
+func (s *Store) UpdateCompany(ctx context.Context, c store.Company) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE companies SET name = ?, street = ?, city = ?, zip = ?,
+		ico = ?, dic = ?, icdph = ?, iban = ?, email = ?, phone = ?, vat_payer = ?, default_due_days = ?
+		WHERE id = ?`,
+		c.Name, c.Street, c.City, c.Zip, c.ICO, c.DIC, c.ICDPH, c.IBAN, c.Email, c.Phone, c.VATPayer, c.DefaultDueDays, c.ID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
+// ---- adresár ----
+
+const contactCols = `id, company_id, name, street, city, zip, country, ico, dic, icdph,
+	email, phone, iban, due_days, note`
+
+func scanContact(r interface{ Scan(...any) error }) (store.Contact, error) {
+	var c store.Contact
+	err := r.Scan(&c.ID, &c.CompanyID, &c.Name, &c.Street, &c.City, &c.Zip, &c.Country, &c.ICO, &c.DIC,
+		&c.ICDPH, &c.Email, &c.Phone, &c.IBAN, &c.DueDays, &c.Note)
+	return c, err
+}
+
+func (s *Store) ListContacts(ctx context.Context, companyID int64, search string) ([]store.Contact, error) {
+	rows, err := s.db.QueryContext(ctx, "SELECT "+contactCols+" FROM contacts WHERE company_id = ?", companyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []store.Contact{}
+	for rows.Next() {
+		c, err := scanContact(rows)
+		if err != nil {
+			return nil, err
+		}
+		// filtrovanie a zoradenie v Go — SQLite nevie slovenskú diakritiku
+		if store.Matches(search, c.Name, c.ICO, c.City) {
+			out = append(out, c)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := store.SearchKey(out[i].Name), store.SearchKey(out[j].Name)
+		if a != b {
+			return a < b
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out, rows.Err()
+}
+
+func (s *Store) GetContact(ctx context.Context, companyID, id int64) (store.Contact, error) {
+	c, err := scanContact(s.db.QueryRowContext(ctx,
+		"SELECT "+contactCols+" FROM contacts WHERE id = ? AND company_id = ?", id, companyID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return c, store.ErrNotFound
+	}
+	return c, err
+}
+
+func (s *Store) SaveContact(ctx context.Context, companyID int64, c *store.Contact) error {
+	vals := []any{c.Name, c.Street, c.City, c.Zip, c.Country, c.ICO, c.DIC, c.ICDPH,
+		c.Email, c.Phone, c.IBAN, c.DueDays, c.Note}
+	if c.ID == 0 {
+		res, err := s.db.ExecContext(ctx, `INSERT INTO contacts (company_id, name, street, city, zip, country,
+			ico, dic, icdph, email, phone, iban, due_days, note)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, append([]any{companyID}, vals...)...)
+		if err != nil {
+			return err
+		}
+		if c.ID, err = res.LastInsertId(); err != nil {
+			return err
+		}
+	} else {
+		res, err := s.db.ExecContext(ctx, `UPDATE contacts SET name = ?, street = ?, city = ?, zip = ?, country = ?,
+			ico = ?, dic = ?, icdph = ?, email = ?, phone = ?, iban = ?, due_days = ?, note = ?
+			WHERE id = ? AND company_id = ?`, append(vals, c.ID, companyID)...)
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return store.ErrNotFound
+		}
+	}
+	c.CompanyID = companyID
+	return nil
+}
+
+func (s *Store) DeleteContact(ctx context.Context, companyID, id int64) error {
+	res, err := s.db.ExecContext(ctx, "DELETE FROM contacts WHERE id = ? AND company_id = ?", id, companyID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
 // ---- faktúry ----
 
 const invoiceCols = `id, company_id, kind, status, number, variable_symbol,
 	customer_name, customer_street, customer_city, customer_zip, customer_country,
 	customer_ico, customer_dic, customer_icdph, customer_email,
 	issue_date, delivery_date, due_date, paid_date,
-	currency, price_mode, reverse_charge, note, summary_json`
+	currency, price_mode, reverse_charge, note, summary_json, contact_id, non_vat_payer`
 
 func scanInvoice(r interface{ Scan(...any) error }) (invoice.Invoice, error) {
 	var inv invoice.Invoice
@@ -147,7 +253,7 @@ func scanInvoice(r interface{ Scan(...any) error }) (invoice.Invoice, error) {
 	err := r.Scan(&inv.ID, &inv.CompanyID, &inv.Kind, &inv.Status, &inv.Number, &inv.VariableSymbol,
 		&c.Name, &c.Street, &c.City, &c.Zip, &c.Country, &c.ICO, &c.DIC, &c.ICDPH, &c.Email,
 		&issue, &delivery, &due, &paid,
-		&inv.Currency, &inv.PriceMode, &inv.ReverseCharge, &inv.Note, &summary)
+		&inv.Currency, &inv.PriceMode, &inv.ReverseCharge, &inv.Note, &summary, &inv.ContactID, &inv.NonVATPayer)
 	if err != nil {
 		return inv, err
 	}
@@ -205,18 +311,14 @@ func (s *Store) ListInvoices(ctx context.Context, companyID int64, f store.Invoi
 		return nil, err
 	}
 	var out []invoice.Invoice
-	needle := strings.ToLower(strings.TrimSpace(f.Search))
 	for rows.Next() {
 		inv, err := scanInvoice(rows)
 		if err != nil {
 			rows.Close()
 			return nil, err
 		}
-		if needle != "" {
-			hay := strings.ToLower(inv.Number + " " + inv.Customer.Name + " " + inv.Customer.ICO)
-			if !strings.Contains(hay, needle) {
-				continue
-			}
+		if !store.Matches(f.Search, inv.Number, inv.Customer.Name, inv.Customer.ICO) {
+			continue
 		}
 		out = append(out, inv)
 	}
@@ -259,15 +361,15 @@ func (s *Store) SaveInvoice(ctx context.Context, companyID int64, inv *invoice.I
 	vals := []any{string(inv.Kind), string(inv.Status), inv.Number, inv.VariableSymbol,
 		c.Name, c.Street, c.City, c.Zip, c.Country, c.ICO, c.DIC, c.ICDPH, c.Email,
 		inv.IssueDate.String(), inv.DeliveryDate.String(), inv.DueDate.String(), inv.PaidDate.String(),
-		inv.Currency, string(inv.PriceMode), inv.ReverseCharge, inv.Note, string(summary)}
+		inv.Currency, string(inv.PriceMode), inv.ReverseCharge, inv.Note, string(summary), inv.ContactID, inv.NonVATPayer}
 
 	if inv.ID == 0 {
 		res, err := tx.ExecContext(ctx, `INSERT INTO invoices (company_id, kind, status, number, variable_symbol,
 			customer_name, customer_street, customer_city, customer_zip, customer_country,
 			customer_ico, customer_dic, customer_icdph, customer_email,
 			issue_date, delivery_date, due_date, paid_date,
-			currency, price_mode, reverse_charge, note, summary_json)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			currency, price_mode, reverse_charge, note, summary_json, contact_id, non_vat_payer)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			append([]any{companyID}, vals...)...)
 		if err != nil {
 			return err
@@ -280,7 +382,8 @@ func (s *Store) SaveInvoice(ctx context.Context, companyID int64, inv *invoice.I
 			customer_name = ?, customer_street = ?, customer_city = ?, customer_zip = ?, customer_country = ?,
 			customer_ico = ?, customer_dic = ?, customer_icdph = ?, customer_email = ?,
 			issue_date = ?, delivery_date = ?, due_date = ?, paid_date = ?,
-			currency = ?, price_mode = ?, reverse_charge = ?, note = ?, summary_json = ?
+			currency = ?, price_mode = ?, reverse_charge = ?, note = ?, summary_json = ?,
+			contact_id = ?, non_vat_payer = ?
 			WHERE id = ? AND company_id = ?`,
 			append(vals, inv.ID, companyID)...)
 		if err != nil {

@@ -74,3 +74,33 @@ func ValidICDPH(s string) bool {
 	}
 	return rem == 0
 }
+
+// ValidIBAN overí IBAN kontrolným súčtom modulo 97 (ISO 13616).
+// Pre slovenský IBAN navyše kontroluje dĺžku 24 znakov.
+func ValidIBAN(s string) bool {
+	s = NormalizeID(s)
+	if len(s) < 15 || len(s) > 34 {
+		return false
+	}
+	if strings.HasPrefix(s, "SK") && len(s) != 24 {
+		return false
+	}
+	for i, r := range s {
+		isDigit := r >= '0' && r <= '9'
+		isLetter := r >= 'A' && r <= 'Z'
+		if (i < 2 && !isLetter) || (i >= 2 && i < 4 && !isDigit) || (!isDigit && !isLetter) {
+			return false
+		}
+	}
+	rearranged := s[4:] + s[:4]
+	rem := 0
+	for _, r := range rearranged {
+		if r >= 'A' {
+			v := int(r-'A') + 10
+			rem = (rem*100 + v) % 97
+		} else {
+			rem = (rem*10 + int(r-'0')) % 97
+		}
+	}
+	return rem == 1
+}

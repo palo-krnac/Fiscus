@@ -28,7 +28,7 @@ func setup(t *testing.T, mode edition.Mode) *env {
 	caps, _ := edition.For(mode)
 	a := app.New(memstore.New(), caps)
 	a.Today = func() invoice.Date { return invoice.MustDate("2026-10-29") }
-	c, err := a.CreateCompany(context.Background(), store.Company{Name: "Moja firma"})
+	c, err := a.CreateCompany(context.Background(), store.Company{Name: "Moja firma", VATPayer: true, ICDPH: "SK2020372640"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,11 +163,11 @@ func TestPreview(t *testing.T) {
 		Summary struct{ Total string }
 		Errors  []invoice.FieldError
 	}
-	e.do("POST", "/api/invoices/preview", draftJSON, 200, &out)
+	e.do("POST", fmt.Sprintf("/api/companies/%d/invoices/preview", e.cid), draftJSON, 200, &out)
 	if out.Summary.Total != "559.65" {
 		t.Fatalf("náhľad: %+v", out)
 	}
-	e.do("POST", "/api/invoices/preview", `{"lines":[{"description":"x","quantity":"1","unitPrice":"1","vatRate":20}]}`, 422, nil)
+	e.do("POST", fmt.Sprintf("/api/companies/%d/invoices/preview", e.cid), `{"lines":[{"description":"x","quantity":"1","unitPrice":"1","vatRate":20}]}`, 422, nil)
 }
 
 func TestNotFoundAndIsolation(t *testing.T) {
@@ -193,4 +193,41 @@ func TestSPAFallback(t *testing.T) {
 		}
 		res.Body.Close()
 	}
+}
+
+func TestContactsAPI(t *testing.T) {
+	e := setup(t, edition.Desktop)
+	base := fmt.Sprintf("/api/companies/%d/contacts", e.cid)
+	var c store.Contact
+	e.do("POST", base, `{"name":"Kováč Peter","city":"Banská Bystrica"}`, 201, &c)
+	e.do("POST", base, `{"name":""}`, 422, nil)
+	var list []store.Contact
+	e.do("GET", base+"?q=kovac", nil, 200, &list)
+	if len(list) != 1 || list[0].ID != c.ID {
+		t.Fatalf("hľadanie: %+v", list)
+	}
+	c.Email = "peter@kovac.sk"
+	e.do("PUT", fmt.Sprintf("%s/%d", base, c.ID), c, 200, &c)
+	e.do("GET", fmt.Sprintf("%s/%d", base, c.ID), nil, 200, &c)
+	if c.Email != "peter@kovac.sk" {
+		t.Fatal("e-mail sa neuložil")
+	}
+	e.do("DELETE", fmt.Sprintf("%s/%d", base, c.ID), nil, 204, nil)
+	e.do("GET", fmt.Sprintf("%s/%d", base, c.ID), nil, 404, nil)
+	e.do("GET", base, nil, 200, &list)
+	if len(list) != 0 {
+		t.Fatal("prázdny adresár má byť [] a nie null")
+	}
+}
+
+func TestUpdateCompanyAPI(t *testing.T) {
+	e := setup(t, edition.Desktop)
+	path := fmt.Sprintf("/api/companies/%d", e.cid)
+	var c store.Company
+	e.do("PUT", path, `{"name":"Nový názov","vatPayer":false,"defaultDueDays":30}`, 200, &c)
+	if c.Name != "Nový názov" || c.VATPayer || c.DefaultDueDays != 30 || c.ID != e.cid {
+		t.Fatalf("%+v", c)
+	}
+	e.do("PUT", path, `{"name":""}`, 422, nil)
+	e.do("PUT", "/api/companies/999", `{"name":"x"}`, 404, nil)
 }

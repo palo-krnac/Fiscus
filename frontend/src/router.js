@@ -2,6 +2,8 @@ import { createRouter, createWebHistory } from 'vue-router'
 import InvoiceList from './views/InvoiceList.vue'
 import InvoiceEdit from './views/InvoiceEdit.vue'
 import Placeholder from './views/Placeholder.vue'
+import Contacts from './views/Contacts.vue'
+import Settings from './views/Settings.vue'
 
 // Moduly z etapového plánu — zatiaľ prázdne stránky s popisom.
 export const modules = [
@@ -43,9 +45,9 @@ export const modules = [
   {
     group: 'Ostatné',
     items: [
-      { path: '/adresar', label: 'Adresár', icon: 'pi-address-book', stage: 1 },
+      { path: '/adresar', label: 'Adresár', icon: 'pi-address-book', ready: true },
       { path: '/zalohy', label: 'Zálohy', icon: 'pi-history', stage: 1 },
-      { path: '/nastavenia', label: 'Nastavenia', icon: 'pi-cog', stage: 1 },
+      { path: '/nastavenia', label: 'Nastavenia', icon: 'pi-cog', ready: true },
     ],
   },
 ]
@@ -62,6 +64,9 @@ export const router = createRouter({
     { path: '/faktury', component: InvoiceList, meta: { title: 'Vydané faktúry' } },
     { path: '/faktury/nova', component: InvoiceEdit, meta: { title: 'Nová faktúra' } },
     { path: '/faktury/:id(\\d+)', component: InvoiceEdit, props: true, meta: { title: 'Faktúra' } },
+    { path: '/adresar', component: Contacts, meta: { title: 'Adresár' } },
+    { path: '/adresar/:id(\\d+|novy)', component: Contacts, props: true, meta: { title: 'Adresár' } },
+    { path: '/nastavenia', component: Settings, meta: { title: 'Nastavenia' } },
     ...placeholderRoutes,
     { path: '/:pathMatch(.*)*', redirect: '/faktury' },
   ],

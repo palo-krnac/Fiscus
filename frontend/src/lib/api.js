@@ -46,6 +46,15 @@ export const api = {
   capabilities: () => request('GET', '/api/capabilities'),
   companies: () => request('GET', '/api/companies'),
   createCompany: (c) => request('POST', '/api/companies', c),
+  updateCompany: (c) => request('PUT', `/api/companies/${c.id}`, c),
+
+  contacts: (cid, q) => request('GET', `/api/companies/${cid}/contacts` + (q ? `?q=${encodeURIComponent(q)}` : '')),
+  contact: (cid, id) => request('GET', `/api/companies/${cid}/contacts/${id}`),
+  saveContact: (cid, c) =>
+    c.id
+      ? request('PUT', `/api/companies/${cid}/contacts/${c.id}`, c)
+      : request('POST', `/api/companies/${cid}/contacts`, c),
+  deleteContact: (cid, id) => request('DELETE', `/api/companies/${cid}/contacts/${id}`),
 
   invoices(cid, { year, status, q } = {}) {
     const p = new URLSearchParams()
@@ -60,7 +69,7 @@ export const api = {
     invoice.id
       ? request('PUT', `${inv(cid)}/${invoice.id}`, invoice)
       : request('POST', inv(cid), invoice),
-  preview: (invoice) => request('POST', '/api/invoices/preview', invoice),
+  preview: (cid, invoice) => request('POST', `${inv(cid)}/preview`, invoice),
   issue: (cid, id) => request('POST', `${inv(cid)}/${id}/issue`),
   pay: (cid, id, date) => request('POST', `${inv(cid)}/${id}/pay`, date ? { date } : undefined),
   cancel: (cid, id) => request('POST', `${inv(cid)}/${id}/cancel`),

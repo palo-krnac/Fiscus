@@ -39,3 +39,21 @@ func TestValidDIC(t *testing.T) {
 		t.Fatal("ValidDIC")
 	}
 }
+
+func TestValidIBAN(t *testing.T) {
+	cases := map[string]bool{
+		"SK31 1200 0000 1987 4263 7541": true, // vzorový IBAN z ECBS
+		"sk3112000000198742637541":      true,
+		"SK31 1200 0000 1987 4263 7542": false, // zlý kontrolný súčet
+		"SK31 1200 0000 1987 4263 754":  false, // krátky
+		"DE89 3704 0044 0532 0130 00":   true,
+		"CZ65 0800 0000 1920 0014 5399": true,
+		"XX00":                          false,
+		"":                              false,
+	}
+	for in, want := range cases {
+		if got := ValidIBAN(in); got != want {
+			t.Errorf("ValidIBAN(%q) = %v, chcem %v", in, got, want)
+		}
+	}
+}
