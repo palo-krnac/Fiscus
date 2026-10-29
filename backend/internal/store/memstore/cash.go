@@ -48,6 +48,12 @@ func (s *Store) SaveCashDocument(_ context.Context, companyID int64, d *cash.Doc
 		return store.ErrNotFound
 	}
 	d.CompanyID = companyID
-	s.cashDocs[d.ID] = *d
+	c := *d
+	if d.Tax != nil { // vlastná kópia — volajúci môže doklad ďalej meniť
+		t := *d.Tax
+		t.Rows = append([]cash.VATRow(nil), d.Tax.Rows...)
+		c.Tax = &t
+	}
+	s.cashDocs[d.ID] = c
 	return nil
 }

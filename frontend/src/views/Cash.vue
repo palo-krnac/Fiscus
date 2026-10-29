@@ -20,6 +20,9 @@ import { fiskusGridTheme, skGridLocale, gridRows } from '../lib/grid.js'
 import { matches, searchTerms } from '../lib/search.js'
 import { cashColumns } from '../lib/columns.js'
 import FormField from '../components/FormField.vue'
+import Checkbox from 'primevue/checkbox'
+import { codes, ratesOn } from '../lib/codes.js'
+import { emptyTax, taxErrors, taxLabel, taxPayload } from '../lib/cashvat.js'
 import ExportButton from '../components/ExportButton.vue'
 
 const router = useRouter()
@@ -98,7 +101,7 @@ const columnDefs = [
     colId: 'link',
     headerName: 'Doklad',
     width: 140,
-    valueGetter: (p) => (p.data.cancelled ? 'stornovaný' : p.data.linkNumber),
+    valueGetter: (p) => (p.data.cancelled ? 'stornovaný' : p.data.linkNumber || taxLabel(p.data, formatAmount)),
     cellClass: (p) => (p.data.cancelled ? 'cell-cancelled' : 'cell-link'),
   },
 ]
@@ -124,7 +127,8 @@ const formOpen = computed({
 })
 
 async function openNew(kind) {
-  form.value = { kind, date: fromISODate(toISODate(new Date())), amount: '', partner: '', purpose: '', note: '', link: null }
+  form.value = { kind, date: fromISODate(toISODate(new Date())), amount: '', partner: '', purpose: '', note: '', link: null, tax: null }
+  preview.value = null
   errors.value = {}
   candidates.value = []
   try {
@@ -159,6 +163,7 @@ async function save() {
       note: f.note,
       linkKind: f.link?.kind ?? '',
       linkId: f.link?.id ?? 0,
+      tax: f.link ? undefined : taxPayload(f.tax),
     })
     form.value = null
     toast.add({ severity: 'success', summary: `Doklad ${d.number} vystavený`, detail: d.linkNumber ? `${d.linkNumber} je uhradená` : '', life: 4000 })
@@ -170,6 +175,35 @@ async function save() {
     busy.value = false
   }
 }
+
+// ---- DPH (iba platiteľ, doklad bez väzby na faktúru) ----
+const vatPayer = computed(() => !!session.company?.vatPayer)
+const preview = ref(null) // doklad po prepočte na serveri (základ, daň)
+const rateOptions = computed(() => ratesOn(toISODate(form.value?.date) ?? undefined).map((r) => ({ label: `${r} %`, value: r })))
+function toggleTax(on) {
+  form.value.tax = on ? emptyTax(form.value.amount) : null
+  preview.value = null
+  if (on) refreshPreview()
+}
+let previewTimer = null
+function refreshPreview() {
+  clearTimeout(previewTimer)
+  previewTimer = setTimeout(async () => {
+    const f = form.value
+    if (!f?.tax) return
+    try {
+      preview.value = await api.previewCash(session.companyId, {
+        kind: f.kind, date: toISODate(f.date), amount: String(f.amount).replace(/\s/g, '').replace(',', '.') || '0',
+        purpose: f.purpose || '-', tax: taxPayload(f.tax),
+      })
+    } catch {
+      preview.value = null
+    }
+  }, 250)
+}
+watch(() => form.value && [form.value.tax, form.value.amount, form.value.date], refreshPreview, { deep: true })
+const pvErrors = computed(() => taxErrors(preview.value?.errors))
+const rowPreview = (i) => preview.value?.tax?.rows?.find((r) => Number(r.vatRate) === Number(form.value.tax.rows[i]?.vatRate))
 
 // ---- detail ----
 const detail = ref(null)
@@ -314,6 +348,48 @@ const docLink = (kind, id) => (kind === 'purchase' ? `/prijate/${id}` : `/faktur
         <FormField label="Účel" :span="2" :error="errors.purpose">
           <InputText v-model="form.purpose" size="small" :placeholder="form.kind === 'in' ? 'napr. Vklad do pokladne, Tržba' : 'napr. Kancelárske potreby, Poštovné'" />
         </FormField>
+        <fieldset v-if="vatPayer && !form.link" class="vat span2">
+          <label class="vat-toggle">
+            <Checkbox :model-value="!!form.tax" binary @update:model-value="toggleTax" />
+            <span>{{ form.kind === 'out' ? 'Doklad s DPH — pokladničný blok (zjednodušená faktúra)' : 'Tržba z e-kasy s DPH' }}</span>
+          </label>
+          <template v-if="form.tax">
+            <table class="vat-rows">
+              <thead><tr><th>Sadzba</th><th class="num">Suma s DPH</th><th class="num">Základ</th><th class="num">DPH</th><th /></tr></thead>
+              <tbody>
+                <tr v-for="(r, i) in form.tax.rows" :key="i">
+                  <td><Select v-model="r.vatRate" :options="rateOptions" option-label="label" option-value="value" size="small" :invalid="!!pvErrors[`tax.rows.${i}.vatRate`] || !!errors[`tax.rows.${i}.vatRate`]" /></td>
+                  <td class="num"><InputText v-model="r.gross" inputmode="decimal" size="small" class="num" :aria-label="`Suma s DPH ${r.vatRate} %`" /></td>
+                  <td class="num calc">{{ rowPreview(i) ? formatAmount(rowPreview(i).base) : '' }}</td>
+                  <td class="num calc">{{ rowPreview(i) ? formatAmount(rowPreview(i).vat) : '' }}</td>
+                  <td><Button v-if="form.tax.rows.length > 1" icon="pi pi-times" text size="small" aria-label="Odobrať sadzbu" @click="form.tax.rows.splice(i, 1)" /></td>
+                </tr>
+              </tbody>
+            </table>
+            <Button label="Ďalšia sadzba" icon="pi pi-plus" text size="small" @click="form.tax.rows.push({ vatRate: 5, gross: '' })" />
+            <p v-if="pvErrors['tax.rows'] || errors['tax.rows']" class="err">{{ errors['tax.rows'] || pvErrors['tax.rows'] }}</p>
+            <div v-if="form.kind === 'out'" class="form-grid">
+              <FormField label="IČ DPH predajcu" :span="2" :error="errors['tax.supplierIcdph']" hint="Z pokladničného bloku — bez neho nemožno DPH odpočítať">
+                <InputText v-model="form.tax.supplierIcdph" size="small" spellcheck="false" placeholder="SK…" :disabled="form.tax.noDeduction" />
+              </FormField>
+              <FormField label="Druh výdavku" :span="2" hint="Stĺpec v peňažnom denníku">
+                <Select v-model="form.tax.expense" :options="codes.expenseKinds" option-label="label" option-value="code" size="small" fluid />
+              </FormField>
+              <label class="vat-toggle full">
+                <Checkbox v-model="form.tax.noDeduction" binary />
+                <span>Bez odpočtu DPH (reprezentácia, súkromná spotreba)</span>
+              </label>
+            </div>
+            <label v-else class="vat-toggle">
+              <Checkbox v-model="form.tax.goods" binary />
+              <span>Predaj tovaru (inak výrobky a služby)</span>
+            </label>
+            <p class="muted small">
+              {{ form.kind === 'out' ? 'Odpočet pôjde do priznania k DPH a do kontrolného výkazu (časť B.3).' : 'Daň pôjde do priznania k DPH a do kontrolného výkazu (časť D.1).' }}
+            </p>
+          </template>
+          <p v-if="errors.tax" class="err">{{ errors.tax }}</p>
+        </fieldset>
         <FormField label="Poznámka" :span="2">
           <InputText v-model="form.note" size="small" />
         </FormField>
@@ -334,6 +410,14 @@ const docLink = (kind, id) => (kind === 'purchase' ? `/prijate/${id}` : `/faktur
         <dl class="facts">
           <dt>Druh</dt><dd>{{ detail.kind === 'in' ? 'Príjmový pokladničný doklad' : 'Výdavkový pokladničný doklad' }}</dd>
           <dt>Dátum</dt><dd>{{ formatDate(detail.date) }}</dd>
+          <template v-if="detail.tax?.rows?.length">
+            <dt>DPH</dt>
+            <dd>
+              <span v-for="r in detail.tax.rows" :key="r.vatRate" class="vat-line">{{ r.vatRate }} %: základ {{ formatAmount(r.base) }} €, DPH {{ formatAmount(r.vat) }} €</span>
+              <span v-if="detail.tax.supplierIcdph" class="vat-line">IČ DPH predajcu {{ detail.tax.supplierIcdph }}</span>
+              <span v-if="detail.tax.noDeduction" class="vat-line">bez odpočtu</span>
+            </dd>
+          </template>
           <dt v-if="detail.linkNumber">Uhrádza</dt>
           <dd v-if="detail.linkNumber"><RouterLink :to="docLink(detail.linkKind, detail.linkId)">{{ detail.linkNumber }}</RouterLink></dd>
         </dl>
@@ -409,6 +493,65 @@ const docLink = (kind, id) => (kind === 'purchase' ? `/prijate/${id}` : `/faktur
 .grand {
   border-bottom: 3px double currentColor;
   line-height: 1.15;
+}
+.vat {
+  border: 0;
+  border-top: 1px solid var(--rule);
+  margin: 4px 0 0;
+  padding: 8px 0 0;
+  min-width: 0;
+}
+.span2 {
+  grid-column: span 2;
+}
+.vat-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 6px;
+}
+.vat-rows {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+.vat-rows th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--ink-soft);
+  padding: 2px 4px;
+}
+.vat-rows td {
+  padding: 2px 4px;
+}
+.vat-rows .num {
+  text-align: right;
+}
+.vat-rows td.num :deep(input) {
+  width: 5.6rem;
+  text-align: right;
+}
+.vat-rows :deep(.p-select) {
+  width: 6.2rem;
+}
+.full {
+  grid-column: 1 / -1;
+}
+.vat-rows .calc {
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+.vat-line {
+  display: block;
+}
+.err {
+  color: var(--tone-overdue);
+  font-size: var(--fs-sm);
+  margin: 4px 0;
+}
+.small {
+  font-size: var(--fs-sm);
 }
 .toolbar {
   display: flex;

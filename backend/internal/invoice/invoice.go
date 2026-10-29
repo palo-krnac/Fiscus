@@ -370,7 +370,8 @@ func (inv *Invoice) Cancel() error {
 // Overdue vráti true, ak je faktúra po splatnosti k danému dňu.
 func (inv *Invoice) Overdue(today Date) bool {
 	// dobropis je záväzok voči odberateľovi, nie pohľadávka po splatnosti
-	return inv.Status == StatusIssued && (inv.Kind == KindInvoice || inv.Kind == KindProforma) && today.After(inv.DueDate)
+	// vyúčtovaná záloha sa nevymáha — doplatok je na vyúčtovacej faktúre
+	return inv.Status == StatusIssued && (inv.Kind == KindInvoice || inv.Kind == KindProforma) && !inv.Settled() && today.After(inv.DueDate)
 }
 
 // SequenceKey je kľúč číselného radu podľa druhu dokladu. Je nezávislý
