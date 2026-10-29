@@ -12,6 +12,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/audit"
 	"github.com/palo-krnac/fiscus/backend/internal/auth"
 	"github.com/palo-krnac/fiscus/backend/internal/bank"
+	"github.com/palo-krnac/fiscus/backend/internal/cash"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/journal"
 	"github.com/palo-krnac/fiscus/backend/internal/money"
@@ -267,7 +268,7 @@ type docCache struct {
 // propose navrhne rozpis pohybu podľa spárovaného dokladu (nil = nevie).
 func (c *docCache) propose(e journal.Entry, vatPayer bool) []journal.Line {
 	if e.Doc == nil {
-		return nil
+		return c.proposeCash(e, vatPayer)
 	}
 	switch e.Doc.Kind {
 	case "invoice":
@@ -298,6 +299,27 @@ func (c *docCache) propose(e journal.Entry, vatPayer bool) []journal.Line {
 			Deduct: vatPayer && !p.NoDeduction})
 	}
 	return nil
+}
+
+// proposeCash rozpíše pokladničný doklad s DPH (blok, tržba z e-kasy).
+func (c *docCache) proposeCash(e journal.Entry, vatPayer bool) []journal.Line {
+	id, ok := strings.CutPrefix(e.Key, "cash:")
+	if !ok {
+		return nil
+	}
+	n, err := strconv.ParseInt(id, 10, 64)
+	if err != nil {
+		return nil
+	}
+	d, err := c.a.Store.GetCashDocument(c.ctx, c.cid, n)
+	if err != nil || d.Tax == nil || len(d.Tax.Rows) == 0 {
+		return nil
+	}
+	_, tax, gross := d.Tax.Totals()
+	if d.Kind == cash.In {
+		return journal.SaleLines(e.Amount, journal.Sale{Total: gross, VAT: tax, Goods: d.Tax.Goods, VATPayer: vatPayer})
+	}
+	return journal.BuyLines(e.Amount, journal.Buy{Total: gross, VAT: tax, Kind: d.Tax.Expense, Deduct: vatPayer && !d.Tax.NoDeduction})
 }
 
 func (c *docCache) invoice(id int64) *invoice.Invoice {

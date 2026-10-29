@@ -7,18 +7,17 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/audit"
 	"github.com/palo-krnac/fiscus/backend/internal/auth"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
+	"github.com/palo-krnac/fiscus/backend/internal/money"
+	"github.com/palo-krnac/fiscus/backend/internal/store"
 )
 
 // ErrReceiptIssued: k úhrade zálohy je vystavený daňový doklad — úhradu nemožno zrušiť.
 var ErrReceiptIssued = errors.New("k platbe je vystavený daňový doklad k prijatej platbe — opravte ho dobropisom")
 
-// issueAdvanceReceipt vystaví daňový doklad k prijatej platbe k uhradenej
-// zálohovej faktúre a prepojí ich.
-func (a *App) issueAdvanceReceipt(ctx context.Context, companyID int64, proforma invoice.Invoice) (invoice.Invoice, error) {
-	if proforma.Advance != nil && proforma.Advance.ReceiptID != 0 {
-		return proforma, nil
-	}
-	r, err := invoice.NewAdvanceReceipt(proforma, a.Today())
+// issueAdvanceReceipt vystaví daňový doklad k prijatej platbe (aj čiastočnej)
+// k zálohovej faktúre a prepojí ich.
+func (a *App) issueAdvanceReceipt(ctx context.Context, companyID int64, proforma invoice.Invoice, p invoice.Payment) (invoice.Invoice, error) {
+	r, err := invoice.NewAdvanceReceipt(proforma, p.Amount, p.Date, a.Today())
 	if err != nil {
 		return proforma, err
 	}
@@ -30,16 +29,13 @@ func (a *App) issueAdvanceReceipt(ctx context.Context, companyID int64, proforma
 	if err != nil {
 		return proforma, err
 	}
-	if err := issued.MarkPaid(proforma.PaidDate); err != nil {
+	if err := issued.MarkPaid(p.Date); err != nil {
 		return proforma, err
 	}
 	if err := a.Store.SaveInvoice(ctx, companyID, &issued); err != nil {
 		return proforma, err
 	}
-	if proforma.Advance == nil {
-		proforma.Advance = &invoice.Advance{}
-	}
-	proforma.Advance.ReceiptID, proforma.Advance.ReceiptNumber = issued.ID, issued.Number
+	proforma.AddReceipt(invoice.ReceiptRef{ID: issued.ID, Number: issued.Number, Date: p.Date, Amount: issued.Summary.Total})
 	if err := a.Store.SaveInvoice(ctx, companyID, &proforma); err != nil {
 		return proforma, err
 	}
@@ -49,8 +45,8 @@ func (a *App) issueAdvanceReceipt(ctx context.Context, companyID int64, proforma
 	return proforma, nil
 }
 
-// SettleAdvance vytvorí koncept vyúčtovacej faktúry k uhradenej zálohovej
-// faktúre s odpočtom zálohy podľa dokladu k prijatej platbe.
+// SettleAdvance vytvorí koncept vyúčtovacej faktúry k uhradenej (aj čiastočne)
+// zálohovej faktúre s odpočtom záloh podľa dokladov k prijatým platbám.
 func (a *App) SettleAdvance(ctx context.Context, companyID, proformaID int64) (invoice.Invoice, error) {
 	if err := a.Require(ctx, companyID, auth.PermInvoicesWrite); err != nil {
 		return invoice.Invoice{}, err
@@ -59,15 +55,11 @@ func (a *App) SettleAdvance(ctx context.Context, companyID, proformaID int64) (i
 	if err != nil {
 		return p, err
 	}
-	var receipt *invoice.Invoice
-	if p.Advance != nil && p.Advance.ReceiptID != 0 {
-		r, err := a.Store.GetInvoice(ctx, companyID, p.Advance.ReceiptID)
-		if err != nil {
-			return p, err
-		}
-		receipt = &r
+	receipts, err := a.receiptsOf(ctx, companyID, p)
+	if err != nil {
+		return p, err
 	}
-	f, err := invoice.NewFinalInvoice(p, receipt, a.Today(), a.dueDays(ctx, companyID, p))
+	f, err := invoice.NewFinalInvoice(p, receipts, a.Today(), a.dueDays(ctx, companyID, p))
 	if err != nil {
 		return f, &invoice.ValidationError{Fields: []invoice.FieldError{{Field: "advance", Message: err.Error()}}}
 	}
@@ -87,15 +79,133 @@ func (a *App) SettleAdvance(ctx context.Context, companyID, proformaID int64) (i
 	return saved, nil
 }
 
-// linkFinal zapíše číslo vystavenej vyúčtovacej faktúry do zálohovej faktúry.
+// linkFinal zapíše číslo vystavenej vyúčtovacej faktúry do všetkých
+// odpočítaných zálohových faktúr.
 func (a *App) linkFinal(ctx context.Context, companyID int64, final invoice.Invoice) error {
-	p, err := a.Store.GetInvoice(ctx, companyID, final.Advance.ProformaID)
+	for _, id := range final.ProformaIDs() {
+		p, err := a.Store.GetInvoice(ctx, companyID, id)
+		if err != nil {
+			return err
+		}
+		if p.Advance == nil {
+			p.Advance = &invoice.Advance{}
+		}
+		p.Advance.FinalID, p.Advance.FinalNumber = final.ID, final.Number
+		if err := a.Store.SaveInvoice(ctx, companyID, &p); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// AdvanceCandidate je ďalšia záloha, ktorú možno pridať do vyúčtovania.
+type AdvanceCandidate struct {
+	ID       int64        `json:"id"`
+	Number   string       `json:"number"`
+	Date     invoice.Date `json:"date"`
+	Total    money.Dec    `json:"total"`
+	Paid     money.Dec    `json:"paid"`
+	Currency string       `json:"currency"`
+}
+
+// AdvanceCandidates vráti uhradené (aj čiastočne) nevyúčtované zálohy
+// odberateľa konceptu vyúčtovacej faktúry.
+func (a *App) AdvanceCandidates(ctx context.Context, companyID, finalID int64) ([]AdvanceCandidate, error) {
+	if err := a.Require(ctx, companyID, auth.PermInvoicesRead); err != nil {
+		return nil, err
+	}
+	f, err := a.Store.GetInvoice(ctx, companyID, finalID)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	out := []AdvanceCandidate{}
+	if f.Status != invoice.StatusDraft || f.Advance == nil || len(f.Advance.Deductions) == 0 {
+		return out, nil
+	}
+	list, err := a.Store.ListInvoices(ctx, companyID, store.InvoiceFilter{})
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range list {
+		if p.Kind != invoice.KindProforma || (p.Status != invoice.StatusIssued && p.Status != invoice.StatusPaid) ||
+			p.Paid().Sign() <= 0 || (p.Advance != nil && p.Advance.FinalID != 0) || !f.SameCustomer(p) {
+			continue
+		}
+		out = append(out, AdvanceCandidate{ID: p.ID, Number: p.Number, Date: p.IssueDate, Total: p.Summary.Total, Paid: p.Paid(), Currency: p.Currency})
+	}
+	return out, nil
+}
+
+// receiptsOf načíta doklady k platbám zálohovej faktúry.
+func (a *App) receiptsOf(ctx context.Context, companyID int64, p invoice.Invoice) ([]invoice.Invoice, error) {
+	var out []invoice.Invoice
+	for _, ref := range p.AllReceipts() {
+		r, err := a.Store.GetInvoice(ctx, companyID, ref.ID)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, nil
+}
+
+// AddAdvanceToFinal pridá do konceptu vyúčtovacej faktúry ďalšiu zálohu
+// toho istého odberateľa (odpočty a položky).
+func (a *App) AddAdvanceToFinal(ctx context.Context, companyID, finalID, proformaID int64) (invoice.Invoice, error) {
+	return a.changeFinalAdvances(ctx, companyID, finalID, proformaID, true)
+}
+
+// RemoveAdvanceFromFinal odoberie pridanú zálohu z konceptu vyúčtovania.
+func (a *App) RemoveAdvanceFromFinal(ctx context.Context, companyID, finalID, proformaID int64) (invoice.Invoice, error) {
+	return a.changeFinalAdvances(ctx, companyID, finalID, proformaID, false)
+}
+
+func (a *App) changeFinalAdvances(ctx context.Context, companyID, finalID, proformaID int64, add bool) (invoice.Invoice, error) {
+	if err := a.Require(ctx, companyID, auth.PermInvoicesWrite); err != nil {
+		return invoice.Invoice{}, err
+	}
+	f, err := a.Store.GetInvoice(ctx, companyID, finalID)
+	if err != nil {
+		return f, err
+	}
+	p, err := a.Store.GetInvoice(ctx, companyID, proformaID)
+	if err != nil {
+		return f, err
+	}
+	bad := func(err error) error {
+		return &invoice.ValidationError{Fields: []invoice.FieldError{{Field: "advance", Message: err.Error()}}}
+	}
+	if p.Kind != invoice.KindProforma {
+		return f, bad(invoice.ErrNotAdvance)
+	}
+	if add {
+		receipts, err := a.receiptsOf(ctx, companyID, p)
+		if err != nil {
+			return f, err
+		}
+		if err := f.AddAdvance(p, receipts); err != nil {
+			return f, bad(err)
+		}
+	} else if err := f.RemoveAdvance(proformaID); err != nil {
+		return f, bad(err)
+	}
+	saved, err := a.saveDraft(ctx, companyID, f)
+	if err != nil {
+		return saved, err
 	}
 	if p.Advance == nil {
 		p.Advance = &invoice.Advance{}
 	}
-	p.Advance.FinalID, p.Advance.FinalNumber = final.ID, final.Number
-	return a.Store.SaveInvoice(ctx, companyID, &p)
+	what := "Pridaná záloha "
+	if add {
+		p.Advance.FinalID = saved.ID
+	} else {
+		p.Advance.FinalID, p.Advance.FinalNumber, what = 0, "", "Odobraná záloha "
+	}
+	if err := a.Store.SaveInvoice(ctx, companyID, &p); err != nil {
+		return saved, err
+	}
+	a.record(ctx, companyID, audit.CatInvoices, "update", "invoice", saved.ID,
+		what+p.Number+" vo vyúčtovaní pre "+saved.Customer.Name, nil, saved.Advance)
+	return saved, nil
 }

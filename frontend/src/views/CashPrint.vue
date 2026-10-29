@@ -66,6 +66,16 @@ const addr = (c) => [c.street, [c.zip, c.city].filter(Boolean).join(' ')].filter
         <div v-if="doc.note" class="wide"><dt>Poznámka</dt><dd>{{ doc.note }}</dd></div>
       </dl>
 
+      <table v-if="doc.tax?.rows?.length" class="vat">
+        <thead><tr><th>Sadzba DPH</th><th>Základ</th><th>DPH</th><th>Spolu</th></tr></thead>
+        <tbody>
+          <tr v-for="r in doc.tax.rows" :key="r.vatRate">
+            <td>{{ r.vatRate }} %</td><td>{{ formatAmount(r.base) }}</td><td>{{ formatAmount(r.vat) }}</td><td>{{ formatAmount(r.gross) }}</td>
+          </tr>
+        </tbody>
+        <tfoot v-if="doc.tax.supplierIcdph"><tr><td colspan="4">IČ DPH predajcu: {{ doc.tax.supplierIcdph }}</td></tr></tfoot>
+      </table>
+
       <section class="sum">
         <div>
           <span>Suma</span>
@@ -85,6 +95,32 @@ const addr = (c) => [c.street, [c.zip, c.city].filter(Boolean).join(' ')].filter
 </template>
 
 <style scoped>
+.vat {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 10px 0 0;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+.vat th,
+.vat td {
+  border-bottom: 1px solid #d5dbe2;
+  padding: 3px 6px;
+  text-align: right;
+}
+.vat th:first-child,
+.vat td:first-child {
+  text-align: left;
+}
+.vat th {
+  font-weight: 500;
+  color: #4a5a6c;
+}
+.vat tfoot td {
+  text-align: left;
+  border: 0;
+  color: #4a5a6c;
+}
 .print-root {
   min-height: 100%;
   background: #e9ecf0;

@@ -124,9 +124,19 @@ const svRows = computed(() => {
   return (data.value?.sv ?? []).filter((l) => matches(terms, [l.country, l.vatId, l.name, l.value, SV_CODES[l.code]]))
 })
 const d2 = computed(() => data.value?.kv?.d2)
+const d1 = computed(() => data.value?.kv?.d1)
+// B.3: súhrn (B.3.1) alebo po dodávateľoch (B.3.2) — rozhodol server podľa limitu
+const b3 = computed(() => {
+  const kv = data.value?.kv
+  if (kv?.b31) return { part: 'B.3.1', rows: [kv.b31] }
+  const rows = kv?.b32 ?? []
+  return { part: rows.length ? 'B.3.2' : 'B.3', rows }
+})
 
 function openDoc(kind, id) {
-  if (id) router.push(kind === 'purchase' ? `/prijate/${id}` : `/faktury/${id}`)
+  if (!id) return
+  if (kind === 'cash') router.push(`/pokladna/${id}/tlac`)
+  else router.push(kind === 'purchase' ? `/prijate/${id}` : `/faktury/${id}`)
 }
 
 async function downloadXML(which) {
@@ -196,7 +206,7 @@ async function downloadXML(which) {
       <!-- PRIZNANIE -->
       <template v-if="tab === 'dph'">
         <div class="toolbar">
-          <span class="muted">{{ data.invoices }} vydaných a {{ data.purchases }} prijatých dokladov · {{ data.label }}</span>
+          <span class="muted">{{ data.invoices }} vydaných a {{ data.purchases }} prijatých dokladov<template v-if="data.cash">, {{ data.cash }} pokladničných</template> · {{ data.label }}</span>
           <div class="spacer" />
           <label class="excess">
             <span>Nadmerný odpočet z minulého obdobia (r. 34)</span>
@@ -313,6 +323,45 @@ async function downloadXML(which) {
               </tbody>
             </table>
           </div>
+          <p v-else class="empty">Žiadne záznamy.</p>
+        </section>
+
+        <section class="kv">
+          <h2><span class="part">{{ b3.part }}</span> Pokladničné bloky (zjednodušené faktúry) s odpočtom <span class="muted">{{ b3.rows.reduce((n, r) => n + r.count, 0) }}</span></h2>
+          <div v-if="b3.rows.length" class="table-wrap">
+            <table class="lines">
+              <thead>
+                <tr><th v-if="b3.part === 'B.3.2'">IČ DPH dodávateľa</th><th v-if="b3.part === 'B.3.2'">Dodávateľ</th><th class="num">Základ</th><th class="num">Daň</th><th class="num">Odpočet</th></tr>
+              </thead>
+              <tbody>
+                <tr v-for="(r, i) in b3.rows" :key="i">
+                  <td v-if="b3.part === 'B.3.2'" class="mono">{{ r.partner }}</td>
+                  <td v-if="b3.part === 'B.3.2'">{{ r.name }}</td>
+                  <td class="num">{{ formatAmount(r.base) }}</td>
+                  <td class="num">{{ formatAmount(r.vat) }}</td>
+                  <td class="num">{{ formatAmount(r.deducted) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p v-else class="empty">Žiadne záznamy.</p>
+        </section>
+
+        <section class="kv">
+          <h2><span class="part">D.1</span> Tržby z e-kasy súhrnne <span class="muted">{{ d1?.count ?? 0 }}</span></h2>
+          <table v-if="d1?.count" class="lines d2">
+            <thead>
+              <tr><th class="num">Základ 23 %</th><th class="num">Daň 23 %</th><th class="num">Základ znížené</th><th class="num">Daň znížené</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="num">{{ formatAmount(d1.base) }}</td>
+                <td class="num">{{ formatAmount(d1.vat) }}</td>
+                <td class="num">{{ formatAmount(d1.baseReduced) }}</td>
+                <td class="num">{{ formatAmount(d1.vatReduced) }}</td>
+              </tr>
+            </tbody>
+          </table>
           <p v-else class="empty">Žiadne záznamy.</p>
         </section>
 

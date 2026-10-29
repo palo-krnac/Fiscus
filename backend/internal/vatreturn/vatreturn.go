@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/palo-krnac/fiscus/backend/internal/cash"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/money"
 	"github.com/palo-krnac/fiscus/backend/internal/party"
@@ -91,14 +92,32 @@ type KVA2 struct {
 	ID       int64        `json:"id"`
 }
 
+// KVB3 je riadok B.3 (prijaté zjednodušené faktúry — pokladničné bloky):
+// v B.3.1 jeden súhrn bez IČ DPH, v B.3.2 súčet za každého dodávateľa.
+type KVB3 struct {
+	Partner  string    `json:"partner,omitempty"` // IČ DPH dodávateľa (iba B.3.2)
+	Name     string    `json:"name,omitempty"`
+	Base     money.Dec `json:"base"`
+	VAT      money.Dec `json:"vat"`
+	Deducted money.Dec `json:"deducted"`
+	Count    int       `json:"count"` // počet dokladov
+}
+
+// B3Limit: od tejto sumy odpočítanej dane zo zjednodušených faktúr za
+// obdobie sa B.3 vypĺňa po dodávateľoch (B.3.2), inak súhrnne (B.3.1).
+var B3Limit = money.FromInt(3000)
+
 // KV je kontrolný výkaz.
 type KV struct {
-	A1 []KVLine       `json:"a1"`
-	A2 []KVA2         `json:"a2"`
-	B1 []KVLine       `json:"b1"`
-	B2 []KVLine       `json:"b2"`
-	C1 []KVCorrection `json:"c1"`
-	D2 KVSum          `json:"d2"`
+	A1  []KVLine       `json:"a1"`
+	A2  []KVA2         `json:"a2"`
+	B1  []KVLine       `json:"b1"`
+	B2  []KVLine       `json:"b2"`
+	B31 *KVB3          `json:"b31,omitempty"` // súhrn (odpočet pod 3 000 €)
+	B32 []KVB3         `json:"b32"`           // po dodávateľoch (odpočet od 3 000 €)
+	C1  []KVCorrection `json:"c1"`
+	D1  KVSum          `json:"d1"` // tržby z e-kasy (ERP) súhrnne
+	D2  KVSum          `json:"d2"`
 }
 
 // Kódy plnenia v súhrnnom výkaze.
@@ -130,6 +149,7 @@ type Return struct {
 	Warnings  []Warning `json:"warnings"`
 	Invoices  int       `json:"invoices"`  // počet zahrnutých vydaných dokladov
 	Purchase  int       `json:"purchases"` // počet zahrnutých prijatých faktúr
+	Cash      int       `json:"cash"`      // počet zahrnutých pokladničných dokladov s DPH
 }
 
 // Input sú podklady pre výpočet.
@@ -137,6 +157,9 @@ type Input struct {
 	Period    Period
 	Invoices  []invoice.Invoice
 	Purchases []purchase.Purchase
+	// CashDocs sú pokladničné doklady; do priznania idú iba platné doklady
+	// s DPH bez väzby na faktúru (blok = B.3, tržba z e-kasy = D.1).
+	CashDocs []cash.Document
 	// ExcessCarried je nadmerný odpočet z predchádzajúceho obdobia (riadok 34).
 	ExcessCarried money.Dec
 }
@@ -167,7 +190,7 @@ func noSpaces(s string) string { return strings.Join(strings.Fields(s), "") }
 // Compute zostaví priznanie a kontrolný výkaz.
 func Compute(in Input) Return {
 	ret := Return{Period: in.Period, Label: in.Period.Label(), Rows: map[string]money.Dec{}, KV: KV{
-		A1: []KVLine{}, A2: []KVA2{}, B1: []KVLine{}, B2: []KVLine{}, C1: []KVCorrection{},
+		A1: []KVLine{}, A2: []KVA2{}, B1: []KVLine{}, B2: []KVLine{}, B32: []KVB3{}, C1: []KVCorrection{},
 	}, SV: []SVLine{}, Warnings: []Warning{}}
 	add := func(row string, v money.Dec) { ret.Rows[row] = ret.Rows[row].Add(v) }
 	warn := func(doc, kind string, id int64, msg string) {
@@ -349,6 +372,8 @@ func Compute(in Input) Return {
 		}
 	}
 
+	ret.addCash(in, add, warn)
+
 	// súčty
 	var r17 money.Dec
 	for _, k := range taxRows {
@@ -487,4 +512,92 @@ func (ret *Return) addA2(inv invoice.Invoice, when invoice.Date, warn func(doc, 
 		}
 		ret.KV.A2 = append(ret.KV.A2, g.line)
 	}
+}
+
+// addCash zaradí pokladničné doklady s DPH: tržby z e-kasy (daň na výstupe,
+// D.1) a pokladničné bloky (odpočet, B.3.1 alebo B.3.2 podľa limitu).
+func (ret *Return) addCash(in Input, add func(string, money.Dec), warn func(string, string, int64, string)) {
+	b3 := map[string]*KVB3{}
+	var order []string
+	var total KVB3
+	for _, d := range in.CashDocs {
+		if d.Cancelled || d.Tax == nil || d.LinkKind != "" || !in.Period.Contains(d.Date) {
+			continue
+		}
+		if d.Kind == cash.In {
+			ret.Cash++
+			for _, r := range d.Tax.Rows {
+				if r.Rate == 0 {
+					add("r13", r.Base)
+					continue
+				}
+				rows, ok := outputRows[r.Rate]
+				if !ok {
+					warn(d.Number, "cash", d.ID, fmt.Sprintf("Sadzba %d %% nepatrí do tlačiva DPHv25", r.Rate))
+					continue
+				}
+				add(rows.base, r.Base)
+				add(rows.tax, r.VAT)
+				if reduced(r.Rate) {
+					ret.KV.D1.BaseReduced = ret.KV.D1.BaseReduced.Add(r.Base)
+					ret.KV.D1.VATReduced = ret.KV.D1.VATReduced.Add(r.VAT)
+				} else {
+					ret.KV.D1.Base = ret.KV.D1.Base.Add(r.Base)
+					ret.KV.D1.VAT = ret.KV.D1.VAT.Add(r.VAT)
+				}
+			}
+			ret.KV.D1.Count++
+			continue
+		}
+		if d.Tax.NoDeduction {
+			continue // bez odpočtu: ani v KV
+		}
+		partner := d.Tax.SupplierICDPH
+		if !isSKPayer(partner) {
+			warn(d.Number, "cash", d.ID, "Pokladničný blok bez IČ DPH predajcu — DPH nemožno odpočítať")
+			continue
+		}
+		var base, tax money.Dec
+		for _, r := range d.Tax.Rows {
+			if r.Rate == 0 {
+				continue
+			}
+			row, ok := deductRows[r.Rate]
+			if !ok {
+				warn(d.Number, "cash", d.ID, fmt.Sprintf("Sadzba %d %% nepatrí do tlačiva DPHv25", r.Rate))
+				continue
+			}
+			add(row, r.VAT)
+			add(domesticRow[r.Rate], r.VAT)
+			base, tax = base.Add(r.Base), tax.Add(r.VAT)
+		}
+		if tax.IsZero() {
+			continue
+		}
+		ret.Cash++
+		line := b3[partner]
+		if line == nil {
+			line = &KVB3{Partner: partner, Name: d.Partner}
+			b3[partner] = line
+			order = append(order, partner)
+		}
+		line.Base, line.VAT, line.Deducted, line.Count = line.Base.Add(base), line.VAT.Add(tax), line.Deducted.Add(tax), line.Count+1
+		total.Base, total.VAT, total.Deducted, total.Count = total.Base.Add(base), total.VAT.Add(tax), total.Deducted.Add(tax), total.Count+1
+	}
+	if total.Count == 0 {
+		return
+	}
+	// Štruktúru B.3 v XML zatiaľ nemáme overenú voči schéme KVDPHv25 —
+	// súbor ju neobsahuje a účtovník ju doplní v eDane.
+	part := "B.3.1"
+	if total.Deducted.Cmp(B3Limit) < 0 {
+		ret.KV.B31 = &total
+	} else {
+		part = "B.3.2"
+		for _, p := range order {
+			ret.KV.B32 = append(ret.KV.B32, *b3[p])
+		}
+	}
+	warn("", "cash", 0, fmt.Sprintf("Pokladničné bloky (%d) patria do časti %s kontrolného výkazu, ktorú súbor XML zatiaľ neobsahuje — doplňte ju v eDane podľa prehľadu (základ %s €, daň %s €)",
+		total.Count, part, total.Base.Display(), total.VAT.Display()))
 }

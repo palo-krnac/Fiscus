@@ -90,9 +90,9 @@ func TestPaymentsSpecial(t *testing.T) {
 	if err := cn.MarkPaid(MustDate("2026-10-11")); err != nil || cn.Status != StatusPaid {
 		t.Fatalf("dobropis doplatenie: %v", err)
 	}
-	// záloha iba celá
+	// záloha aj čiastočne (k platbe vznikne daňový doklad)
 	pf := issued(t, func(i *Invoice) { i.Kind = KindProforma })
-	if err := pf.AddPayment(Payment{Date: MustDate("2026-10-10"), Amount: money.MustParse("100")}); !errors.Is(err, ErrPartialAdvance) {
+	if err := pf.AddPayment(Payment{Date: MustDate("2026-10-10"), Amount: money.MustParse("100")}); err != nil || pf.Status != StatusIssued || !pf.PartlyPaid() {
 		t.Fatalf("záloha čiastočne: %v", err)
 	}
 	// jediná úhrada zrušená → neuhradená

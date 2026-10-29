@@ -105,3 +105,18 @@ func (s *Server) cancelCash(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, d)
 }
+
+// previewCash: POST …/cash/preview — prepočet DPH dokladu bez uloženia.
+func (s *Server) previewCash(w http.ResponseWriter, r *http.Request) {
+	cid, _ := pathID(w, r, "cid")
+	var d cash.Document
+	if !decodeLoose(w, r, &d) {
+		return
+	}
+	pv, err := s.App.PreviewCash(r.Context(), cid, d)
+	if err != nil {
+		failCash(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, pv)
+}

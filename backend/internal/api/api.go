@@ -143,6 +143,9 @@ func (s *Server) Handler() http.Handler {
 	need("POST /api/companies/{cid}/invoices/{id}/cancel", auth.PermInvoicesWrite, s.cancel)
 	need("POST /api/companies/{cid}/invoices/{id}/credit-note", auth.PermInvoicesWrite, s.creditNote)
 	need("POST /api/companies/{cid}/invoices/{id}/settle", auth.PermInvoicesWrite, s.settleAdvance)
+	need("GET /api/companies/{cid}/invoices/{id}/advances", auth.PermInvoicesRead, s.advanceCandidates)
+	need("POST /api/companies/{cid}/invoices/{id}/advances/{pid}", auth.PermInvoicesWrite, s.addAdvance)
+	need("DELETE /api/companies/{cid}/invoices/{id}/advances/{pid}", auth.PermInvoicesWrite, s.removeAdvance)
 
 	need("GET /api/companies/{cid}/quotes", auth.PermInvoicesRead, s.listQuotes)
 	need("GET /api/companies/{cid}/quotes/{id}", auth.PermInvoicesRead, s.getQuote)
@@ -240,6 +243,7 @@ func (s *Server) Handler() http.Handler {
 	need("GET /api/companies/{cid}/cash/candidates", auth.PermCashRead, s.cashCandidates)
 	need("GET /api/companies/{cid}/cash/{id}", auth.PermCashRead, s.getCash)
 	need("POST /api/companies/{cid}/cash", auth.PermCashWrite, s.createCash)
+	need("POST /api/companies/{cid}/cash/preview", auth.PermCashWrite, s.previewCash)
 	need("PUT /api/companies/{cid}/cash/{id}", auth.PermCashWrite, s.updateCash)
 	need("POST /api/companies/{cid}/cash/{id}/cancel", auth.PermCashWrite, s.cancelCash)
 
@@ -294,7 +298,7 @@ func fail(w http.ResponseWriter, err error) {
 		writeErr(w, http.StatusNotFound, "Záznam neexistuje", nil)
 	case errors.Is(err, invoice.ErrLocked), errors.Is(err, invoice.ErrBadTransition), errors.Is(err, app.ErrReceiptIssued), errors.Is(err, app.ErrAmend):
 		writeErr(w, http.StatusConflict, err.Error(), nil)
-	case errors.Is(err, invoice.ErrBadPayment), errors.Is(err, invoice.ErrPartialAdvance):
+	case errors.Is(err, invoice.ErrBadPayment):
 		writeErr(w, http.StatusUnprocessableEntity, err.Error(), nil)
 	case errors.Is(err, app.ErrCompanyLimit), errors.Is(err, app.ErrForbidden), errors.Is(err, app.ErrReadOnly):
 		writeErr(w, http.StatusForbidden, err.Error(), nil)

@@ -38,6 +38,8 @@ type Document struct {
 	LinkID     int64        `json:"linkId"`
 	LinkNumber string       `json:"linkNumber"`
 	Cancelled  bool         `json:"cancelled"`
+	// Tax je DPH dokladu bez väzby na faktúru (blok, tržba z e-kasy); nil = bez DPH.
+	Tax *Tax `json:"tax,omitempty"`
 }
 
 // Signed vráti sumu so znamienkom (výdavok záporný).
@@ -71,6 +73,9 @@ func (d *Document) Validate() error {
 	}
 	if strings.TrimSpace(d.Purpose) == "" {
 		add("purpose", "Zadajte účel platby")
+	}
+	if len(fe) == 0 {
+		fe = append(fe, d.ValidateTax(d.Date.String())...)
 	}
 	if len(fe) > 0 {
 		return &invoice.ValidationError{Fields: fe}
