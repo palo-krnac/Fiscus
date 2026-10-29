@@ -41,7 +41,9 @@ const euro = (v) => formatAmount(v).replace(/,00$/, '')
 const prevText = (r) => (st.value?.previousEmpty ? '' : euro(r.previous))
 
 // riadky 08 a 17: z dokladov + doplnené ručne
-const fromDocs = (r) => (r.input === 'r08x' ? st.value.facts.receivables : r.input === 'r17x' ? st.value.facts.payables : null)
+const factOf = { r08x: 'receivables', r17x: 'payables', r01: 'intangible', r02: 'tangible' }
+const fromDocs = (r) => (factOf[r.input] ? st.value.facts[factOf[r.input]] ?? '0' : null)
+const docsLabel = (r) => (r.input === 'r01' || r.input === 'r02' ? 'z registra majetku' : 'z dokladov')
 const editable = (r) => canWrite.value && !!r.input
 
 async function save() {
@@ -134,7 +136,7 @@ const printIt = () => window.print()
                 <td class="code">{{ r.code }}</td>
                 <td>
                   {{ r.label }}
-                  <small v-if="fromDocs(r) !== null" class="muted">z dokladov {{ formatAmount(fromDocs(r)) }} €<template v-if="editable(r)"> + doplnené</template></small>
+                  <small v-if="fromDocs(r) !== null" class="muted">{{ docsLabel(r) }} {{ formatAmount(fromDocs(r)) }} €<template v-if="editable(r)"> + doplnené</template></small>
                   <small v-else-if="['10', '11', '13'].includes(r.code)" class="muted">z peňažného denníka</small>
                 </td>
                 <td class="num">
@@ -148,7 +150,7 @@ const printIt = () => window.print()
           </tbody>
         </table>
         <div v-if="canWrite" class="sheet-foot">
-          <span class="muted">Dlhodobý majetok, zásoby, úvery a rezervy zadajte podľa inventúry k 31. 12. Pri r. 08 a 17 zadajte iba to, čo nie je vo faktúrach (napr. DPH, odvody, mzdy).</span>
+          <span class="muted">Zásoby, úvery a rezervy zadajte podľa inventúry k 31. 12. Pri r. 01, 02 doplňte iba majetok mimo registra, pri r. 08 a 17 zadajte iba to, čo nie je vo faktúrach (napr. DPH, odvody, mzdy).</span>
           <Button label="Uložiť zadané riadky" icon="pi pi-check" size="small" :loading="busy" @click="save" />
         </div>
       </section>

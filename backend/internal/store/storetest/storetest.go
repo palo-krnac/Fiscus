@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/palo-krnac/fiscus/backend/internal/asset"
 	"github.com/palo-krnac/fiscus/backend/internal/audit"
 	"github.com/palo-krnac/fiscus/backend/internal/auth"
 	"github.com/palo-krnac/fiscus/backend/internal/bank"
@@ -420,6 +421,55 @@ func Run(t *testing.T, newStore Factory) {
 		}
 		if err := s.SaveQuote(ctx, b.ID, &q1); !errors.Is(err, store.ErrNotFound) {
 			t.Fatal("úprava ponuky inej firmy")
+		}
+	})
+
+	t.Run("dlhodobý majetok", func(t *testing.T) {
+		s := newStore(t)
+		a, _ := s.CreateCompany(ctx, store.Company{Name: "Alfa"})
+		b, _ := s.CreateCompany(ctx, store.Company{Name: "Beta"})
+		car := asset.Asset{Number: "M001", Name: "Osobné auto", Kind: asset.Tangible, Group: 1, Method: asset.Straight,
+			Acquired: invoice.MustDate("2025-03-15"), Cost: m.MustParse("24000"), Share: 80,
+			PurchaseID: 7, PurchaseNo: "PF2025007", Note: "služobné"}
+		pc := asset.Asset{Number: "M002", Name: "Server", Kind: asset.Tangible, Group: 1, Method: asset.Accelerated,
+			Acquired: invoice.MustDate("2024-11-02"), Cost: m.MustParse("3200")}
+		for _, x := range []*asset.Asset{&car, &pc} {
+			if err := s.SaveAsset(ctx, a.ID, x); err != nil || x.ID == 0 || x.CompanyID != a.ID {
+				t.Fatalf("uloženie: %v", err)
+			}
+		}
+		got, err := s.GetAsset(ctx, a.ID, car.ID)
+		if err != nil || !reflect.DeepEqual(got, car) {
+			t.Fatalf("načítanie:\n got %+v\nwant %+v", got, car)
+		}
+		if _, err := s.GetAsset(ctx, b.ID, car.ID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("majetok inej firmy")
+		}
+		list, _ := s.ListAssets(ctx, a.ID)
+		if len(list) != 2 || list[0].ID != pc.ID {
+			t.Fatalf("zoznam podľa zaradenia: %+v", list)
+		}
+		if other, _ := s.ListAssets(ctx, b.ID); len(other) != 0 {
+			t.Fatal("zoznam inej firmy")
+		}
+		car.Disposed, car.DisposalKind = invoice.MustDate("2026-06-30"), asset.DisposalSale
+		if err := s.SaveAsset(ctx, a.ID, &car); err != nil {
+			t.Fatal(err)
+		}
+		if g, _ := s.GetAsset(ctx, a.ID, car.ID); g.DisposalKind != asset.DisposalSale || g.Disposed != car.Disposed {
+			t.Fatalf("vyradenie: %+v", g)
+		}
+		if err := s.SaveAsset(ctx, b.ID, &car); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("úprava majetku inej firmy")
+		}
+		if err := s.DeleteAsset(ctx, b.ID, car.ID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("zmazanie majetku inej firmy")
+		}
+		if err := s.DeleteAsset(ctx, a.ID, car.ID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.GetAsset(ctx, a.ID, car.ID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("zmazaný majetok")
 		}
 	})
 

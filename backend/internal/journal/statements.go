@@ -62,8 +62,8 @@ func IncomeStatement(cur, prev Totals) []Row {
 // AssetInputs sú riadky výkazu o majetku a záväzkoch, ktoré Fiškus zatiaľ
 // nevie z dokladov (dlhodobý majetok, zásoby, úvery…); zadáva ich používateľ.
 type AssetInputs struct {
-	IntangibleDM money.Dec `json:"r01"` // dlhodobý nehmotný majetok
-	TangibleDM   money.Dec `json:"r02"`
+	IntangibleDM money.Dec `json:"r01"` // dlhodobý nehmotný majetok mimo registra majetku
+	TangibleDM   money.Dec `json:"r02"` // dlhodobý hmotný majetok mimo registra majetku
 	FinancialDM  money.Dec `json:"r03"`
 	Material     money.Dec `json:"r05"`
 	Goods        money.Dec `json:"r06"`
@@ -84,7 +84,15 @@ type AssetFacts struct {
 	Cash        money.Dec `json:"cash"`        // konečný stav pokladnice
 	Bank        money.Dec `json:"bank"`        // konečné stavy účtov
 	Transit     money.Dec `json:"transit"`     // priebežné položky (+/−): výdavok c − príjem c
+	Tangible    money.Dec `json:"tangible"`    // ZC hmotného majetku z registra
+	Intangible  money.Dec `json:"intangible"`  // ZC nehmotného majetku z registra
 }
+
+// TangibleDM je dlhodobý hmotný majetok: register + ručne zadaný mimo registra.
+func (v AssetValues) TangibleDM() money.Dec { return v.Facts.Tangible.Add(v.Inputs.TangibleDM) }
+
+// IntangibleDM je dlhodobý nehmotný majetok: register + ručne zadaný mimo registra.
+func (v AssetValues) IntangibleDM() money.Dec { return v.Facts.Intangible.Add(v.Inputs.IntangibleDM) }
 
 // AssetValues sú vstupy a fakty jedného obdobia.
 type AssetValues struct {
@@ -103,8 +111,8 @@ func AssetStatement(cur, prev AssetValues) []Row {
 		}
 		return s
 	}
-	r01 := val(func(v AssetValues) money.Dec { return v.Inputs.IntangibleDM })
-	r02 := val(func(v AssetValues) money.Dec { return v.Inputs.TangibleDM })
+	r01 := val(AssetValues.IntangibleDM)
+	r02 := val(AssetValues.TangibleDM)
 	r03 := val(func(v AssetValues) money.Dec { return v.Inputs.FinancialDM })
 	r05 := val(func(v AssetValues) money.Dec { return v.Inputs.Material })
 	r06 := val(func(v AssetValues) money.Dec { return v.Inputs.Goods })
@@ -179,8 +187,8 @@ func TaxReturnB(t Totals, end, begin AssetValues) TaxB {
 		return Row{Code: code, Label: label, Current: f(end), Previous: f(begin)}
 	}
 	out.Table1a = []Row{
-		row("1", "Zostatková cena hmotného majetku", func(v AssetValues) money.Dec { return v.Inputs.TangibleDM }),
-		row("2", "Zostatková cena nehmotného majetku", func(v AssetValues) money.Dec { return v.Inputs.IntangibleDM }),
+		row("1", "Zostatková cena hmotného majetku", AssetValues.TangibleDM),
+		row("2", "Zostatková cena nehmotného majetku", AssetValues.IntangibleDM),
 		row("3", "Zásoby", func(v AssetValues) money.Dec {
 			return v.Inputs.Material.Add(v.Inputs.Goods).Add(v.Inputs.OtherStock)
 		}),
