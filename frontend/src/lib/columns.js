@@ -144,6 +144,11 @@ export const kvColumns = [
   money('Daň', (r) => r.vat ?? r.vatDiff),
   { header: 'Sadzba %', value: (r) => r.rate, type: 'number', width: 8 },
   money('Odpočítaná daň', (r) => r.deducted),
+  t('Prenesenie – plnenie', (r) => r.label, 22),
+  t('Kód SCS', (r) => r.code, 8),
+  t('Druh tovaru', (r) => r.goods, 8),
+  { header: 'Množstvo', value: (r) => r.quantity, type: 'number', width: 10 },
+  t('MJ', (r) => r.unit, 5),
 ]
 
 const bankStatus = { open: 'Nespárované', matched: 'Spárované', ignored: 'Nepárované' }

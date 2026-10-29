@@ -8,7 +8,7 @@ import { api } from '../lib/api.js'
 import { can, session } from '../lib/session.js'
 import { formatAmount, formatDate, formatMoney, formatQuantity } from '../lib/format.js'
 import { payBySquare, qrSvg } from '../lib/payqr.js'
-import { countryName, paymentLabel, vatExemptionNote } from '../lib/codes.js'
+import { countryName, domesticReverseNote, paymentLabel, vatExemptionNote } from '../lib/codes.js'
 import CompanyLogo from '../components/CompanyLogo.vue'
 import SendMailDialog from '../components/SendMailDialog.vue'
 import { rateText } from '../lib/fx.js'
@@ -156,7 +156,7 @@ const ids = (p) =>
             <td class="num">{{ formatQuantity(l.quantity) }}</td>
             <td>{{ l.unit }}</td>
             <td class="num">{{ formatAmount(l.unitPrice) }}</td>
-            <td v-if="!nonVat" class="num">{{ inv.reverseCharge ? '—' : `${l.vatRate} %` }}</td>
+            <td v-if="!nonVat" class="num">{{ inv.reverseCharge ? '—' : l.reverse ? 'PDP' : `${l.vatRate} %` }}</td>
             <td class="num">{{ formatAmount(l.amount) }}</td>
           </tr>
         </tbody>
@@ -201,8 +201,8 @@ const ids = (p) =>
               <tr><th>{{ deductions.length ? 'Po odpočte zálohy' : 'Sadzba DPH' }}</th><th class="num">Základ</th><th class="num">DPH</th><th class="num">Spolu</th></tr>
             </thead>
             <tbody>
-              <tr v-for="r in inv.summary.rates" :key="r.rate">
-                <td>{{ r.rate }} %</td>
+              <tr v-for="r in inv.summary.rates" :key="`${r.rate}${r.reverse ? 'p' : ''}`">
+                <td>{{ r.reverse ? 'PDP' : `${r.rate} %` }}</td>
                 <td class="num">{{ formatAmount(r.base) }}</td>
                 <td class="num">{{ formatAmount(r.vat) }}</td>
                 <td class="num">{{ formatAmount(r.total) }}</td>
@@ -232,8 +232,8 @@ const ids = (p) =>
                 <tr><th>V eurách</th><th class="num">Základ</th><th class="num">DPH</th><th class="num">Spolu</th></tr>
               </thead>
               <tbody>
-                <tr v-for="r in inv.local.rates" :key="r.rate">
-                  <td>{{ r.rate }} %</td>
+                <tr v-for="r in inv.local.rates" :key="`${r.rate}${r.reverse ? 'p' : ''}`">
+                  <td>{{ r.reverse ? 'PDP' : `${r.rate} %` }}</td>
                   <td class="num">{{ formatAmount(r.base) }}</td>
                   <td class="num">{{ formatAmount(r.vat) }}</td>
                   <td class="num">{{ formatAmount(r.total) }}</td>
@@ -256,6 +256,7 @@ const ids = (p) =>
       <footer class="notes">
         <p v-if="nonVat">Dodávateľ nie je platiteľ DPH.</p>
         <p v-if="inv.reverseCharge && !nonVat">{{ vatExemptionNote(inv) }}</p>
+        <p v-if="!nonVat && domesticReverseNote(inv.lines)">{{ domesticReverseNote(inv.lines) }}</p>
         <p v-if="inv.note" class="user-note">{{ inv.note }}</p>
         <p v-if="quote">Cenová ponuka nie je daňový doklad.</p>
       </footer>

@@ -75,9 +75,26 @@ type KVSum struct {
 	Count       int       `json:"count"` // počet faktúr v súčte
 }
 
+// KVA2 je riadok A.2: dodanie s tuzemským prenesením daňovej povinnosti
+// (§ 69 ods. 12 písm. f až j) — základ bez dane, pri tovare kód a množstvo.
+type KVA2 struct {
+	Partner  string       `json:"partner"`
+	Name     string       `json:"name"`
+	Number   string       `json:"number"`
+	Date     invoice.Date `json:"date"`
+	Base     money.Dec    `json:"base"`
+	Code     string       `json:"code,omitempty"`  // 4-miestny kód colného sadzobníka (plodiny, kovy)
+	Goods    string       `json:"goods,omitempty"` // druh tovaru: MT, IO
+	Quantity *money.Dec   `json:"quantity,omitempty"`
+	Unit     string       `json:"unit,omitempty"` // t, kg, m, ks
+	Label    string       `json:"label"`          // druh plnenia (iba na zobrazenie)
+	ID       int64        `json:"id"`
+}
+
 // KV je kontrolný výkaz.
 type KV struct {
 	A1 []KVLine       `json:"a1"`
+	A2 []KVA2         `json:"a2"`
 	B1 []KVLine       `json:"b1"`
 	B2 []KVLine       `json:"b2"`
 	C1 []KVCorrection `json:"c1"`
@@ -150,7 +167,7 @@ func noSpaces(s string) string { return strings.Join(strings.Fields(s), "") }
 // Compute zostaví priznanie a kontrolný výkaz.
 func Compute(in Input) Return {
 	ret := Return{Period: in.Period, Label: in.Period.Label(), Rows: map[string]money.Dec{}, KV: KV{
-		A1: []KVLine{}, B1: []KVLine{}, B2: []KVLine{}, C1: []KVCorrection{},
+		A1: []KVLine{}, A2: []KVA2{}, B1: []KVLine{}, B2: []KVLine{}, C1: []KVCorrection{},
 	}, SV: []SVLine{}, Warnings: []Warning{}}
 	add := func(row string, v money.Dec) { ret.Rows[row] = ret.Rows[row].Add(v) }
 	warn := func(doc, kind string, id int64, msg string) {
@@ -186,12 +203,22 @@ func Compute(in Input) Return {
 			}
 			continue
 		case inv.ReverseCharge:
-			warn(inv.Number, "invoice", inv.ID, "Tuzemské prenesenie daňovej povinnosti (§ 69 ods. 12, A.2) zatiaľ nie je podporované — doplňte ručne")
+			warn(inv.Number, "invoice", inv.ID, "Prenesenie pri odberateľovi v tuzemsku: vyberte na faktúre druh prenesenia pri položkách (§ 69 ods. 12) — doplňte ručne")
 			continue
+		}
+		if inv.DomesticReverse() {
+			if credit {
+				warn(inv.Number, "invoice", inv.ID, "Dobropis k dodaniu s prenesením daňovej povinnosti (A.2, kód opravy) zatiaľ nie je podporovaný — doplňte ručne")
+			} else {
+				ret.addA2(inv, when, warn)
+			}
 		}
 		payer := isSKPayer(c.ICDPH)
 		ret.Invoices++
 		for _, r := range sum.Rates {
+			if r.Reverse {
+				continue // tuzemské prenesenie: daň priznáva odberateľ, dodávateľ len A.2
+			}
 			if r.Rate == 0 {
 				// oslobodené plnenie: iba riadok 13, do KV sa neuvádza
 				if !credit {
@@ -406,4 +433,58 @@ func (ret *Return) addSV(c invoice.Party, code int, value money.Dec) {
 		}
 	}
 	ret.SV = append(ret.SV, SVLine{Country: country, VATID: id, Name: c.Name, Value: value, Code: code, Count: 1})
+}
+
+// addA2 pridá položky faktúry s tuzemským prenesením do A.2: plodiny a kovy
+// po 4-miestnych kódoch, telefóny a obvody po druhu, stavebné práce spolu.
+// Písm. a) až e) sa v kontrolnom výkaze dodávateľa neuvádzajú.
+func (ret *Return) addA2(inv invoice.Invoice, when invoice.Date, warn func(doc, kind string, id int64, msg string)) {
+	type group struct {
+		line  KVA2
+		goods bool
+		qty   money.Dec
+	}
+	var order []string
+	groups := map[string]*group{}
+	for _, l := range inv.Lines {
+		k := l.Reverse
+		if !k.Reported() {
+			continue
+		}
+		code := ""
+		if k.NeedsCode() {
+			code = invoice.CommodityCode(l.Commodity)
+		}
+		key := string(k) + "/" + code
+		g, ok := groups[key]
+		if !ok {
+			g = &group{goods: k.Goods(), line: KVA2{Partner: noSpaces(strings.ToUpper(inv.Customer.ICDPH)), Name: inv.Customer.Name,
+				Number: noSpaces(inv.Number), Date: when, Code: code, Goods: k.KVKind(), Label: k.Label(), ID: inv.ID}}
+			if g.goods {
+				g.line.Unit = invoice.KVUnit(l.Unit)
+			}
+			groups[key] = g
+			order = append(order, key)
+		}
+		g.line.Base = g.line.Base.Add(l.Amount)
+		if g.goods {
+			if u := invoice.KVUnit(l.Unit); u != g.line.Unit {
+				warn(inv.Number, "invoice", inv.ID, fmt.Sprintf("%s: rôzne merné jednotky (%s, %s) — v A.2 prepočítajte množstvo na jednu", k.Label(), g.line.Unit, u))
+				continue
+			}
+			g.qty = g.qty.Add(l.Quantity)
+		}
+	}
+	for _, key := range order {
+		g := groups[key]
+		if inv.Foreign() {
+			g.line.Base = g.line.Base.DivCents(inv.FXRate)
+		}
+		g.line.Base = g.line.Base.RoundCents()
+		if g.goods {
+			q := g.qty.RoundCents()
+			g.line.Quantity = &q
+		}
+		ret.KV.A2 = append(ret.KV.A2, g.line)
+	}
 }

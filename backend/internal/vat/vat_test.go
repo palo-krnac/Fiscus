@@ -6,7 +6,15 @@ import (
 	m "github.com/palo-krnac/fiscus/backend/internal/money"
 )
 
-func line(q, p string, r Rate) Line { return Line{m.MustParse(q), m.MustParse(p), r} }
+func line(q, p string, r Rate) Line {
+	return Line{Quantity: m.MustParse(q), UnitPrice: m.MustParse(p), Rate: r}
+}
+
+func rev(q, p string, r Rate) Line {
+	l := line(q, p, r)
+	l.Reverse = true
+	return l
+}
 
 func TestCalculate(t *testing.T) {
 	cases := []struct {
@@ -54,6 +62,16 @@ func TestCalculate(t *testing.T) {
 			lines:   []Line{line("1", "1000", Rate23), line("1", "100", Rate5)},
 			mode:    PriceNet,
 			reverse: true, base: "1100.00", vat: "0.00", total: "1100.00", rateCount: 1,
+		},
+		{
+			name:  "tuzemské prenesenie pri položke: samostatný riadok bez DPH",
+			lines: []Line{line("1", "100", Rate23), rev("2", "3000", Rate23), line("1", "10", Rate0)},
+			mode:  PriceNet, base: "6110.00", vat: "23.00", total: "6133.00", rateCount: 3,
+		},
+		{
+			name:  "prenesenie pri cenách s DPH: cena je základ",
+			lines: []Line{rev("1", "6000", Rate23), line("1", "123", Rate23)},
+			mode:  PriceGross, base: "6100.00", vat: "23.00", total: "6123.00", rateCount: 2,
 		},
 		{
 			name:  "dobropis (záporné množstvo)",
@@ -180,5 +198,19 @@ func TestSetPeriods(t *testing.T) {
 	}
 	if Rate(20).Known() {
 		t.Fatal("starý číselník ostal platný")
+	}
+}
+
+func TestReverseRowLast(t *testing.T) {
+	s, _ := Calculate([]Line{rev("1", "1", Rate23), line("1", "1", Rate0), line("1", "1", Rate5)}, PriceNet, false)
+	got := []Key{}
+	for _, r := range s.Rates {
+		got = append(got, r.Key())
+	}
+	want := []Key{{Rate5, false}, {Rate0, false}, {Rate0, true}}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("poradie %v, chcem %v", got, want)
+		}
 	}
 }

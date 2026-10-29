@@ -1,6 +1,10 @@
 package invoice
 
-import "github.com/palo-krnac/fiscus/backend/internal/party"
+import (
+	"strings"
+
+	"github.com/palo-krnac/fiscus/backend/internal/party"
+)
 
 // ExemptionNote vráti povinný text na faktúre pri plnení bez DPH (prenesenie
 // daňovej povinnosti, oslobodenie). Rovnaké texty ako vatExemptionNote vo frontende.
@@ -22,6 +26,26 @@ func ExemptionNote(reverseCharge bool, customer Party, kind SupplyKind) string {
 		return "Prenesenie daňovej povinnosti – daň platí príjemca služby (reverse charge, čl. 196 smernice 2006/112/ES)."
 	}
 	return "Miesto dodania služby je mimo územia SR (§ 15 ods. 1 zákona o DPH)."
+}
+
+// DomesticReverseNote je povinný text pri položkách s tuzemským prenesením
+// (§ 74 ods. 1 písm. o): „prenesenie daňovej povinnosti“ s písmenami § 69 ods. 12.
+func DomesticReverseNote(lines []Line) string {
+	var letters []string
+	seen := map[string]bool{}
+	for _, info := range DomesticRCs {
+		for _, l := range lines {
+			if l.Reverse == info.Code && !seen[info.Letter] {
+				seen[info.Letter] = true
+				letters = append(letters, info.Letter+")")
+			}
+		}
+	}
+	if len(letters) == 0 {
+		return ""
+	}
+	return "PDP – prenesenie daňovej povinnosti podľa § 69 ods. 12 písm. " + strings.Join(letters, ", ") +
+		" zákona o DPH: daň z týchto položiek odvedie odberateľ."
 }
 
 // PaymentLabel vráti názov spôsobu úhrady.

@@ -166,6 +166,19 @@ func KVXML(r Return, tp Taxpayer) []byte {
 		w.raw("<A1" + attr("Odb", l.Partner) + attr("F", l.Number) + attr("Den", l.Date.String()) +
 			attr("Z", amountReq(l.Base)) + attr("D", amountReq(l.VAT)) + attr("S", strconv.Itoa(int(l.Rate))) + "/>")
 	}
+	for _, l := range r.KV.A2 {
+		el := "<A2" + attr("Odb", l.Partner) + attr("F", l.Number) + attr("Den", l.Date.String()) + attr("Z", amountReq(l.Base))
+		if l.Code != "" {
+			el += attr("TK", l.Code)
+		}
+		if l.Goods != "" {
+			el += attr("TD", l.Goods)
+		}
+		if l.Quantity != nil {
+			el += attr("Mn", amountReq(*l.Quantity)) + attr("MJ", l.Unit)
+		}
+		w.raw(el + "/>")
+	}
 	for _, l := range r.KV.B1 {
 		odb := ""
 		if l.Partner != "" {

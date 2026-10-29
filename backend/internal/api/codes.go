@@ -24,6 +24,7 @@ func (s *Server) codes(w http.ResponseWriter, _ *http.Request) {
 		"auditCategories": audit.Categories,
 		"vatRows":         vatreturn.Rows,
 		"currencies":      fx.Currencies,
+		"domesticRCs":     invoice.DomesticRCs,
 	})
 }
 
