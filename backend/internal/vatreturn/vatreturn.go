@@ -120,14 +120,14 @@ type SVLine struct {
 
 // Return je priznanie k DPH spolu s kontrolným výkazom.
 type Return struct {
-	Period Period               `json:"period"`
-	Label  string               `json:"label"`
+	Period Period `json:"period"`
+	Label  string `json:"label"`
 	// Druh priznania; pri dodatočnom aj dátum zistenia a posledná známa povinnosť.
-	Kind       Kind         `json:"kind"`
-	Discovered invoice.Date `json:"discovered,omitempty"`
-	LastKnown  *money.Dec   `json:"lastKnown,omitempty"`
-	Deadline   invoice.Date `json:"deadline"`
-	Rows   map[string]money.Dec `json:"rows"` // r01 … r37 (iba nenulové)
+	Kind       Kind                 `json:"kind"`
+	Discovered invoice.Date         `json:"discovered,omitempty"`
+	LastKnown  *money.Dec           `json:"lastKnown,omitempty"`
+	Deadline   invoice.Date         `json:"deadline"`
+	Rows       map[string]money.Dec `json:"rows"` // r01 … r37 (iba nenulové)
 	// Deduction je odpočet dane spolu (r. 18 + 18a + 19) na prehľad.
 	Deduction money.Dec `json:"deduction"`
 	KV        KV        `json:"kv"`
