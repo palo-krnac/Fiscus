@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { ApiError, api, query, request, setUnauthorizedHandler } from './api.js'
+import { ApiError, api, query, request, setUnauthorizedHandler, download } from './api.js'
 
 const respond = (status, body) =>
   vi.fn().mockResolvedValue({
@@ -81,5 +81,24 @@ describe('pdfURL', () => {
     [[1, 'reminders', 5], '/api/companies/1/reminders/5/pdf'],
   ])('%j → %s', (args, want) => {
     expect(api.pdfURL(...args)).toBe(want)
+  })
+})
+
+describe('download', () => {
+  const res = (status, body, headers = {}) => ({
+    ok: status < 300,
+    status,
+    headers: { get: (h) => headers[h] ?? null },
+    json: async () => JSON.parse(body),
+    blob: async () => new Blob([body]),
+  })
+  it('vráti súbor s menom z hlavičky', async () => {
+    const out = await download('/x', 'a.xml', async () => res(200, '<Invoice/>', { 'Content-Disposition': 'attachment; filename="Faktura-FA1.xml"' }))
+    expect(out.name).toBe('Faktura-FA1.xml')
+    expect(await out.blob.text()).toBe('<Invoice/>')
+  })
+  it('chyba 422 nesie polia', async () => {
+    const body = JSON.stringify({ error: 'E-faktúru nemožno vytvoriť', fields: [{ field: 'customer.dic', message: 'Doplňte DIČ odberateľa' }] })
+    await expect(download('/x', 'a.xml', async () => res(422, body))).rejects.toMatchObject({ status: 422, fields: [{ field: 'customer.dic' }] })
   })
 })

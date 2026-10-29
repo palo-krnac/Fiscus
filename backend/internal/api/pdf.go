@@ -29,7 +29,11 @@ func (s *Server) pdfHandler(get func(*app.App, context.Context, int64, int64) (a
 		if r.URL.Query().Get("inline") == "1" {
 			disp = "inline"
 		}
-		w.Header().Set("Content-Type", "application/pdf")
+		ct := doc.Type
+		if ct == "" {
+			ct = "application/pdf"
+		}
+		w.Header().Set("Content-Type", ct)
 		w.Header().Set("Content-Disposition", disp+`; filename="`+doc.Name+`"`)
 		w.Header().Set("Content-Length", strconv.Itoa(len(doc.Data)))
 		w.Header().Set("X-Content-Type-Options", "nosniff")

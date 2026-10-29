@@ -32,12 +32,15 @@ Po spustení predaja vydáva licencie automaticky služba `fiskus-shop` (webhook
 Fiškus má zabudovaný MCP server na adrese `/mcp`, takže sa k nemu dá pripojiť Claude alebo iný AI asistent. Kľúč si každý používateľ vytvorí v časti **Prístup pre AI**. Asistent má práva svojho používateľa; kľúč môže byť obmedzený len na čítanie. Každé volanie nástroja sa zapíše do auditu.
 
 ```
-# Claude Code
-claude mcp add --transport http fiskus http://127.0.0.1:8080/mcp --header "Authorization: Bearer fk_…"
+# Claude Code (aplikácia z inštalátora beží na porte 48080)
+claude mcp add --transport http fiskus http://127.0.0.1:48080/mcp --header "Authorization: Bearer fk_…"
 
-# aplikácie so stdio (Claude Desktop): most fiskus-mcp
-{"mcpServers":{"fiskus":{"command":"fiskus-mcp","args":["-url","http://127.0.0.1:8080/mcp"],"env":{"FISKUS_API_KEY":"fk_…"}}}}
+# Claude Desktop (stdio): most fiskus-mcp z inštalácie, napr. vo Windows
+# %LOCALAPPDATA%\Programs\Fiskus\fiskus-mcp.exe
+{"mcpServers":{"fiskus":{"command":"C:\\Users\\…\\AppData\\Local\\Programs\\Fiskus\\fiskus-mcp.exe","env":{"FISKUS_API_KEY":"fk_…"}}}}
 ```
+
+Most `fiskus-mcp` sa predvolene pripája na `http://127.0.0.1:48080/mcp` (iná adresa: `-url`). Ak aplikácia nebeží, most ju spustí na pozadí bez okna prehliadača; kým asistent pracuje, aplikácia sa neukončí.
 
 Nástroje:
 - čítanie: `list_companies`, `company_overview`, `list_invoices`, `get_invoice`, `list_purchases`, `list_contacts`, `list_bank_transactions`, `vat_return`

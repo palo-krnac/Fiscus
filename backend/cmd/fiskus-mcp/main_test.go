@@ -50,3 +50,22 @@ func TestBridge(t *testing.T) {
 		t.Fatalf("bez servera: %s", out.String())
 	}
 }
+
+func TestEnsureRunning(t *testing.T) {
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Write([]byte(`{"mode":"desktop"}`))
+	}))
+	defer srv.Close()
+	// beží → nič sa nespúšťa (iba jedna kontrola)
+	ensureRunning(srv.URL + "/mcp")
+	if calls != 1 {
+		t.Fatalf("kontrol %d", calls)
+	}
+	// vzdialený server sa nekontroluje ani nespúšťa
+	ensureRunning("https://fiskus.example.sk/mcp")
+	if calls != 1 {
+		t.Fatal("vzdialený server")
+	}
+}

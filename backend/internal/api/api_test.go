@@ -9,6 +9,7 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -409,7 +410,7 @@ func TestDesktopLauncher(t *testing.T) {
 		{"z príkazového riadka", nil, 404},
 	}
 	for _, tt := range tests {
-		s := &Server{App: a}
+		s := &Server{App: a, MCP: mcp.New(a, "test")}
 		if tt.launcher != nil {
 			s.Desktop = tt.launcher
 		}
@@ -419,6 +420,17 @@ func TestDesktopLauncher(t *testing.T) {
 		e.do("GET", "/api/capabilities", nil, 200, &c)
 		if c.Launcher != (tt.launcher != nil) {
 			t.Errorf("%s: launcher %v", tt.name, c.Launcher)
+		}
+		if tt.launcher != nil {
+			// volanie AI asistenta (MCP) udrží aplikáciu nažive
+			req, _ := http.NewRequest("POST", srv.URL+"/mcp", strings.NewReader("{}"))
+			if res, err := srv.Client().Do(req); err == nil {
+				res.Body.Close()
+			}
+			if tt.launcher.pings != 1 {
+				t.Errorf("MCP neozval aplikáciu: %d", tt.launcher.pings)
+			}
+			tt.launcher.pings = 0
 		}
 		e.do("POST", "/api/desktop/ping", nil, tt.status, nil)
 		e.do("POST", "/api/desktop/quit", nil, tt.status, nil)

@@ -16,6 +16,7 @@ import Checkbox from 'primevue/checkbox'
 import AutoComplete from 'primevue/autocomplete'
 import IcoInput from '../components/IcoInput.vue'
 import { fillFromRegistry } from '../lib/registry.js'
+import { saveBlob } from '../lib/export.js'
 import { api, ApiError } from '../lib/api.js'
 import { session, can } from '../lib/session.js'
 import {
@@ -45,6 +46,25 @@ const canMail = computed(() => {
   if (!v?.id || isRecurring.value || !can('invoices.write')) return false
   return isQuote.value ? !!v.status && v.status !== 'draft' : v.status === 'issued' || v.status === 'paid'
 })
+// e-faktúra (UBL): vystavená faktúra alebo dobropis
+const canEInvoice = computed(() => {
+  const v = inv.value
+  return !!v?.id && !isQuote.value && !isRecurring.value && (v.kind === 'invoice' || v.kind === 'credit_note') && (v.status === 'issued' || v.status === 'paid')
+})
+const busyUBL = ref(false)
+async function downloadEInvoice() {
+  busyUBL.value = true
+  try {
+    const { blob, name } = await api.einvoice(session.companyId, inv.value.id)
+    saveBlob(blob, name)
+    toast.add({ severity: 'success', summary: `Uložené ${name}`, detail: 'E-faktúru pošlete odberateľovi cez svojho digitálneho poštára (Peppol).', life: 5000 })
+  } catch (e) {
+    const detail = e.fields?.length ? e.fields.map((f) => f.message).join(' · ') : e.message
+    toast.add({ severity: 'error', summary: 'E-faktúru nemožno vytvoriť', detail, life: 10000 })
+  } finally {
+    busyUBL.value = false
+  }
+}
 const sample = ref(null) // ukážka textov ďalšej pravidelnej faktúry
 const router = useRouter()
 const route = useRoute()
@@ -750,6 +770,8 @@ const customerFields = reactive([
         @click="router.push(`${base}/${inv.id}/tlac`)"
       />
       <Button v-if="canMail" icon="pi pi-envelope" label="E-mail" severity="secondary" text size="small" @click="mailOpen = true" />
+      <Button v-if="canEInvoice" icon="pi pi-file-export" label="E-faktúra" severity="secondary" text size="small" :loading="busyUBL"
+        v-tooltip.bottom="'Stiahnuť e-faktúru XML (UBL, Peppol BIS 3.0) — od 1. 1. 2027 povinná medzi platiteľmi DPH'" @click="downloadEInvoice" />
       <template v-if="editable && !isRecurring">
         <Button label="Uložiť koncept" severity="secondary" outlined size="small" :loading="busy" @click="save()" v-tooltip.bottom="'Ctrl+S'" />
         <Button label="Vystaviť" icon="pi pi-check" size="small" :disabled="busy" @click="issue" />

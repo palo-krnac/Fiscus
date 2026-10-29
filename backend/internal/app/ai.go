@@ -96,6 +96,15 @@ func (a *App) ExtractPurchase(ctx context.Context, companyID int64, fileName str
 		return PurchaseDraft{}, err
 	}
 	p, warns := r.Purchase(a.Today())
+	warns = a.completeDraft(ctx, companyID, &p, warns)
+	a.record(ctx, companyID, audit.CatAI, "extract", "purchase", 0,
+		fmt.Sprintf("Prečítaný doklad %s cez Claude API: %s %s, %s €", fileName, p.Supplier.Name, p.SupplierNumber, p.Summary.Total.Display()), nil, nil)
+	return PurchaseDraft{Purchase: p, Warnings: warns}, nil
+}
+
+// completeDraft priradí dodávateľa z adresára podľa IČO (aj IBAN) a upozorní
+// na faktúru, ktorá už je zaevidovaná.
+func (a *App) completeDraft(ctx context.Context, companyID int64, p *purchase.Purchase, warns []string) []string {
 	if p.Supplier.ICO != "" {
 		if list, err := a.Store.ListContacts(ctx, companyID, p.Supplier.ICO); err == nil {
 			for _, c := range list {
@@ -121,7 +130,5 @@ func (a *App) ExtractPurchase(ctx context.Context, companyID int64, fileName str
 	if warns == nil {
 		warns = []string{}
 	}
-	a.record(ctx, companyID, audit.CatAI, "extract", "purchase", 0,
-		fmt.Sprintf("Prečítaný doklad %s cez Claude API: %s %s, %s €", fileName, p.Supplier.Name, p.SupplierNumber, p.Summary.Total.Display()), nil, nil)
-	return PurchaseDraft{Purchase: p, Warnings: warns}, nil
+	return warns
 }
