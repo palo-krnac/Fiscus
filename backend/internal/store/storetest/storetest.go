@@ -332,7 +332,10 @@ func Run(t *testing.T, newStore Factory) {
 		d2 := cash.Document{Number: "VPD20260001", Kind: cash.Out, Date: invoice.MustDate("2026-10-05"), Amount: m.MustParse("12.30"),
 			Purpose: "Úhrada PF20260001", LinkKind: "purchase", LinkID: 9, LinkNumber: "PF20260001"}
 		d3 := cash.Document{Number: "PPD20250001", Kind: cash.In, Date: invoice.MustDate("2025-12-31"), Amount: m.MustParse("1"), Purpose: "x"}
-		for _, d := range []*cash.Document{&d1, &d2, &d3} {
+		d4 := cash.Document{Number: "VPD20260002", Kind: cash.Out, Date: invoice.MustDate("2026-10-06"), Amount: m.MustParse("24.60"),
+			Purpose: "Pohonné hmoty", Tax: &cash.Tax{Rows: []cash.VATRow{{Rate: 23, Gross: m.MustParse("24.60"), Base: m.MustParse("20.00"), VAT: m.MustParse("4.60")}},
+				SupplierICDPH: "SK2020372640", Expense: "other"}}
+		for _, d := range []*cash.Document{&d1, &d2, &d3, &d4} {
 			if err := s.SaveCashDocument(ctx, a.ID, d); err != nil || d.ID == 0 || d.CompanyID != a.ID {
 				t.Fatalf("uloženie: %v", err)
 			}
@@ -341,14 +344,17 @@ func Run(t *testing.T, newStore Factory) {
 		if err != nil || !reflect.DeepEqual(got, d2) {
 			t.Fatalf("načítanie:\n got %+v\nwant %+v", got, d2)
 		}
+		if got, err := s.GetCashDocument(ctx, a.ID, d4.ID); err != nil || !reflect.DeepEqual(got, d4) {
+			t.Fatalf("doklad s DPH:\n got %+v\nwant %+v", got, d4)
+		}
 		if _, err := s.GetCashDocument(ctx, b.ID, d2.ID); !errors.Is(err, store.ErrNotFound) {
 			t.Fatal("doklad inej firmy")
 		}
 		list, _ := s.ListCashDocuments(ctx, a.ID, 2026)
-		if len(list) != 2 || list[0].ID != d2.ID {
+		if len(list) != 3 || list[1].ID != d2.ID {
 			t.Fatalf("zoznam: %+v", list)
 		}
-		if all, _ := s.ListCashDocuments(ctx, a.ID, 0); len(all) != 3 {
+		if all, _ := s.ListCashDocuments(ctx, a.ID, 0); len(all) != 4 {
 			t.Fatal("všetky roky")
 		}
 		d1.Cancelled = true

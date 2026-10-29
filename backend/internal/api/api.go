@@ -232,6 +232,7 @@ func (s *Server) Handler() http.Handler {
 	need("GET /api/companies/{cid}/cash/candidates", auth.PermCashRead, s.cashCandidates)
 	need("GET /api/companies/{cid}/cash/{id}", auth.PermCashRead, s.getCash)
 	need("POST /api/companies/{cid}/cash", auth.PermCashWrite, s.createCash)
+	need("POST /api/companies/{cid}/cash/preview", auth.PermCashWrite, s.previewCash)
 	need("PUT /api/companies/{cid}/cash/{id}", auth.PermCashWrite, s.updateCash)
 	need("POST /api/companies/{cid}/cash/{id}/cancel", auth.PermCashWrite, s.cancelCash)
 

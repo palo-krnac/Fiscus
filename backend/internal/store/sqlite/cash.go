@@ -5,6 +5,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 
 	"github.com/palo-krnac/fiscus/backend/internal/cash"
@@ -13,16 +14,23 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 )
 
-const cashCols = "id, company_id, number, kind, date, amount, partner, purpose, note, link_kind, link_id, link_number, cancelled"
+const cashCols = "id, company_id, number, kind, date, amount, partner, purpose, note, link_kind, link_id, link_number, cancelled, tax_json"
 
 func scanCash(r interface{ Scan(...any) error }) (cash.Document, error) {
 	var d cash.Document
 	var date string
 	var amount int64
+	var tax string
 	err := r.Scan(&d.ID, &d.CompanyID, &d.Number, &d.Kind, &date, &amount, &d.Partner, &d.Purpose, &d.Note,
-		&d.LinkKind, &d.LinkID, &d.LinkNumber, &d.Cancelled)
+		&d.LinkKind, &d.LinkID, &d.LinkNumber, &d.Cancelled, &tax)
 	if err != nil {
 		return d, err
+	}
+	if tax != "" {
+		d.Tax = &cash.Tax{}
+		if err := json.Unmarshal([]byte(tax), d.Tax); err != nil {
+			return d, err
+		}
 	}
 	d.Amount = money.FromRaw(amount)
 	d.Date, err = invoice.ParseDate(date)
@@ -61,11 +69,19 @@ func (s *Store) GetCashDocument(ctx context.Context, companyID, id int64) (cash.
 }
 
 func (s *Store) SaveCashDocument(ctx context.Context, companyID int64, d *cash.Document) error {
+	tax := ""
+	if d.Tax != nil {
+		b, err := json.Marshal(d.Tax)
+		if err != nil {
+			return err
+		}
+		tax = string(b)
+	}
 	vals := []any{d.Number, string(d.Kind), d.Date.String(), d.Amount.Raw(), d.Partner, d.Purpose, d.Note,
-		d.LinkKind, d.LinkID, d.LinkNumber, d.Cancelled}
+		d.LinkKind, d.LinkID, d.LinkNumber, d.Cancelled, tax}
 	if d.ID == 0 {
 		res, err := s.db.ExecContext(ctx, `INSERT INTO cash_documents (company_id, number, kind, date, amount, partner,
-			purpose, note, link_kind, link_id, link_number, cancelled) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			purpose, note, link_kind, link_id, link_number, cancelled, tax_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			append([]any{companyID}, vals...)...)
 		if err != nil {
 			return err
@@ -75,7 +91,7 @@ func (s *Store) SaveCashDocument(ctx context.Context, companyID int64, d *cash.D
 		}
 	} else {
 		res, err := s.db.ExecContext(ctx, `UPDATE cash_documents SET number = ?, kind = ?, date = ?, amount = ?, partner = ?,
-			purpose = ?, note = ?, link_kind = ?, link_id = ?, link_number = ?, cancelled = ? WHERE id = ? AND company_id = ?`,
+			purpose = ?, note = ?, link_kind = ?, link_id = ?, link_number = ?, cancelled = ?, tax_json = ? WHERE id = ? AND company_id = ?`,
 			append(vals, d.ID, companyID)...)
 		if err != nil {
 			return err

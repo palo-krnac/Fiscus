@@ -145,6 +145,7 @@ export const api = {
   cashBook: (cid, year) => request('GET', `/api/companies/${cid}/cash` + query({ year })),
   cash: (cid, id) => request('GET', `/api/companies/${cid}/cash/${id}`),
   cashCandidates: (cid, kind) => request('GET', `/api/companies/${cid}/cash/candidates` + query({ kind })),
+  previewCash: (cid, d) => request('POST', `/api/companies/${cid}/cash/preview`, d),
   createCash: (cid, d) => request('POST', `/api/companies/${cid}/cash`, d),
   updateCash: (cid, id, d) => request('PUT', `/api/companies/${cid}/cash/${id}`, d),
   cancelCash: (cid, id) => request('POST', `/api/companies/${cid}/cash/${id}/cancel`),

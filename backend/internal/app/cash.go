@@ -150,14 +150,51 @@ func (a *App) checkLink(ctx context.Context, companyID int64, d *cash.Document) 
 	return nil
 }
 
+// CashPreview je doklad po prepočte DPH s chybami (pred vystavením).
+type CashPreview struct {
+	cash.Document
+	Errors []invoice.FieldError `json:"errors"`
+}
+
+// PreviewCash prepočíta DPH dokladu bez uloženia.
+func (a *App) PreviewCash(ctx context.Context, companyID int64, d cash.Document) (CashPreview, error) {
+	if err := a.Require(ctx, companyID, auth.PermCashWrite); err != nil {
+		return CashPreview{}, err
+	}
+	out := CashPreview{Errors: []invoice.FieldError{}}
+	err := a.prepareCash(ctx, companyID, &d)
+	out.Document = d
+	if ve, ok := err.(*invoice.ValidationError); ok && ve != nil {
+		out.Errors = ve.Fields
+	} else if err != nil {
+		return out, err
+	}
+	return out, nil
+}
+
+// prepareCash upraví texty, prepočíta DPH a overí doklad.
+func (a *App) prepareCash(ctx context.Context, companyID int64, d *cash.Document) error {
+	d.Partner, d.Purpose, d.Note = strings.TrimSpace(d.Partner), strings.TrimSpace(d.Purpose), strings.TrimSpace(d.Note)
+	d.NormalizeTax()
+	if d.Tax != nil {
+		company, err := a.Store.GetCompany(ctx, companyID)
+		if err != nil {
+			return err
+		}
+		if !company.VATPayer {
+			return &invoice.ValidationError{Fields: []invoice.FieldError{{Field: "tax", Message: "DPH na pokladničnom doklade uvádza iba platiteľ DPH"}}}
+		}
+	}
+	return d.Validate()
+}
+
 // CreateCash vystaví pokladničný doklad (a prípadne uhradí faktúru).
 func (a *App) CreateCash(ctx context.Context, companyID int64, d cash.Document) (cash.Document, error) {
 	if err := a.Require(ctx, companyID, auth.PermCashWrite); err != nil {
 		return d, err
 	}
 	d.ID, d.Cancelled = 0, false
-	d.Partner, d.Purpose, d.Note = strings.TrimSpace(d.Partner), strings.TrimSpace(d.Purpose), strings.TrimSpace(d.Note)
-	if err := d.Validate(); err != nil {
+	if err := a.prepareCash(ctx, companyID, &d); err != nil {
 		return d, err
 	}
 	if err := a.checkLink(ctx, companyID, &d); err != nil {
@@ -194,8 +231,13 @@ func (a *App) CreateCash(ctx context.Context, companyID int64, d cash.Document) 
 	if d.Kind == cash.Out {
 		what = "Výdavkový"
 	}
+	withVAT := ""
+	if d.Tax != nil {
+		_, tax, _ := d.Tax.Totals()
+		withVAT = fmt.Sprintf(" (DPH %s €)", tax.Display())
+	}
 	a.record(ctx, companyID, audit.CatCash, "create", "cash", d.ID,
-		fmt.Sprintf("%s pokladničný doklad %s, %s €: %s", what, d.Number, d.Amount.Display(), d.Purpose), nil, d)
+		fmt.Sprintf("%s pokladničný doklad %s, %s €%s: %s", what, d.Number, d.Amount.Display(), withVAT, d.Purpose), nil, d)
 
 	switch d.LinkKind {
 	case "invoice":
