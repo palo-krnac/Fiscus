@@ -41,7 +41,7 @@ async function submit() {
           <rect x="18" y="20.5" width="5" height="3.5" fill="#d9a441" />
         </svg>
         <div>
-          <h1>Fiskus</h1>
+          <h1>Fiškus</h1>
           <p>Prihlásenie</p>
         </div>
       </div>

@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -42,6 +43,7 @@ func main() {
 	backupDir := flag.String("backup-dir", "", "priečinok na automatické zálohy (heslo v FISKUS_BACKUP_PASSWORD)")
 	demoData := flag.Bool("demo", false, "spustiť s ukážkovými dátami v pamäti")
 	rpoURL := flag.String("rpo-url", registry.DefaultBaseURL, "adresa API Registra právnických osôb; prázdne = vypnuté")
+	licensePath := flag.String("license", "", "súbor s licenčným kľúčom (server, viac firiem); predvolene fiskus.license vedľa databázy")
 	adminEmail := flag.String("admin-email", "", "e-mail prvého správcu (server); heslo v FISKUS_ADMIN_PASSWORD")
 	flag.Parse()
 
@@ -70,6 +72,9 @@ func main() {
 	defer st.Close()
 
 	a := app.New(st, caps)
+	if caps.Mode == edition.Server {
+		setupLicense(a, *licensePath, *dbPath)
+	}
 	if *demoData {
 		c, err := demo.Seed(context.Background(), a)
 		if err != nil {
@@ -123,4 +128,34 @@ func main() {
 	defer cancel()
 	_ = srv.Shutdown(ctx)
 	cleanup() // pri SQLite: záverečná záloha
+}
+
+// setupLicense načíta licenciu (súbor alebo FISKUS_LICENSE) a nastaví, kam sa uloží nová.
+func setupLicense(a *app.App, path, dbPath string) {
+	if path == "" && dbPath != "" {
+		path = filepath.Join(filepath.Dir(dbPath), "fiskus.license")
+	}
+	if path != "" {
+		a.SaveLicense = func(key string) error { return os.WriteFile(path, []byte(key+"\n"), 0o600) }
+	}
+	key := os.Getenv("FISKUS_LICENSE")
+	if key == "" && path != "" {
+		if b, err := os.ReadFile(path); err == nil {
+			key = string(b)
+		}
+	}
+	if key == "" {
+		log.Print("licencia: bezplatná verzia pre jednu firmu")
+		return
+	}
+	if err := a.LoadLicense(key); err != nil {
+		log.Printf("licencia: %v — beží bezplatná verzia pre jednu firmu", err)
+		return
+	}
+	if st := a.Capabilities().License; st != nil {
+		log.Printf("licencia: %s, platná do %s", st.Customer, st.Expires.Format("2. 1. 2006"))
+		if st.Warning != "" {
+			log.Printf("licencia: %s", st.Warning)
+		}
+	}
 }

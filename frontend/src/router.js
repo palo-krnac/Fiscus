@@ -9,6 +9,7 @@ import PurchaseList from './views/PurchaseList.vue'
 import PurchaseEdit from './views/PurchaseEdit.vue'
 import Users from './views/Users.vue'
 import AuditLog from './views/AuditLog.vue'
+import Companies from './views/Companies.vue'
 
 // Moduly z etapového plánu — zatiaľ prázdne stránky s popisom.
 export const modules = [
@@ -55,6 +56,7 @@ export const modules = [
       { path: '/audit', label: 'Audit', icon: 'pi-shield', ready: true, perm: 'audit.read' },
       { path: '/zalohy', label: 'Zálohy', icon: 'pi-history', stage: 1, perm: 'settings.write' },
       { path: '/nastavenia', label: 'Nastavenia', icon: 'pi-cog', ready: true, perm: 'settings.write' },
+      { path: '/firmy', label: 'Firmy a licencia', icon: 'pi-building', ready: true, superAdmin: true, serverOnly: true },
     ],
   },
 ]
@@ -84,6 +86,7 @@ export const router = createRouter({
     { path: '/adresar/:id(\\d+|novy)', component: Contacts, props: true, meta: { title: 'Adresár', perm: 'contacts.read' } },
     { path: '/nastavenia', component: Settings, meta: { title: 'Nastavenia', perm: 'settings.write' } },
     { path: '/pouzivatelia', component: Users, meta: { title: 'Používatelia', perm: 'users.manage' } },
+    { path: '/firmy', component: Companies, meta: { title: 'Firmy a licencia', superAdmin: true, noCompany: true } },
     { path: '/audit', component: AuditLog, meta: { title: 'Audit', perm: 'audit.read' } },
     ...placeholderRoutes,
     { path: '/:pathMatch(.*)*', redirect: '/faktury' },
@@ -91,5 +94,5 @@ export const router = createRouter({
 })
 
 router.afterEach((to) => {
-  document.title = to.meta.title ? `${to.meta.title} – Fiskus` : 'Fiskus'
+  document.title = to.meta.title ? `${to.meta.title} – Fiškus` : 'Fiškus'
 })

@@ -4,14 +4,18 @@ package app
 
 import (
 	"context"
+	"crypto/ed25519"
 	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	"github.com/palo-krnac/fiscus/backend/internal/audit"
 	"github.com/palo-krnac/fiscus/backend/internal/auth"
 	"github.com/palo-krnac/fiscus/backend/internal/edition"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
+	"github.com/palo-krnac/fiscus/backend/internal/license"
 	"github.com/palo-krnac/fiscus/backend/internal/party"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 )
@@ -22,8 +26,15 @@ var ErrCompanyLimit = errors.New("desktopová verzia podporuje iba jednu firmu �
 // App je aplikačná služba.
 type App struct {
 	Store store.Store
-	Caps  edition.Capabilities
-	Today func() invoice.Date // dá sa podvrhnúť v testoch
+	Caps  edition.Capabilities // režim bez licencie; aktuálne schopnosti vracia Capabilities()
+	Today func() invoice.Date  // dá sa podvrhnúť v testoch
+	Now   func() time.Time     // čas pre licenciu; nil = time.Now
+
+	// LicenseKeys sú verejné kľúče na overenie licencie; nil = license.TrustedKeys.
+	LicenseKeys []ed25519.PublicKey
+	// SaveLicense trvalo uloží licenčný kľúč (nastaví main); nil = iba v pamäti.
+	SaveLicense func(key string) error
+	lic         atomic.Pointer[license.License]
 }
 
 // New vytvorí službu.
@@ -37,8 +48,8 @@ func (a *App) CreateCompany(ctx context.Context, c store.Company) (store.Company
 	if err != nil {
 		return store.Company{}, err
 	}
-	if !a.Caps.CanAddCompany(n) {
-		return store.Company{}, ErrCompanyLimit
+	if !a.Capabilities().CanAddCompany(n) {
+		return store.Company{}, a.companyLimitError()
 	}
 	normalizeCompany(&c)
 	if err := validateCompany(c); err != nil {

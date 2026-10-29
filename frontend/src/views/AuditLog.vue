@@ -119,7 +119,7 @@ function reset() {
     </header>
 
     <div class="filters">
-      <Select v-if="superAdmin && session.caps.multiCompany" v-model="filter.scope" :options="scopes" option-label="label" option-value="value" size="small" class="scope" aria-label="Firma" />
+      <Select v-if="superAdmin && session.caps.mode === 'server'" v-model="filter.scope" :options="scopes" option-label="label" option-value="value" size="small" class="scope" aria-label="Firma" />
       <Select v-model="filter.category" :options="categories" option-label="label" option-value="code" placeholder="Všetky kategórie" show-clear size="small" class="cat" aria-label="Kategória" />
       <label class="date"><span>od</span><InputText v-model="filter.from" type="date" size="small" aria-label="Od dátumu" /></label>
       <label class="date"><span>do</span><InputText v-model="filter.to" type="date" size="small" aria-label="Do dátumu" /></label>

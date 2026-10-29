@@ -13,6 +13,8 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/audit"
 	"github.com/palo-krnac/fiscus/backend/internal/auth"
 	"github.com/palo-krnac/fiscus/backend/internal/edition"
+	"github.com/palo-krnac/fiscus/backend/internal/invoice"
+	"github.com/palo-krnac/fiscus/backend/internal/license"
 )
 
 const sessionCookie = "fiskus_session"
@@ -368,4 +370,34 @@ func (s *Server) verifyAudit(w http.ResponseWriter, r *http.Request) {
 		res["error"] = err.Error()
 	}
 	writeJSON(w, http.StatusOK, res)
+}
+
+// ---- licencia ----
+
+func (s *Server) getLicense(w http.ResponseWriter, r *http.Request) {
+	if !auth.ActorFrom(r.Context()).SuperAdmin {
+		fail(w, app.ErrForbidden)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.App.Capabilities())
+}
+
+func (s *Server) setLicense(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Key string `json:"key"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	c, err := s.App.SetLicense(r.Context(), body.Key)
+	switch {
+	case errors.Is(err, license.ErrFormat), errors.Is(err, license.ErrSignature), errors.Is(err, license.ErrExpired),
+		errors.Is(err, app.ErrLicenseDesktop):
+		writeErr(w, http.StatusUnprocessableEntity, err.Error(), []invoice.FieldError{{Field: "key", Message: err.Error()}})
+		return
+	case err != nil:
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, c)
 }

@@ -33,7 +33,7 @@ export async function request(method, path, body, fetchImpl = globalThis.fetch) 
   try {
     res = await fetchImpl(path, init)
   } catch {
-    throw new ApiError(0, 'Server neodpovedá. Skontrolujte, či program Fiskus beží.')
+    throw new ApiError(0, 'Server neodpovedá. Skontrolujte, či program Fiškus beží.')
   }
   const text = await res.text()
   let data = null
@@ -66,6 +66,8 @@ export function query(params = {}) {
 export const api = {
   capabilities: () => request('GET', '/api/capabilities'),
   me: () => request('GET', '/api/me'),
+  license: () => request('GET', '/api/license'),
+  setLicense: (key) => request('POST', '/api/license', { key }),
   login: (email, password) => request('POST', '/api/auth/login', { email, password }),
   logout: () => request('POST', '/api/auth/logout'),
   changePassword: (current, password) => request('POST', '/api/auth/password', { current, password }),
