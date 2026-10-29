@@ -22,3 +22,14 @@ func TestEU(t *testing.T) {
 		}
 	}
 }
+
+func TestCountryName(t *testing.T) {
+	tests := []struct{ in, want string }{
+		{"SK", "Slovensko"}, {"de", "Nemecko"}, {" cz ", "Česko"}, {"XX", "XX"}, {"", ""},
+	}
+	for _, tt := range tests {
+		if got := CountryName(tt.in); got != tt.want {
+			t.Errorf("CountryName(%q) = %q, chcem %q", tt.in, got, tt.want)
+		}
+	}
+}

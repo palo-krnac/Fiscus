@@ -28,6 +28,9 @@ onMounted(async () => {
 })
 const addressLines = (p) => [p.street, [p.zip, p.city].filter(Boolean).join(' ')].filter(Boolean)
 const print = () => window.print()
+const download = () => {
+  window.location.href = api.pdfURL(session.companyId, 'reminders', props.id)
+}
 </script>
 
 <template>
@@ -35,8 +38,8 @@ const print = () => window.print()
     <nav class="toolbar">
       <Button icon="pi pi-arrow-left" label="Späť" text size="small" @click="router.push('/upomienky')" />
       <div class="spacer" />
-      <span class="tip">V okne tlače zvoľte „Uložiť ako PDF“</span>
-      <Button icon="pi pi-print" label="Tlačiť / PDF" size="small" :disabled="!r" @click="print" />
+      <Button icon="pi pi-download" label="Stiahnuť PDF" severity="secondary" outlined size="small" :disabled="!r" @click="download" />
+      <Button icon="pi pi-print" label="Tlačiť" size="small" :disabled="!r" @click="print" />
     </nav>
     <p v-if="error" class="error">{{ error }}</p>
 
@@ -148,10 +151,6 @@ const print = () => window.print()
 }
 .spacer {
   flex: 1;
-}
-.tip {
-  font-size: var(--fs-sm);
-  color: var(--ink-faint);
 }
 .error {
   text-align: center;
@@ -343,9 +342,6 @@ td small {
 @media (max-width: 860px) {
   .print-root {
     overflow-x: auto;
-  }
-  .tip {
-    display: none;
   }
   .sheet {
     margin: 12px;
