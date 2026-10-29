@@ -284,3 +284,26 @@ func TestCodesAPI(t *testing.T) {
 		t.Fatalf("%+v", codes)
 	}
 }
+
+func TestCreditNoteAPI(t *testing.T) {
+	e := setup(t, edition.Desktop)
+	base := fmt.Sprintf("/api/companies/%d/invoices", e.cid)
+	var d invoice.Invoice
+	e.do("POST", base, draftJSON, 201, &d)
+	e.do("POST", fmt.Sprintf("%s/%d/credit-note", base, d.ID), nil, 422, nil) // koncept
+	e.do("POST", fmt.Sprintf("%s/%d/issue", base, d.ID), nil, 200, nil)
+	var cn invoice.Invoice
+	e.do("POST", fmt.Sprintf("%s/%d/credit-note", base, d.ID), nil, 201, &cn)
+	if cn.Kind != invoice.KindCreditNote || cn.Correction == nil || cn.Summary.Total.String() != "-559.65" {
+		t.Fatalf("%+v", cn)
+	}
+	e.do("POST", fmt.Sprintf("%s/%d/issue", base, cn.ID), nil, 422, nil) // chýba dôvod
+	cn.Correction.Reason = "Vrátenie tovaru"
+	e.do("PUT", fmt.Sprintf("%s/%d", base, cn.ID), cn, 200, nil)
+	var issued invoice.Invoice
+	e.do("POST", fmt.Sprintf("%s/%d/issue", base, cn.ID), nil, 200, &issued)
+	if issued.Number != "DB20260001" {
+		t.Fatal(issued.Number)
+	}
+	e.do("POST", base, `{"kind":"credit_note","customer":{"name":"x"}}`, 422, nil)
+}

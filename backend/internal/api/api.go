@@ -47,6 +47,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/companies/{cid}/invoices/{id}/issue", s.issue)
 	mux.HandleFunc("POST /api/companies/{cid}/invoices/{id}/pay", s.pay)
 	mux.HandleFunc("POST /api/companies/{cid}/invoices/{id}/cancel", s.cancel)
+	mux.HandleFunc("POST /api/companies/{cid}/invoices/{id}/credit-note", s.creditNote)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "neznáma adresa API", nil)
 	})

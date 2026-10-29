@@ -21,7 +21,7 @@ const company = computed(() => session.company ?? {})
 const nonVat = computed(() => !!inv.value?.nonVatPayer)
 const docTitle = computed(() => {
   switch (inv.value?.kind) {
-    case 'credit_note': return 'Dobropis'
+    case 'credit_note': return nonVat.value ? 'Dobropis – opravná faktúra' : 'Dobropis – opravný daňový doklad'
     case 'proforma': return 'Zálohová faktúra'
   }
   return nonVat.value ? 'Faktúra' : 'Faktúra – daňový doklad'
@@ -73,6 +73,13 @@ const ids = (p) =>
           <div class="due"><dt>Dátum splatnosti</dt><dd>{{ formatDate(inv.dueDate) }}</dd></div>
         </dl>
       </header>
+
+      <section v-if="inv.correction" class="correction">
+        <div><span>Opravuje faktúru</span><strong>{{ inv.correction.originalNumber }}</strong></div>
+        <div><span>Zo dňa</span><strong>{{ formatDate(inv.correction.originalIssueDate) }}</strong></div>
+        <div><span>Dátum dodania pôvodného plnenia</span><strong>{{ formatDate(inv.correction.originalDeliveryDate) }}</strong></div>
+        <div class="why"><span>Dôvod opravy</span><strong>{{ inv.correction.reason }}</strong></div>
+      </section>
 
       <section class="parties">
         <div class="party">
@@ -156,7 +163,7 @@ const ids = (p) =>
             </tfoot>
           </table>
           <div class="payable">
-            <span>K úhrade</span>
+            <span>{{ inv.kind === 'credit_note' ? 'Suma dobropisu' : 'K úhrade' }}</span>
             <strong>{{ formatMoney(inv.summary.total, inv.currency) }}</strong>
           </div>
         </div>
@@ -274,6 +281,23 @@ const ids = (p) =>
   color: #1f3a5c;
 }
 
+.correction {
+  display: grid;
+  grid-template-columns: auto auto auto 1fr;
+  gap: 0 8mm;
+  margin-top: 5mm;
+  padding: 2.5mm 3mm;
+  background: #f6f7f9;
+  border-left: 2pt solid #1f3a5c;
+}
+.correction div {
+  display: flex;
+  flex-direction: column;
+}
+.correction span {
+  font-size: 8pt;
+  color: #4e5866;
+}
 .parties {
   display: grid;
   grid-template-columns: 1fr 1fr;

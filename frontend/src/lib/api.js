@@ -75,4 +75,5 @@ export const api = {
   issue: (cid, id) => request('POST', `${inv(cid)}/${id}/issue`),
   pay: (cid, id, date) => request('POST', `${inv(cid)}/${id}/pay`, date ? { date } : undefined),
   cancel: (cid, id) => request('POST', `${inv(cid)}/${id}/cancel`),
+  creditNote: (cid, id) => request('POST', `${inv(cid)}/${id}/credit-note`),
 }

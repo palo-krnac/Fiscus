@@ -106,9 +106,13 @@ const columnDefs = [
   {
     field: 'number',
     headerName: 'Číslo',
-    width: 118,
     minWidth: 112,
-    valueFormatter: (p) => p.value || 'koncept',
+    cellRenderer: (p) => {
+      if (p.data._totals) return p.value
+      const num = p.value || 'koncept'
+      return p.data.kind === 'credit_note' ? `${num}<span class="kind-badge">dobropis</span>` : num
+    },
+    width: 150,
     cellClass: (p) => (p.data._totals ? '' : p.value ? 'cell-number' : 'cell-draft'),
   },
   { colId: 'customer', headerName: 'Odberateľ', valueGetter: (p) => p.data.customer.name, flex: 1, minWidth: 180 },
@@ -341,6 +345,16 @@ onBeforeUnmount(() => {
 .grid :deep(.cell-number) {
   font-weight: 600;
   color: var(--blue-deep);
+}
+.grid :deep(.kind-badge) {
+  margin-left: 6px;
+  padding: 0 5px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  font-style: normal;
+  color: var(--tone-draft);
+  border: 1px solid currentColor;
+  border-radius: 3px;
 }
 .grid :deep(.cell-draft) {
   color: var(--tone-draft);

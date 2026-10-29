@@ -22,7 +22,8 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [ ] DIČ a IČ DPH z registrov finančnej správy (vyžaduje API kľúč)
 - [x] Tlač a PDF faktúry (A4) s QR kódom **PAY by square**
 - [ ] Odoslanie faktúry e-mailom (PDF na serveri + SMTP)
-- [ ] Dobropis, zálohová faktúra, cenová ponuka, pravidelná fakturácia
+- [x] Dobropis (opravná faktúra) k vystavenej faktúre: celý aj čiastočný, kontrola limitu, sadzby k pôvodnému dodaniu
+- [ ] Zálohová faktúra a daňový doklad k prijatej platbe, cenová ponuka, pravidelná fakturácia
 - [ ] Prijaté faktúry (vrátane AI vyťaženia z PDF: AI iba navrhuje, účtuje pevne naprogramovaný automat)
 - [ ] Banka: import výpisov (camt.053 / CSV), párovanie platieb
 - [ ] Pokladňa

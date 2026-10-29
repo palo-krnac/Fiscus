@@ -266,8 +266,19 @@ func Run(t *testing.T, newStore Factory) {
 		inv.ContactID = 42
 		inv.NonVATPayer = true
 		inv.PaymentMethod = invoice.PayCash
+		inv.Kind = invoice.KindCreditNote
+		inv.Correction = &invoice.Correction{OriginalID: 5, OriginalNumber: "FA20260005",
+			OriginalIssueDate: invoice.MustDate("2026-09-01"), OriginalDeliveryDate: invoice.MustDate("2026-08-31"), Reason: "Vrátenie"}
 		_ = s.SaveInvoice(ctx, c.ID, inv)
 		got, _ := s.GetInvoice(ctx, c.ID, inv.ID)
+		if got.Correction == nil || *got.Correction != *inv.Correction || got.Kind != invoice.KindCreditNote {
+			t.Fatalf("údaje dobropisu: %+v", got.Correction)
+		}
+		plain := draft("Bez opravy", "2026-10-01")
+		_ = s.SaveInvoice(ctx, c.ID, plain)
+		if p, _ := s.GetInvoice(ctx, c.ID, plain.ID); p.Correction != nil {
+			t.Fatal("bežná faktúra nemá mať údaje dobropisu")
+		}
 		if got.ContactID != 42 || !got.NonVATPayer || got.PaymentMethod != invoice.PayCash {
 			t.Fatalf("načítané: contact=%d nonVat=%v", got.ContactID, got.NonVATPayer)
 		}
