@@ -255,7 +255,7 @@ func fail(w http.ResponseWriter, err error) {
 		writeErr(w, http.StatusUnprocessableEntity, "Doklad obsahuje chyby", ve.Fields)
 	case errors.Is(err, store.ErrNotFound):
 		writeErr(w, http.StatusNotFound, "Záznam neexistuje", nil)
-	case errors.Is(err, invoice.ErrLocked), errors.Is(err, invoice.ErrBadTransition), errors.Is(err, app.ErrReceiptIssued):
+	case errors.Is(err, invoice.ErrLocked), errors.Is(err, invoice.ErrBadTransition), errors.Is(err, app.ErrReceiptIssued), errors.Is(err, app.ErrAmend):
 		writeErr(w, http.StatusConflict, err.Error(), nil)
 	case errors.Is(err, invoice.ErrBadPayment), errors.Is(err, invoice.ErrPartialAdvance):
 		writeErr(w, http.StatusUnprocessableEntity, err.Error(), nil)
@@ -404,7 +404,16 @@ func (s *Server) getInvoice(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, inv)
+	// vystavená faktúra sa dá upravovať, kým nie je uhradená (a priznaná)
+	lock := ""
+	if inv.Status != invoice.StatusDraft {
+		lock = s.App.AmendBlock(r.Context(), cid, inv)
+	}
+	writeJSON(w, http.StatusOK, struct {
+		invoice.Invoice
+		Amendable  bool   `json:"amendable"`
+		LockReason string `json:"lockReason,omitempty"`
+	}{inv, inv.Status != invoice.StatusDraft && lock == "", lock})
 }
 
 func (s *Server) saveInvoice(w http.ResponseWriter, r *http.Request) {
