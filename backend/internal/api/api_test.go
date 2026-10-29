@@ -307,3 +307,33 @@ func TestCreditNoteAPI(t *testing.T) {
 	}
 	e.do("POST", base, `{"kind":"credit_note","customer":{"name":"x"}}`, 422, nil)
 }
+
+func TestPurchasesAPI(t *testing.T) {
+	e := setup(t, edition.Desktop)
+	base := fmt.Sprintf("/api/companies/%d/purchases", e.cid)
+	body := `{"supplierNumber":"2026/77","supplier":{"name":"Orange Slovensko, a.s.","icdph":"SK2020310578"},
+		"issueDate":"2026-10-01","receivedDate":"2026-10-03","dueDate":"2026-10-15",
+		"rates":[{"vatRate":23,"base":"40.65","vat":"9.35"}]}`
+	var prev app.PurchasePreview
+	e.do("POST", base+"/preview", body, 200, &prev)
+	if prev.Summary.Total.String() != "50.00" || len(prev.Errors) != 0 {
+		t.Fatalf("náhľad: %+v %+v", prev.Summary, prev.Errors)
+	}
+	var saved app.PurchasePreview
+	e.do("POST", base, body, 201, &saved)
+	if saved.Number != "PF20260001" {
+		t.Fatal(saved.Number)
+	}
+	e.do("POST", base, body, 422, nil) // duplicita
+	var rows []purchaseRow
+	e.do("GET", base+"?year=2026", nil, 200, &rows)
+	if len(rows) != 1 || !rows[0].Overdue || rows[0].DaysOverdue != 14 {
+		t.Fatalf("%+v", rows)
+	}
+	e.do("POST", fmt.Sprintf("%s/%d/pay", base, saved.ID), nil, 200, nil)
+	e.do("PUT", fmt.Sprintf("%s/%d", base, saved.ID), body, 409, nil)
+	e.do("DELETE", fmt.Sprintf("%s/%d", base, saved.ID), nil, 409, nil)
+	e.do("POST", fmt.Sprintf("%s/%d/unpay", base, saved.ID), nil, 200, nil)
+	e.do("DELETE", fmt.Sprintf("%s/%d", base, saved.ID), nil, 204, nil)
+	e.do("GET", fmt.Sprintf("%s/%d", base, saved.ID), nil, 404, nil)
+}

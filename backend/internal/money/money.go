@@ -157,6 +157,27 @@ func (d Dec) String() string {
 	return fmt.Sprintf("%s%d.%s", sign, whole, fs)
 }
 
+// Display vráti sumu v slovenskom zápise s 2 desatinnými miestami: "1 234,50".
+func (d Dec) Display() string {
+	s := d.RoundCents().String()
+	neg := strings.HasPrefix(s, "-")
+	s = strings.TrimPrefix(s, "-")
+	whole, frac, _ := strings.Cut(s, ".")
+	frac = (frac + "00")[:2]
+	var b strings.Builder
+	for i, r := range whole {
+		if i > 0 && (len(whole)-i)%3 == 0 {
+			b.WriteRune('\u00a0')
+		}
+		b.WriteRune(r)
+	}
+	out := b.String() + "," + frac
+	if neg {
+		out = "-" + out
+	}
+	return out
+}
+
 // MarshalJSON zapisuje číslo ako reťazec, aby JavaScript nestratil presnosť.
 func (d Dec) MarshalJSON() ([]byte, error) { return []byte(`"` + d.String() + `"`), nil }
 

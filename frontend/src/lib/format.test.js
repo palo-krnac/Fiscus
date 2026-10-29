@@ -60,6 +60,13 @@ it('množstvo bez zbytočných núl', () => {
   expect(formatQuantity('2.5')).toBe('2,5')
 })
 
+it('stav prijatej faktúry', async () => {
+  const { purchaseStatusOf } = await import('./format.js')
+  expect(purchaseStatusOf({ status: 'booked' }).label).toBe('Neuhradená')
+  expect(purchaseStatusOf({ status: 'paid' }).tone).toBe('paid')
+  expect(purchaseStatusOf({ status: 'booked', overdue: true, daysOverdue: 2 }).label).toBe('Po splatnosti 2 dni')
+})
+
 describe('statusOf', () => {
   it('omeškanie má prednosť a skloňuje dni', () => {
     expect(statusOf({ status: 'issued', overdue: true, daysOverdue: 1 }).label).toBe('Po splatnosti 1 deň')

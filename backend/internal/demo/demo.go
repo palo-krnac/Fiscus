@@ -8,6 +8,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/app"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	m "github.com/palo-krnac/fiscus/backend/internal/money"
+	"github.com/palo-krnac/fiscus/backend/internal/purchase"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 	"github.com/palo-krnac/fiscus/backend/internal/vat"
 )
@@ -19,6 +20,14 @@ func ico(seven string) string {
 		sum += int(seven[i]-'0') * (8 - i)
 	}
 	return fmt.Sprintf("%s%d", seven, (11-sum%11)%10)
+}
+
+// icdph vráti najbližšie platné slovenské IČ DPH (10 číslic deliteľných 11) od n.
+func icdph(n int) string {
+	for n%11 != 0 {
+		n++
+	}
+	return fmt.Sprintf("SK%d", n)
 }
 
 type customer struct{ name, city, ico string }
@@ -107,6 +116,41 @@ func Seed(ctx context.Context, a *app.App) (store.Company, error) {
 		}
 		if err != nil {
 			return c, err
+		}
+	}
+	// prijaté faktúry
+	suppliers := []struct {
+		name, ico, icdph, what string
+		base                   string
+		rate                   vat.Rate
+		day                    int
+	}{
+		{"Čerpacia stanica Hron s.r.o.", ico("4855101"), icdph(2120455101), "Pohonné hmoty", "81.30", vat.Rate23, 3},
+		{"TeleNet Slovensko s.r.o.", ico("4855202"), icdph(2120455202), "Mobilné služby", "40.65", vat.Rate23, 8},
+		{"Elektro veľkoobchod BB s.r.o.", ico("4855303"), icdph(2120455303), "Elektroinštalačný materiál", "612.40", vat.Rate23, 12},
+		{"Prenájom priestorov Ján Malý", ico("4855404"), "", "Nájom kancelárie (neplatiteľ DPH)", "350.00", vat.Rate0, 20},
+		{"Energie Stred s.r.o.", ico("4855505"), icdph(2120455505), "Elektrina", "54.10", vat.Rate23, 33},
+		{"Kníhkupectvo pri fontáne s.r.o.", ico("4855606"), icdph(2120455606), "Odborná literatúra", "38.00", vat.Rate5, 45},
+	}
+	for i, sp := range suppliers {
+		received := today.AddDays(-sp.day)
+		pu := purchase.Purchase{
+			SupplierNumber: fmt.Sprintf("%d%05d", received.Year(), 1200+i*37),
+			Supplier:       invoice.Party{Name: sp.name, ICO: sp.ico, ICDPH: sp.icdph, Country: "SK"},
+			IssueDate:      received.AddDays(-2),
+			ReceivedDate:   received,
+			DueDate:        received.AddDays(12),
+			Description:    sp.what,
+			Rates:          []purchase.RateRow{{Rate: sp.rate, Base: m.MustParse(sp.base)}},
+		}
+		saved, _, err := a.SavePurchase(ctx, c.ID, pu)
+		if err != nil {
+			return c, fmt.Errorf("demo nákup %s: %w", sp.name, err)
+		}
+		if sp.day > 15 {
+			if _, err := a.MarkPurchasePaid(ctx, c.ID, saved.ID, received.AddDays(5)); err != nil {
+				return c, err
+			}
 		}
 	}
 	return c, nil

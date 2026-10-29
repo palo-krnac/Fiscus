@@ -24,7 +24,8 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [ ] Odoslanie faktúry e-mailom (PDF na serveri + SMTP)
 - [x] Dobropis (opravná faktúra) k vystavenej faktúre: celý aj čiastočný, kontrola limitu, sadzby k pôvodnému dodaniu
 - [ ] Zálohová faktúra a daňový doklad k prijatej platbe, cenová ponuka, pravidelná fakturácia
-- [ ] Prijaté faktúry (vrátane AI vyťaženia z PDF: AI iba navrhuje, účtuje pevne naprogramovaný automat)
+- [x] Prijaté faktúry: evidencia z rekapitulácie DPH dodávateľa, odpočet / bez odpočtu, prenesenie, kontrola duplicít, úhrady
+- [ ] AI vyťaženie prijatých faktúr z PDF (AI iba navrhuje, účtuje pevne naprogramovaný automat)
 - [ ] Banka: import výpisov (camt.053 / CSV), párovanie platieb
 - [ ] Pokladňa
 - [ ] **Priznanie DPH, kontrolný výkaz, súhrnný výkaz**: XML pre eDane / finančnú správu
@@ -32,6 +33,13 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [ ] Obrazovka záloh a obnovy, nastavenie priečinka a hesla
 - [ ] Inštalačky: Inno Setup (Windows), DMG (macOS), AppImage (Linux)
 - [ ] E-faktúra (UBL / Peppol): pripraviť sa na povinnú e-fakturáciu na Slovensku (termín overiť)
+
+## Používatelia, práva a audit (pre účtovné kancelárie a poskytovateľov služieb)
+- [ ] Používatelia a prihlasovanie v serverovom režime (heslo, neskôr 2FA); desktop voliteľne PIN
+- [ ] Roly pre každú firmu zvlášť: správca, účtovník, fakturant, zákazník (klient kancelárie), len čítanie
+- [ ] Práva kontroluje backend pri každej požiadavke
+- [ ] Audit všetkých zmien (kto, kedy, čo, pred/po) vrátane volaní cez MCP a API; filter podľa firmy a kategórie (doklady, nákup, nastavenia, používatelia, zálohy, prístupy)
+- [ ] MCP server pre AI asistentov: čítanie dát a kontrolované akcie v rámci práv používateľa, každé volanie auditované
 
 ## Etapa 2 — účtovníctvo
 - [ ] Jednoduché účtovníctvo (peňažný denník)

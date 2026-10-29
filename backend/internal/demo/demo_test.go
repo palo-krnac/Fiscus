@@ -22,6 +22,9 @@ func TestSeed(t *testing.T) {
 	if len(list) != 40 {
 		t.Fatalf("%d faktúr", len(list))
 	}
+	if p, _ := a.Store.ListPurchases(context.Background(), c.ID, store.PurchaseFilter{}); len(p) != 6 {
+		t.Fatalf("%d prijatých faktúr", len(p))
+	}
 	for _, cu := range customers {
 		if !party.ValidICO(cu.ico) {
 			t.Errorf("neplatné demo IČO %s", cu.ico)

@@ -67,6 +67,12 @@ export const STATUS = {
   cancelled: { label: 'Stornovaná', tone: 'cancelled' },
 }
 
+/** Stav prijatej faktúry vrátane omeškania. */
+export function purchaseStatusOf(row) {
+  if (row.overdue) return statusOf(row)
+  return row.status === 'paid' ? { label: 'Uhradená', tone: 'paid' } : { label: 'Neuhradená', tone: 'issued' }
+}
+
 /** Stav riadku zoznamu vrátane omeškania. */
 export function statusOf(row) {
   if (row.overdue) {
