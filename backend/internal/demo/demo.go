@@ -3,7 +3,9 @@ package demo
 
 import (
 	"context"
+	"encoding/xml"
 	"fmt"
+	"strings"
 
 	"github.com/palo-krnac/fiscus/backend/internal/app"
 	"github.com/palo-krnac/fiscus/backend/internal/auth"
@@ -155,7 +157,70 @@ func Seed(ctx context.Context, a *app.App) (store.Company, error) {
 			}
 		}
 	}
+	if err := seedBank(ctx, a, c); err != nil {
+		return c, fmt.Errorf("demo výpis: %w", err)
+	}
 	return c, nil
+}
+
+// seedBank naimportuje ukážkový výpis: dve presné úhrady (spárujú sa samé),
+// čiastočnú úhradu, platbu dodávateľovi, poplatok a neznámu platbu.
+func seedBank(ctx context.Context, a *app.App, c store.Company) error {
+	invs, err := a.Store.ListInvoices(ctx, c.ID, store.InvoiceFilter{Status: invoice.StatusIssued})
+	if err != nil {
+		return err
+	}
+	purs, err := a.Store.ListPurchases(ctx, c.ID, store.PurchaseFilter{})
+	if err != nil {
+		return err
+	}
+	today := a.Today()
+	var b strings.Builder
+	b.WriteString(`<?xml version="1.0" encoding="UTF-8"?><Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.02"><BkToCstmrStmt><Stmt>`)
+	fmt.Fprintf(&b, `<Acct><Id><IBAN>%s</IBAN></Id></Acct>`, strings.ReplaceAll(c.IBAN, " ", ""))
+	n := 0
+	entry := func(dir, amount, e2e, name, msg string, day int) {
+		n++
+		party := "Dbtr"
+		if dir == "DBIT" {
+			party = "Cdtr"
+		}
+		fmt.Fprintf(&b, `<Ntry><Amt Ccy="EUR">%s</Amt><CdtDbtInd>%s</CdtDbtInd><Sts>BOOK</Sts><BookgDt><Dt>%s</Dt></BookgDt>`+
+			`<AcctSvcrRef>DEMO-%03d</AcctSvcrRef><NtryDtls><TxDtls><Refs><EndToEndId>%s</EndToEndId></Refs>`+
+			`<RltdPties><%s><Nm>%s</Nm></%s></RltdPties><RmtInf><Ustrd>%s</Ustrd></RmtInf></TxDtls></NtryDtls></Ntry>`,
+			amount, dir, today.AddDays(-day).String(), n, e2e, party, xmlText(name), party, xmlText(msg))
+	}
+	k := 0
+	for _, inv := range invs {
+		if inv.Status != invoice.StatusIssued || inv.Kind != invoice.KindInvoice {
+			continue
+		}
+		switch k {
+		case 0, 1:
+			entry("CRDT", inv.Summary.Total.String(), "/VS"+inv.VariableSymbol+"/SS/KS0308", inv.Customer.Name, "Uhrada faktury "+inv.Number, 2+k)
+		case 2:
+			half := inv.Summary.Total.MulRatio(m.FromInt(1), m.FromInt(2)).RoundCents()
+			entry("CRDT", half.String(), "/VS"+inv.VariableSymbol, inv.Customer.Name, "Ciastocna uhrada", 4)
+		}
+		k++
+	}
+	for _, p := range purs {
+		if p.Status == purchase.StatusBooked {
+			entry("DBIT", p.Summary.Total.String(), "/VS"+p.VariableSymbol, p.Supplier.Name, p.Description, 1)
+			break
+		}
+	}
+	entry("DBIT", "4.90", "NOTPROVIDED", "", "Poplatok za vedenie uctu", 0)
+	entry("CRDT", "150.00", "NOTPROVIDED", "Neznámy platca", "zaloha", 3)
+	b.WriteString(`</Stmt></BkToCstmrStmt></Document>`)
+	_, err = a.ImportStatement(ctx, c.ID, "demo-vypis.xml", []byte(b.String()))
+	return err
+}
+
+func xmlText(s string) string {
+	var b strings.Builder
+	_ = xml.EscapeText(&b, []byte(s))
+	return b.String()
 }
 
 // Ukážkoví používatelia pre serverový režim (heslo všetkých: DemoPassword).

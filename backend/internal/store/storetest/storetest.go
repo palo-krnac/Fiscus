@@ -9,9 +9,11 @@ import (
 	"reflect"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/palo-krnac/fiscus/backend/internal/audit"
 	"github.com/palo-krnac/fiscus/backend/internal/auth"
+	"github.com/palo-krnac/fiscus/backend/internal/bank"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	m "github.com/palo-krnac/fiscus/backend/internal/money"
 	"github.com/palo-krnac/fiscus/backend/internal/purchase"
@@ -285,6 +287,61 @@ func Run(t *testing.T, newStore Factory) {
 		}
 		if got.ContactID != 42 || !got.NonVATPayer || got.PaymentMethod != invoice.PayCash {
 			t.Fatalf("načítané: contact=%d nonVat=%v", got.ContactID, got.NonVATPayer)
+		}
+	})
+
+	t.Run("bankové pohyby", func(t *testing.T) {
+		s := newStore(t)
+		a, _ := s.CreateCompany(ctx, store.Company{Name: "Alfa"})
+		b, _ := s.CreateCompany(ctx, store.Company{Name: "Beta"})
+		tx := func(fp, date, amount string, dir bank.Direction) bank.Transaction {
+			return bank.Transaction{Account: "SK3112000000198742637541", Date: invoice.MustDate(date), Amount: m.MustParse(amount),
+				Currency: "EUR", Direction: dir, VS: "2026001", SS: "1", KS: "308", CounterName: "Odberateľ",
+				CounterIBAN: "SK8975000000000012345671", Message: "Úhrada", BankRef: "R-" + fp, Fingerprint: fp}
+		}
+		batch := []bank.Transaction{tx("a", "2026-10-01", "100.50", bank.In), tx("b", "2026-10-02", "20", bank.Out), tx("c", "2025-12-31", "5", bank.Out)}
+		saved, dup, err := s.SaveBankTransactions(ctx, a.ID, batch)
+		if err != nil || len(saved) != 3 || dup != 0 || saved[0].ID == 0 || saved[0].Status != bank.StatusOpen || saved[0].CompanyID != a.ID {
+			t.Fatalf("uloženie: %+v %d %v", saved, dup, err)
+		}
+		// opakovaný import: nič nové
+		again, dup, err := s.SaveBankTransactions(ctx, a.ID, append(batch, tx("d", "2026-10-03", "7", bank.In)))
+		if err != nil || len(again) != 1 || dup != 3 || again[0].Fingerprint != "d" {
+			t.Fatalf("opakovaný import: %+v %d %v", again, dup, err)
+		}
+		// rovnaký odtlačok v inej firme je iný pohyb
+		if other, _, _ := s.SaveBankTransactions(ctx, b.ID, batch[:1]); len(other) != 1 {
+			t.Fatal("iná firma")
+		}
+		list, _ := s.ListBankTransactions(ctx, a.ID, store.BankFilter{})
+		if len(list) != 4 || list[0].Fingerprint != "d" || list[3].Fingerprint != "c" {
+			t.Fatalf("zoznam: %+v", list)
+		}
+		if y, _ := s.ListBankTransactions(ctx, a.ID, store.BankFilter{Year: 2025}); len(y) != 1 {
+			t.Fatalf("rok: %d", len(y))
+		}
+		got, err := s.GetBankTransaction(ctx, a.ID, saved[0].ID)
+		if err != nil || !reflect.DeepEqual(got, saved[0]) {
+			t.Fatalf("načítanie:\n got %+v\nwant %+v", got, saved[0])
+		}
+		if _, err := s.GetBankTransaction(ctx, b.ID, saved[0].ID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("pohyb inej firmy")
+		}
+		got.Status, got.Note = bank.StatusMatched, "spárované"
+		got.Match = &bank.Match{Kind: "invoice", ID: 9, Number: "FA20260009", Auto: true, At: time.Date(2026, 10, 2, 8, 0, 0, 0, time.UTC)}
+		got.Amount = m.MustParse("999") // suma sa úpravou nemení
+		if err := s.UpdateBankTransaction(ctx, a.ID, got); err != nil {
+			t.Fatal(err)
+		}
+		upd, _ := s.GetBankTransaction(ctx, a.ID, got.ID)
+		if upd.Status != bank.StatusMatched || upd.Match == nil || *upd.Match != *got.Match || !upd.Amount.Equal(m.MustParse("100.50")) || upd.Note != "spárované" {
+			t.Fatalf("po úprave: %+v", upd)
+		}
+		if st, _ := s.ListBankTransactions(ctx, a.ID, store.BankFilter{Status: bank.StatusOpen}); len(st) != 3 {
+			t.Fatalf("filter stavu: %d", len(st))
+		}
+		if err := s.UpdateBankTransaction(ctx, b.ID, got); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("úprava pohybu inej firmy")
 		}
 	})
 

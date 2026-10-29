@@ -55,6 +55,18 @@ describe('request', () => {
   })
 })
 
+describe('súbor', () => {
+  it('Blob sa posiela bez prevodu na JSON', async () => {
+    const f = respond(200, {})
+    const file = new Blob(['<Document/>'], { type: 'text/xml' })
+    await request('POST', '/api/x', file, f)
+    const [, init] = f.mock.calls[0]
+    expect(init.body).toBe(file)
+    expect(init.headers['Content-Type']).toBe('text/xml')
+    expect(init.headers['X-Fiskus']).toBe('1')
+  })
+})
+
 describe('query', () => {
   it('vynechá prázdne hodnoty', () => {
     expect(query({ category: 'invoices', q: '', user: 0, from: undefined })).toBe('?category=invoices&user=0')

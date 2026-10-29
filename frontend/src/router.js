@@ -11,6 +11,7 @@ import Users from './views/Users.vue'
 import AuditLog from './views/AuditLog.vue'
 import Companies from './views/Companies.vue'
 import VatReturn from './views/VatReturn.vue'
+import Bank from './views/Bank.vue'
 
 // Moduly z etapového plánu — zatiaľ prázdne stránky s popisom.
 export const modules = [
@@ -29,7 +30,7 @@ export const modules = [
   {
     group: 'Peniaze',
     items: [
-      { path: '/banka', label: 'Banka', icon: 'pi-building-columns', stage: 1, perm: 'purchases.read' },
+      { path: '/banka', label: 'Banka', icon: 'pi-building-columns', ready: true, perm: 'bank.read' },
       { path: '/pokladna', label: 'Pokladňa', icon: 'pi-wallet', stage: 1, perm: 'purchases.read' },
     ],
   },
@@ -87,6 +88,7 @@ export const router = createRouter({
     { path: '/adresar/:id(\\d+|novy)', component: Contacts, props: true, meta: { title: 'Adresár', perm: 'contacts.read' } },
     { path: '/nastavenia', component: Settings, meta: { title: 'Nastavenia', perm: 'settings.write' } },
     { path: '/pouzivatelia', component: Users, meta: { title: 'Používatelia', perm: 'users.manage' } },
+    { path: '/banka', component: Bank, meta: { title: 'Banka', perm: 'bank.read' } },
     { path: '/dph', component: VatReturn, props: { tab: 'dph' }, meta: { title: 'Priznanie k DPH', perm: 'vat.read' } },
     { path: '/kontrolny-vykaz', component: VatReturn, props: { tab: 'kv' }, meta: { title: 'Kontrolný výkaz', perm: 'vat.read' } },
     { path: '/firmy', component: Companies, meta: { title: 'Firmy a licencia', superAdmin: true, noCompany: true } },

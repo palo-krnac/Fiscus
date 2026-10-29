@@ -249,6 +249,16 @@ func (inv *Invoice) MarkPaid(on Date) error {
 	return nil
 }
 
+// Unpay zruší úhradu (napr. platba bola omylom priradená k inej faktúre).
+func (inv *Invoice) Unpay() error {
+	if inv.Status != StatusPaid {
+		return ErrBadTransition
+	}
+	inv.Status = StatusIssued
+	inv.PaidDate = Date{}
+	return nil
+}
+
 // Cancel stornuje vystavenú, ešte neuhradenú faktúru.
 func (inv *Invoice) Cancel() error {
 	if inv.Status != StatusIssued {

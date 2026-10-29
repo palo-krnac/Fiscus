@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.08">
+  <BkToCstmrStmt><Stmt>
+    <Acct><Id><IBAN>SK3112000000198742637541</IBAN></Id></Acct>
+    <Ntry>
+      <Amt Ccy="EUR">654.30</Amt>
+      <CdtDbtInd>CRDT</CdtDbtInd>
+      <Sts><Cd>BOOK</Cd></Sts>
+      <BookgDt><DtTm>2026-10-12T09:15:00+02:00</DtTm></BookgDt>
+      <NtryDtls><TxDtls>
+        <Refs><AcctSvcrRef>X-77</AcctSvcrRef></Refs>
+        <RltdPties><Dbtr><Pty><Nm>Elektro Hron s.r.o.</Nm></Pty></Dbtr></RltdPties>
+        <RmtInf><Strd><CdtrRefInf><Ref>/VS20260026/SS/KS</Ref></CdtrRefInf></Strd></RmtInf>
+      </TxDtls></NtryDtls>
+    </Ntry>
+  </Stmt></BkToCstmrStmt>
+</Document>

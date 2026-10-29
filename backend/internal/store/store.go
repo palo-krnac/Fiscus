@@ -9,6 +9,7 @@ package store
 import (
 	"context"
 	"errors"
+	"github.com/palo-krnac/fiscus/backend/internal/bank"
 
 	"github.com/palo-krnac/fiscus/backend/internal/audit"
 	"github.com/palo-krnac/fiscus/backend/internal/auth"
@@ -91,6 +92,12 @@ type PurchaseFilter struct {
 	Search string // interné číslo, číslo dodávateľa, dodávateľ, IČO
 }
 
+// BankFilter obmedzuje zoznam bankových pohybov.
+type BankFilter struct {
+	Year   int         // podľa dátumu zaúčtovania; 0 = všetky
+	Status bank.Status // "" = všetky
+}
+
 // Store je úložisko.
 type Store interface {
 	ListCompanies(ctx context.Context) ([]Company, error)
@@ -117,6 +124,15 @@ type Store interface {
 	// SavePurchase vloží (ID == 0) alebo prepíše prijatú faktúru. Nastaví ID.
 	SavePurchase(ctx context.Context, companyID int64, p *purchase.Purchase) error
 	DeletePurchase(ctx context.Context, companyID, id int64) error
+
+	// SaveBankTransactions vloží nové pohyby; pohyby s už známym odtlačkom
+	// (opakovaný import) preskočí. Vráti vložené pohyby (s ID) a počet preskočených.
+	SaveBankTransactions(ctx context.Context, companyID int64, txs []bank.Transaction) ([]bank.Transaction, int, error)
+	// ListBankTransactions vráti pohyby, najnovšie prvé.
+	ListBankTransactions(ctx context.Context, companyID int64, f BankFilter) ([]bank.Transaction, error)
+	GetBankTransaction(ctx context.Context, companyID, id int64) (bank.Transaction, error)
+	// UpdateBankTransaction uloží stav, spárovanie a poznámku pohybu.
+	UpdateBankTransaction(ctx context.Context, companyID int64, t bank.Transaction) error
 
 	// ---- používatelia a prístupy ----
 	CreateUser(ctx context.Context, u auth.User) (auth.User, error) // ErrDuplicate pri rovnakom e-maile
