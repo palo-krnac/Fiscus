@@ -332,16 +332,28 @@ func (inv *Invoice) MarkPaid(on Date) error {
 }
 
 // Unpay zruší všetky úhrady (napr. platba bola omylom priradená k inej faktúre).
+// Zápočet s dobropisom ostane — ten sa ruší iba spolu s dobropisom.
 func (inv *Invoice) Unpay() error {
-	if inv.Status != StatusPaid && len(inv.Payments) == 0 {
-		return ErrBadTransition
-	}
 	if inv.Status != StatusPaid && inv.Status != StatusIssued {
 		return ErrBadTransition
 	}
-	inv.Payments = nil
-	inv.Status = StatusIssued
-	inv.PaidDate = Date{}
+	var kept []Payment
+	for _, p := range inv.Payments {
+		if p.Source == PaymentCredit {
+			kept = append(kept, p)
+		}
+	}
+	paidBefore := len(inv.Payments) > 0 || inv.Status == StatusPaid
+	if !paidBefore || (len(kept) == len(inv.Payments) && len(kept) > 0) {
+		return ErrBadTransition // nie je čo zrušiť
+	}
+	inv.Payments = kept
+	inv.Status, inv.PaidDate = StatusIssued, Date{}
+	if len(kept) > 0 {
+		if rem := inv.Summary.Total.Sub(inv.paymentsSum()); rem.IsZero() || rem.Sign() != inv.Summary.Total.Sign() {
+			inv.Status, inv.PaidDate = StatusPaid, kept[len(kept)-1].Date
+		}
+	}
 	inv.SyncPaid()
 	return nil
 }

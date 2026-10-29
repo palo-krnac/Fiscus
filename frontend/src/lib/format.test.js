@@ -81,6 +81,10 @@ describe('statusOf', () => {
   })
   it('bežné stavy', () => {
     expect(statusOf({ status: 'paid' }).label).toBe('Uhradená')
+    const credit = [{ source: 'credit_note', amount: '100' }]
+    expect(statusOf({ status: 'paid', kind: 'invoice', payments: credit }).label).toBe('Vyrovnaná dobropisom')
+    expect(statusOf({ status: 'paid', kind: 'credit_note', payments: credit }).label).toBe('Započítaný s faktúrou')
+    expect(statusOf({ status: 'paid', kind: 'invoice', payments: [...credit, { source: 'bank', amount: '10' }] }).label).toBe('Uhradená')
     expect(statusOf({ status: 'draft' }).tone).toBe('draft')
   })
 })

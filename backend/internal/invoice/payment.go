@@ -11,6 +11,8 @@ const (
 	PaymentManual = "manual" // označená ručne
 	PaymentBank   = "bank"   // spárovaný bankový pohyb
 	PaymentCash   = "cash"   // pokladničný doklad
+	// PaymentCredit je zápočet dobropisu s pôvodnou faktúrou (Ref = ID druhého dokladu).
+	PaymentCredit = "credit_note"
 )
 
 // Payment je úhrada faktúry (aj čiastočná). Suma má rovnaké znamienko ako
@@ -102,4 +104,34 @@ func (inv *Invoice) RemovePayment(source string, ref int64) bool {
 		}
 	}
 	return false
+}
+
+// OffsetCreditNote započíta vystavený dobropis s neuhradenou časťou pôvodnej
+// faktúry: faktúre zníži zostatok, dobropisu tiež (táto časť sa nevracia).
+// Keď dobropis pokryje celý zostatok, faktúra je vyrovnaná. Ak bola faktúra
+// už uhradená, nič sa nezapočíta a dobropis ostane na vrátenie peňazí.
+// Vráti započítanú sumu (kladnú).
+func OffsetCreditNote(orig, cn *Invoice) (money.Dec, error) {
+	if cn.Kind != KindCreditNote || cn.Status != StatusIssued || cn.Correction == nil || cn.Correction.OriginalID != orig.ID {
+		return money.Zero, ErrBadTransition
+	}
+	if orig.Status != StatusIssued {
+		return money.Zero, nil
+	}
+	open := orig.Remaining()       // kladný zostatok faktúry
+	credit := cn.Remaining().Neg() // kladná suma, ktorú by bolo treba vrátiť
+	amount := open
+	if credit.Cmp(amount) < 0 {
+		amount = credit
+	}
+	if amount.Sign() <= 0 {
+		return money.Zero, nil
+	}
+	if err := orig.AddPayment(Payment{Date: cn.IssueDate, Amount: amount, Source: PaymentCredit, Ref: cn.ID}); err != nil {
+		return money.Zero, err
+	}
+	if err := cn.AddPayment(Payment{Date: cn.IssueDate, Amount: amount.Neg(), Source: PaymentCredit, Ref: orig.ID}); err != nil {
+		return money.Zero, err
+	}
+	return amount, nil
 }

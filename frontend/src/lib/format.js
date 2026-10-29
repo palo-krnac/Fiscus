@@ -81,8 +81,14 @@ export function statusOf(row) {
     return { label: `Po splatnosti ${d} ${d === 1 ? 'deň' : d < 5 ? 'dni' : 'dní'}${partly ? ', čiastočne uhradená' : ''}`, tone: 'overdue' }
   }
   if (partly) return { label: 'Čiastočne uhradená', tone: 'issued' }
+  // vyrovnaná iba zápočtom dobropisu (žiadne peniaze neprišli ani neodišli)
+  if (row.status === 'paid' && row.payments?.length && row.payments.every((p) => p.source === 'credit_note')) {
+    return row.kind === 'credit_note'
+      ? { label: 'Započítaný s faktúrou', tone: 'paid' }
+      : { label: 'Vyrovnaná dobropisom', tone: 'paid' }
+  }
   return STATUS[row.status] ?? { label: row.status, tone: 'draft' }
 }
 
 /** Odkiaľ je úhrada faktúry. */
-export const paymentSource = (s) => ({ bank: 'banka', cash: 'pokladňa', manual: 'ručne' })[s] ?? s
+export const paymentSource = (s) => ({ bank: 'banka', cash: 'pokladňa', manual: 'ručne', credit_note: 'zápočet dobropisu' })[s] ?? s
