@@ -12,13 +12,10 @@ import (
 // ErrReceiptIssued: k úhrade zálohy je vystavený daňový doklad — úhradu nemožno zrušiť.
 var ErrReceiptIssued = errors.New("k platbe je vystavený daňový doklad k prijatej platbe — opravte ho dobropisom")
 
-// issueAdvanceReceipt vystaví daňový doklad k prijatej platbe k uhradenej
-// zálohovej faktúre a prepojí ich.
-func (a *App) issueAdvanceReceipt(ctx context.Context, companyID int64, proforma invoice.Invoice) (invoice.Invoice, error) {
-	if proforma.Advance != nil && proforma.Advance.ReceiptID != 0 {
-		return proforma, nil
-	}
-	r, err := invoice.NewAdvanceReceipt(proforma, a.Today())
+// issueAdvanceReceipt vystaví daňový doklad k prijatej platbe (aj čiastočnej)
+// k zálohovej faktúre a prepojí ich.
+func (a *App) issueAdvanceReceipt(ctx context.Context, companyID int64, proforma invoice.Invoice, p invoice.Payment) (invoice.Invoice, error) {
+	r, err := invoice.NewAdvanceReceipt(proforma, p.Amount, p.Date, a.Today())
 	if err != nil {
 		return proforma, err
 	}
@@ -30,16 +27,13 @@ func (a *App) issueAdvanceReceipt(ctx context.Context, companyID int64, proforma
 	if err != nil {
 		return proforma, err
 	}
-	if err := issued.MarkPaid(proforma.PaidDate); err != nil {
+	if err := issued.MarkPaid(p.Date); err != nil {
 		return proforma, err
 	}
 	if err := a.Store.SaveInvoice(ctx, companyID, &issued); err != nil {
 		return proforma, err
 	}
-	if proforma.Advance == nil {
-		proforma.Advance = &invoice.Advance{}
-	}
-	proforma.Advance.ReceiptID, proforma.Advance.ReceiptNumber = issued.ID, issued.Number
+	proforma.AddReceipt(invoice.ReceiptRef{ID: issued.ID, Number: issued.Number, Date: p.Date, Amount: issued.Summary.Total})
 	if err := a.Store.SaveInvoice(ctx, companyID, &proforma); err != nil {
 		return proforma, err
 	}
@@ -49,8 +43,8 @@ func (a *App) issueAdvanceReceipt(ctx context.Context, companyID int64, proforma
 	return proforma, nil
 }
 
-// SettleAdvance vytvorí koncept vyúčtovacej faktúry k uhradenej zálohovej
-// faktúre s odpočtom zálohy podľa dokladu k prijatej platbe.
+// SettleAdvance vytvorí koncept vyúčtovacej faktúry k uhradenej (aj čiastočne)
+// zálohovej faktúre s odpočtom záloh podľa dokladov k prijatým platbám.
 func (a *App) SettleAdvance(ctx context.Context, companyID, proformaID int64) (invoice.Invoice, error) {
 	if err := a.Require(ctx, companyID, auth.PermInvoicesWrite); err != nil {
 		return invoice.Invoice{}, err
@@ -59,15 +53,15 @@ func (a *App) SettleAdvance(ctx context.Context, companyID, proformaID int64) (i
 	if err != nil {
 		return p, err
 	}
-	var receipt *invoice.Invoice
-	if p.Advance != nil && p.Advance.ReceiptID != 0 {
-		r, err := a.Store.GetInvoice(ctx, companyID, p.Advance.ReceiptID)
+	var receipts []invoice.Invoice
+	for _, ref := range p.AllReceipts() {
+		r, err := a.Store.GetInvoice(ctx, companyID, ref.ID)
 		if err != nil {
 			return p, err
 		}
-		receipt = &r
+		receipts = append(receipts, r)
 	}
-	f, err := invoice.NewFinalInvoice(p, receipt, a.Today(), a.dueDays(ctx, companyID, p))
+	f, err := invoice.NewFinalInvoice(p, receipts, a.Today(), a.dueDays(ctx, companyID, p))
 	if err != nil {
 		return f, &invoice.ValidationError{Fields: []invoice.FieldError{{Field: "advance", Message: err.Error()}}}
 	}

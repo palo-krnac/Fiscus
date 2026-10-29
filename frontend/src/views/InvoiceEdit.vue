@@ -31,7 +31,7 @@ import { quoteActions, quoteStatusOf, validDays as quoteValidDays } from '../lib
 import { firstOfNextMonth, intervals, placeholders, recurringStatusOf } from '../lib/recurring.js'
 import InputNumber from 'primevue/inputnumber'
 import { filterItems, itemFromLine, lineFromItem, sameNameItem } from '../lib/catalog.js'
-import { canCredit, canSettle, editorTitle, hasDeductions } from '../lib/advance.js'
+import { canCredit, canSettle, editorTitle, hasDeductions, receiptsOf } from '../lib/advance.js'
 import SendMailDialog from '../components/SendMailDialog.vue'
 import { currencyOptions, isForeignCurrency, rateHint, rateText } from '../lib/fx.js'
 
@@ -593,7 +593,7 @@ async function markPaid() {
     const amount = partial ? (isCredit.value ? -d.amount : d.amount).toFixed(2) : undefined
     inv.value = await api.pay(session.companyId, inv.value.id, toISODate(d.date), amount)
     payDlg.value = null
-    const rn = inv.value.advance?.receiptNumber
+    const rn = receiptsOf(inv.value).at(-1)?.number
     toast.add({
       severity: 'success',
       summary: inv.value.status === 'paid' ? 'Označená ako uhradená' : `Čiastočná úhrada, zostáva ${formatMoney(inv.value.balance, inv.value.currency)}`,
@@ -891,15 +891,15 @@ const customerFields = reactive([
         <p v-if="einvStatus" class="advance-note einv-status"><i class="pi pi-send" /> <span>{{ einvStatus }}</span></p>
         <p v-if="isProforma" class="advance-note">
           <i class="pi pi-info-circle" />
-          <span v-if="inv.status !== 'paid'">Zálohová faktúra nie je daňový doklad. Po úhrade vznikne daňový doklad k prijatej platbe a zálohu potom vyúčtujete.</span>
-          <span v-else-if="inv.advance?.receiptId">
-            Uhradená {{ formatDate(inv.paidDate) }} — daňový doklad
-            <RouterLink :to="`/faktury/${inv.advance.receiptId}`">{{ inv.advance.receiptNumber }}</RouterLink>.
-            <template v-if="inv.advance.finalId">Vyúčtovaná faktúrou <RouterLink :to="`/faktury/${inv.advance.finalId}`">{{ inv.advance.finalNumber || 'koncept' }}</RouterLink>.</template>
-          </span>
-          <span v-else>
-            Uhradená {{ formatDate(inv.paidDate) }}.
-            <template v-if="inv.advance?.finalId">Vyúčtovaná faktúrou <RouterLink :to="`/faktury/${inv.advance.finalId}`">{{ inv.advance.finalNumber || 'koncept' }}</RouterLink>.</template>
+          <span>
+            <template v-if="inv.status === 'paid'">Uhradená {{ formatDate(inv.paidDate) }}.</template>
+            <template v-else-if="Number(inv.paidAmount) > 0">Uhradená časť {{ formatMoney(inv.paidAmount, inv.currency) }}, zostáva {{ formatMoney(inv.balance, inv.currency) }}.</template>
+            <template v-else>Zálohová faktúra nie je daňový doklad. Ku každej prijatej platbe (aj čiastočnej) vznikne daňový doklad k prijatej platbe a zálohu potom vyúčtujete.</template>
+            <template v-if="receiptsOf(inv).length">
+              {{ ' ' }}{{ receiptsOf(inv).length === 1 ? 'Daňový doklad' : 'Daňové doklady' }}
+              <template v-for="(r, i) in receiptsOf(inv)" :key="r.id"><template v-if="i">, </template><RouterLink :to="`/faktury/${r.id}`">{{ r.number }}</RouterLink></template>.
+            </template>
+            <template v-if="inv.advance?.finalId">{{ ' ' }}Vyúčtovaná faktúrou <RouterLink :to="`/faktury/${inv.advance.finalId}`">{{ inv.advance.finalNumber || 'koncept' }}</RouterLink><template v-if="inv.advance.finalNumber && inv.status !== 'paid'"> — zvyšok zálohy sa už nevymáha, doplatok je na vyúčtovaní</template>.</template>
           </span>
         </p>
         <p v-if="isReceipt && inv.advance" class="advance-note">
@@ -1396,7 +1396,7 @@ const customerFields = reactive([
         <label>
           <span>Suma ({{ inv.currency || 'EUR' }})</span>
           <InputNumber v-model="payDlg.amount" :min="0.01" :min-fraction-digits="2" :max-fraction-digits="2" locale="sk-SK" size="small" />
-          <small>Zostatok {{ formatMoney(balanceAbs, inv.currency) }}. Menšia suma = čiastočná úhrada.</small>
+          <small>Zostatok {{ formatMoney(balanceAbs, inv.currency) }}. Menšia suma = čiastočná úhrada.<template v-if="isProforma && !inv.nonVatPayer"> K prijatej sume vznikne daňový doklad k prijatej platbe.</template></small>
         </label>
       </div>
       <template #footer>

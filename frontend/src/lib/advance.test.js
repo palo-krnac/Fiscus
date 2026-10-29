@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canCredit, canSettle, editorTitle, hasDeductions, kindBadge, kindLabel } from './advance.js'
+import { canCredit, canSettle, editorTitle, hasDeductions, kindBadge, kindLabel, receiptsOf } from './advance.js'
 
 describe('zálohy', () => {
   it.each([
@@ -22,6 +22,8 @@ describe('zálohy', () => {
   it.each([
     [{ kind: 'proforma', status: 'paid' }, true],
     [{ kind: 'proforma', status: 'issued' }, false],
+    [{ kind: 'proforma', status: 'issued', paidAmount: '100.00' }, true],
+    [{ kind: 'proforma', status: 'issued', paidAmount: '0.00' }, false],
     [{ kind: 'proforma', status: 'paid', advance: { finalId: 9 } }, false],
     [{ kind: 'invoice', status: 'paid' }, false],
   ])('vyúčtovanie %o', (inv, ok) => {
@@ -32,5 +34,12 @@ describe('zálohy', () => {
     expect(canCredit({ kind: 'advance_receipt' })).toBe(true)
     expect(hasDeductions({ advance: { deductions: [{}] } })).toBe(true)
     expect(hasDeductions({})).toBe(false)
+  })
+  it('doklady k platbám', () => {
+    expect(receiptsOf({})).toEqual([])
+    expect(receiptsOf({ paidDate: '2026-10-10', summary: { total: '492.00' }, advance: { receiptId: 4, receiptNumber: 'ZD1' } })).toEqual([
+      { id: 4, number: 'ZD1', date: '2026-10-10', amount: '492.00' },
+    ])
+    expect(receiptsOf({ advance: { receiptId: 4, receipts: [{ id: 4 }, { id: 5 }] } })).toHaveLength(2)
   })
 })

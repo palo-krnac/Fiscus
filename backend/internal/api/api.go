@@ -286,7 +286,7 @@ func fail(w http.ResponseWriter, err error) {
 		writeErr(w, http.StatusNotFound, "Záznam neexistuje", nil)
 	case errors.Is(err, invoice.ErrLocked), errors.Is(err, invoice.ErrBadTransition), errors.Is(err, app.ErrReceiptIssued), errors.Is(err, app.ErrAmend):
 		writeErr(w, http.StatusConflict, err.Error(), nil)
-	case errors.Is(err, invoice.ErrBadPayment), errors.Is(err, invoice.ErrPartialAdvance):
+	case errors.Is(err, invoice.ErrBadPayment):
 		writeErr(w, http.StatusUnprocessableEntity, err.Error(), nil)
 	case errors.Is(err, app.ErrCompanyLimit), errors.Is(err, app.ErrForbidden), errors.Is(err, app.ErrReadOnly):
 		writeErr(w, http.StatusForbidden, err.Error(), nil)

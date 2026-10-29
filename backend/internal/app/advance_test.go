@@ -157,3 +157,52 @@ func TestAdvanceReceiptNotFromClient(t *testing.T) {
 		t.Fatalf("odpočet z klienta: %+v %v", s.Advance, err)
 	}
 }
+
+func TestPartialAdvance(t *testing.T) {
+	a, c := newApp(t, edition.Desktop)               // dnes 29. 10. 2026
+	dr, _ := a.SaveDraft(ctx, c.ID, proformaDraft()) // 492 €
+	p, err := a.Issue(ctx, c.ID, dr.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// prvá časť: daňový doklad k 246 € (daň 46 €), záloha ostáva neuhradená
+	p, err = a.AddPayment(ctx, c.ID, p.ID, invoice.Payment{Date: invoice.MustDate("2026-10-05"), Amount: m.MustParse("246"), Source: invoice.PaymentManual}, false)
+	if err != nil || p.Status != invoice.StatusIssued || len(p.AllReceipts()) != 1 || p.Advance.ReceiptNumber != "ZD20260001" {
+		t.Fatalf("prvá platba: %+v %v", p.Advance, err)
+	}
+	r1, _ := a.Store.GetInvoice(ctx, c.ID, p.AllReceipts()[0].ID)
+	if r1.Summary.Total.String() != "246.00" || r1.Summary.VAT.String() != "46.00" || r1.DeliveryDate.String() != "2026-10-05" || r1.Status != invoice.StatusPaid {
+		t.Fatalf("doklad k prvej platbe: %+v", r1.Summary)
+	}
+	if _, err := a.RemovePayment(ctx, c.ID, p.ID, invoice.PaymentManual, 0); !errors.Is(err, ErrReceiptIssued) {
+		t.Fatalf("zrušenie platby s dokladom: %v", err)
+	}
+
+	// vyúčtovanie po prvej platbe: odpočíta sa 246 €, doplatok 246 €
+	f, err := a.SettleAdvance(ctx, c.ID, p.ID)
+	if err != nil || f.Summary.Total.String() != "246.00" || len(f.Advance.Deductions) != 1 {
+		t.Fatalf("vyúčtovanie: %+v %v", f.Summary, err)
+	}
+	// po koncepte vyúčtovania už ďalšia platba k zálohe nejde
+	if _, err := a.MarkPaid(ctx, c.ID, p.ID, invoice.MustDate("2026-10-20")); !errors.Is(err, invoice.ErrAlreadySettled) {
+		t.Fatalf("platba po vyúčtovaní: %v", err)
+	}
+	final, err := a.Issue(ctx, c.ID, f.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, _ = a.Store.GetInvoice(ctx, c.ID, p.ID)
+	if !p.Settled() || p.Overdue(a.Today()) || p.Advance.FinalNumber != final.Number {
+		t.Fatalf("vyúčtovaná záloha: %+v", p.Advance)
+	}
+	// vyúčtovaná záloha nie je v návrhoch párovania, vyúčtovanie áno
+	cands, _ := a.candidates(ctx, c.ID)
+	if len(cands) != 1 || cands[0].ID != final.ID {
+		t.Fatalf("kandidáti: %+v", cands)
+	}
+	// priznanie: daň z prijatej časti zálohy a zo zvyšku na vyúčtovaní
+	ret, _, err := a.VATReturn(ctx, c.ID, "2026-10", m.Zero)
+	if err != nil || ret.Rows["r04"].String() != "92.00" {
+		t.Fatalf("DPH: %+v %v", ret.Rows, err)
+	}
+}

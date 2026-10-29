@@ -496,7 +496,7 @@ func (a *App) MarkPaid(ctx context.Context, companyID, id int64, on invoice.Date
 }
 
 // AddPayment pripíše úhradu faktúry (aj čiastočnú). S rest=true sa suma
-// doplní na celý zostatok. Pri zálohovej faktúre vznikne po úplnej úhrade
+// doplní na celý zostatok. Pri zálohovej faktúre vznikne ku každej platbe
 // daňový doklad k prijatej platbe.
 func (a *App) AddPayment(ctx context.Context, companyID, id int64, p invoice.Payment, rest bool) (invoice.Invoice, error) {
 	inv, err := a.transition(ctx, companyID, id, "pay", "Úhrada ", func(inv *invoice.Invoice) error {
@@ -508,9 +508,9 @@ func (a *App) AddPayment(ctx context.Context, companyID, id int64, p invoice.Pay
 		}
 		return inv.AddPayment(p)
 	})
-	if err == nil && inv.Status == invoice.StatusPaid && inv.NeedsReceipt() {
-		// prijatá záloha: daňová povinnosť vzniká dňom prijatia platby
-		inv, err = a.issueAdvanceReceipt(ctx, companyID, inv)
+	if err == nil && inv.NeedsReceipt() && p.Amount.Sign() > 0 {
+		// prijatá záloha (aj časť): daňová povinnosť vzniká dňom prijatia platby
+		inv, err = a.issueAdvanceReceipt(ctx, companyID, inv, p)
 	}
 	return inv, err
 }
