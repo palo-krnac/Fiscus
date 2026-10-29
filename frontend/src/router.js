@@ -14,6 +14,7 @@ import VatReturn from './views/VatReturn.vue'
 import Bank from './views/Bank.vue'
 import AiAccess from './views/AiAccess.vue'
 import Cash from './views/Cash.vue'
+import Backups from './views/Backups.vue'
 import CashPrint from './views/CashPrint.vue'
 
 // Moduly z etapového plánu — zatiaľ prázdne stránky s popisom.
@@ -61,7 +62,7 @@ export const modules = [
       { path: '/pouzivatelia', label: 'Používatelia', icon: 'pi-users', ready: true, perm: 'users.manage', serverOnly: true },
       { path: '/audit', label: 'Audit', icon: 'pi-shield', ready: true, perm: 'audit.read' },
       { path: '/ai', label: 'Prístup pre AI', icon: 'pi-sparkles', ready: true },
-      { path: '/zalohy', label: 'Zálohy', icon: 'pi-history', stage: 1, perm: 'settings.write' },
+      { path: '/zalohy', label: 'Zálohy', icon: 'pi-history', ready: true, superAdmin: true },
       { path: '/nastavenia', label: 'Nastavenia', icon: 'pi-cog', ready: true, perm: 'settings.write' },
       { path: '/firmy', label: 'Firmy a licencia', icon: 'pi-building', ready: true, superAdmin: true, serverOnly: true },
     ],
@@ -94,6 +95,7 @@ export const router = createRouter({
     { path: '/nastavenia', component: Settings, meta: { title: 'Nastavenia', perm: 'settings.write' } },
     { path: '/pouzivatelia', component: Users, meta: { title: 'Používatelia', perm: 'users.manage' } },
     { path: '/ai', component: AiAccess, meta: { title: 'Prístup pre AI', noCompany: true } },
+    { path: '/zalohy', component: Backups, meta: { title: 'Zálohy', superAdmin: true, noCompany: true } },
     { path: '/pokladna', component: Cash, meta: { title: 'Pokladňa', perm: 'cash.read' } },
     { path: '/pokladna/:id(\\d+)/tlac', component: CashPrint, props: true, meta: { title: 'Pokladničný doklad', bare: true, perm: 'cash.read' } },
     { path: '/banka', component: Bank, meta: { title: 'Banka', perm: 'bank.read' } },

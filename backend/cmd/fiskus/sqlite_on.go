@@ -15,24 +15,60 @@ import (
 
 func init() { openSQLite = openWithBackups }
 
+// verifier overí súbor databázy pred obnovou (databáza ešte nie je otvorená).
+type verifier struct{}
+
+func (verifier) Snapshot(context.Context, string) error { return backup.ErrNoBackup }
+func (verifier) Verify(ctx context.Context, path string) error {
+	return (&sqlite.Store{}).Verify(ctx, path)
+}
+
 // openWithBackups otvorí SQLite a ak je zadaný priečinok záloh, zálohuje
-// pri štarte, každých 24 hodín a pri ukončení programu.
-func openWithBackups(path, backupDir string) (store.Store, func(), error) {
+// pri štarte, každých 24 hodín a pri ukončení programu. Pred otvorením
+// vykoná obnovu zo zálohy, ak bola naplánovaná v programe alebo zadaná
+// parametrom -restore.
+func openWithBackups(path, backupDir, restoreFile string) (store.Store, *backup.Manager, string, func(), error) {
+	pw := os.Getenv("FISKUS_BACKUP_PASSWORD")
+	var m *backup.Manager
+	off := ""
+	switch {
+	case backupDir == "":
+		off = "Zálohy sú vypnuté. Spustite Fiškus s parametrom -backup-dir <priečinok> a heslom v premennej FISKUS_BACKUP_PASSWORD."
+	case pw == "":
+		off = "Chýba heslo záloh v premennej FISKUS_BACKUP_PASSWORD — bez neho sa zálohy nevytvárajú."
+		log.Print("upozornenie: FISKUS_BACKUP_PASSWORD nie je nastavené, zálohy sú vypnuté")
+	default:
+		m = &backup.Manager{Dir: backupDir, Password: pw, Policy: backup.DefaultPolicy, Source: verifier{}}
+	}
+
+	ctx := context.Background()
+	if restoreFile != "" {
+		if pw == "" {
+			return nil, nil, "", nil, errNoPassword
+		}
+		rm := &backup.Manager{Password: pw, Source: verifier{}}
+		if err := rm.Restore(ctx, restoreFile, path); err != nil {
+			return nil, nil, "", nil, err
+		}
+		log.Printf("obnovené zo zálohy %s (pôvodná databáza: %s.pred-obnovou)", restoreFile, path)
+	} else if m != nil {
+		if b, ok, err := m.ApplyPending(ctx, path); err != nil {
+			return nil, nil, "", nil, err
+		} else if ok {
+			log.Printf("obnovené zo zálohy %s (pôvodná databáza: %s.pred-obnovou)", b.Path, path)
+		}
+	}
+
 	s, err := sqlite.Open(path)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, "", nil, err
 	}
-	if backupDir == "" {
-		return s, func() {}, nil
+	if m == nil {
+		return s, nil, off, func() {}, nil
 	}
-	pw := os.Getenv("FISKUS_BACKUP_PASSWORD")
-	if pw == "" {
-		log.Print("upozornenie: FISKUS_BACKUP_PASSWORD nie je nastavené, zálohy sú vypnuté")
-		return s, func() {}, nil
-	}
-	m := &backup.Manager{Dir: backupDir, Password: pw, Policy: backup.DefaultPolicy, Source: s}
+	m.Source = s
 	run := func(reason string) {
-		info, err := m.Create(context.Background(), time.Now())
+		info, err := m.Create(ctx, time.Now())
 		if err != nil {
 			log.Printf("záloha (%s) zlyhala: %v", reason, err)
 			return
@@ -53,5 +89,5 @@ func openWithBackups(path, backupDir string) (store.Store, func(), error) {
 			}
 		}
 	}()
-	return s, func() { close(done); run("ukončenie") }, nil
+	return s, m, "", func() { close(done); run("ukončenie") }, nil
 }

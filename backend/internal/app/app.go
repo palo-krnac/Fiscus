@@ -7,6 +7,7 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
+	"github.com/palo-krnac/fiscus/backend/internal/backup"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -34,7 +35,10 @@ type App struct {
 	LicenseKeys []ed25519.PublicKey
 	// SaveLicense trvalo uloží licenčný kľúč (nastaví main); nil = iba v pamäti.
 	SaveLicense func(key string) error
-	lic         atomic.Pointer[license.License]
+	// Backups spravuje šifrované zálohy (nil = vypnuté, dôvod v BackupsOff).
+	Backups    *backup.Manager
+	BackupsOff string
+	lic        atomic.Pointer[license.License]
 }
 
 // New vytvorí službu.

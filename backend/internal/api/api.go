@@ -51,6 +51,11 @@ func (s *Server) Handler() http.Handler {
 	if s.MCP != nil {
 		mux.HandleFunc("/mcp", s.mcpHandler)
 	}
+	open("GET /api/backups", s.backupStatus)
+	open("POST /api/backups", s.createBackup)
+	open("DELETE /api/backups/restore", s.cancelRestore)
+	open("GET /api/backups/{name}", s.downloadBackup)
+	open("POST /api/backups/{name}/restore", s.restoreBackup)
 	open("GET /api/me/keys", s.listKeys)
 	open("POST /api/me/keys", s.createKey)
 	open("DELETE /api/me/keys/{id}", s.revokeKey)
