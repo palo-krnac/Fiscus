@@ -13,6 +13,11 @@ import { fillFromRegistry } from '../lib/registry.js'
 import { session, selectCompany } from '../lib/session.js'
 import FormField from '../components/FormField.vue'
 import IcoInput from '../components/IcoInput.vue'
+import ExportButton from '../components/ExportButton.vue'
+import IconField from 'primevue/iconfield'
+import InputIcon from 'primevue/inputicon'
+import { matches, searchTerms } from '../lib/search.js'
+import { companyColumns } from '../lib/columns.js'
 
 const router = useRouter()
 const toast = useToast()
@@ -28,6 +33,11 @@ const errors = ref({})
 const caps = computed(() => info.value ?? session.caps)
 const lic = computed(() => info.value?.license ?? null)
 const count = computed(() => session.companies.length)
+const search = ref('')
+const visible = computed(() => {
+  const terms = searchTerms(search.value)
+  return session.companies.filter((c) => matches(terms, [c.name, c.ico, c.dic, c.icdph, c.city]))
+})
 const canAdd = computed(() => !caps.value.maxCompanies || count.value < caps.value.maxCompanies)
 const limitText = computed(() => {
   if (canAdd.value) return ''
@@ -99,6 +109,7 @@ async function create() {
       <h1>{{ server ? 'Firmy a licencia' : 'Firma' }}</h1>
       <span class="count">{{ count }}{{ caps.maxCompanies ? ` / ${caps.maxCompanies}` : '' }}</span>
       <div class="spacer" />
+      <ExportButton v-if="count" name="Firmy" :columns="companyColumns" :rows="visible" />
       <Button size="small" icon="pi pi-plus" label="Založiť firmu" :disabled="!canAdd" @click="openCreate" />
     </header>
 
@@ -107,12 +118,18 @@ async function create() {
     </p>
     <p v-else-if="limitText" class="note">{{ limitText }}</p>
 
+    <IconField v-if="count" class="search">
+      <InputIcon class="pi pi-search" />
+      <InputText v-model="search" placeholder="Hľadať firmu, IČO, obec" size="small" aria-label="Hľadať firmu" />
+    </IconField>
+
     <table v-if="count" class="companies">
       <thead>
         <tr><th>Firma</th><th>IČO</th><th>IČ DPH</th><th aria-label="Akcie" /></tr>
       </thead>
       <tbody>
-        <tr v-for="c in session.companies" :key="c.id" :class="{ current: c.id === session.companyId }">
+        <tr v-if="!visible.length"><td colspan="4" class="empty">Žiadna firma nevyhovuje hľadaniu.</td></tr>
+        <tr v-for="c in visible" :key="c.id" :class="{ current: c.id === session.companyId }">
           <td class="name" data-label="Firma">{{ c.name }}</td>
           <td data-label="IČO">{{ c.ico || '—' }}</td>
           <td data-label="IČ DPH">{{ c.icdph || '—' }}</td>
@@ -141,6 +158,7 @@ async function create() {
           <strong>Server – viac firiem</strong>
           <span class="price">39 € <small>ročne</small></span>
           <small>pre účtovné kancelárie a poskytovateľov služieb</small>
+          <a class="buy" href="https://fiskus.sk" target="_blank" rel="noopener">Kúpiť na fiskus.sk</a>
         </div>
       </div>
     </section>
@@ -232,6 +250,15 @@ h2 {
   margin: 6px 0 6px;
   color: var(--ink-soft);
 }
+.search {
+  max-width: 320px;
+}
+.search :deep(input) {
+  width: 100%;
+}
+.empty {
+  color: var(--ink-faint);
+}
 .companies {
   width: 100%;
   border-collapse: collapse;
@@ -299,6 +326,11 @@ h2 {
 .plan > small {
   color: var(--ink-soft);
   font-size: var(--fs-sm);
+}
+.buy {
+  margin-top: 4px;
+  font-size: var(--fs-sm);
+  color: var(--blue);
 }
 .lic {
   display: grid;
