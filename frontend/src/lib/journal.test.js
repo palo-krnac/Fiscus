@@ -23,6 +23,7 @@ describe('peňažný denník', () => {
     [{ lines: [] }, 'Nerozpísaný'],
     [{ lines: [{}], auto: true }, 'Návrh Fiškusa'],
     [{ lines: [{}], auto: false }, 'Rozpísaný ručne'],
+    [{ lines: [{}], means: 'close' }, 'Uzávierka'],
   ])('stav %j', (e, label) => expect(entryState(e).label).toBe(label))
   it('rozpis ako text', () => {
     expect(linesText(cols, [{ column: 'e2', amount: '100' }, { column: 'g.dph', amount: '23' }], (v) => v)).toBe('Služby 100 · Zaplatená DPH 23')

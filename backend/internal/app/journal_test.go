@@ -208,3 +208,45 @@ func TestJournalBalancesAndOpenItems(t *testing.T) {
 		t.Fatal("k dňu pred úhradou")
 	}
 }
+
+func TestClosingOperations(t *testing.T) {
+	a, c := newApp(t, edition.Desktop)
+	k1, err := a.AddClosing(ctx, c.ID, 2026, "Odpisy dlhodobého majetku", []journal.Line{{Column: journal.ExpOther, Amount: m.MustParse("1200")}})
+	if err != nil || k1 != "close:2026:001" {
+		t.Fatalf("%s %v", k1, err)
+	}
+	k2, _ := a.AddClosing(ctx, c.ID, 2026, "Neuznaný výdavok", []journal.Line{{Column: journal.ExpServices, Amount: m.MustParse("-80")}})
+	if k2 != "close:2026:002" {
+		t.Fatal(k2)
+	}
+	if _, err := a.AddClosing(ctx, c.ID, 2026, "", []journal.Line{{Column: journal.ExpOther, Amount: m.MustParse("1")}}); err == nil {
+		t.Fatal("bez popisu")
+	}
+	if _, err := a.AddClosing(ctx, c.ID, 2026, "x", []journal.Line{{Column: journal.TransitIn, Amount: m.MustParse("1")}}); err == nil {
+		t.Fatal("priebežná položka")
+	}
+	_, _ = a.AddClosing(ctx, c.ID, 2025, "Odpisy 2025", []journal.Line{{Column: journal.ExpOther, Amount: m.MustParse("900")}})
+	book, _ := a.Journal(ctx, c.ID, 2026)
+	if len(book.Entries) != 2 || book.Entries[0].Means != journal.Closing || book.Entries[0].Date.String() != "2026-12-31" ||
+		book.Totals.TaxExp.String() != "1120.00" || book.Totals.Open != 0 || !book.Totals.BankOut.IsZero() {
+		t.Fatalf("%+v %+v", book.Entries, book.Totals)
+	}
+	// úprava a zmazanie
+	if err := a.ClassifyJournal(ctx, c.ID, k1, []journal.Line{{Column: journal.ExpOther, Amount: m.MustParse("1300")}}, "Odpisy – opravené"); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.ClassifyJournal(ctx, c.ID, k2, nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.ClassifyJournal(ctx, c.ID, "close:2026:099", nil, ""); err == nil {
+		t.Fatal("neexistujúca operácia")
+	}
+	book, _ = a.Journal(ctx, c.ID, 2026)
+	if len(book.Entries) != 1 || book.Entries[0].Text != "Odpisy – opravené" || book.Totals.TaxExp.String() != "1300.00" {
+		t.Fatalf("%+v", book.Entries)
+	}
+	st, _ := a.StatementsFor(ctx, c.ID, 2026)
+	if r := rowsByCode(st.Income); r["10"].Current.String() != "1300.00" || r["10"].Previous.String() != "900.00" {
+		t.Fatalf("výkaz: %+v", st.Income)
+	}
+}

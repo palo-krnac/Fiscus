@@ -130,6 +130,7 @@ export const api = {
 
   journal: (cid, year) => request('GET', `/api/companies/${cid}/journal` + query({ year })),
   classifyJournal: (cid, key, lines, note) => request('PUT', `/api/companies/${cid}/journal/${encodeURIComponent(key)}`, { lines, note }),
+  addClosing: (cid, year, text, lines) => request('POST', `/api/companies/${cid}/journal/closing`, { year, text, lines }),
   setJournalOpening: (cid, year, bank) => request('PUT', `/api/companies/${cid}/journal/opening`, { year, bank }),
   statements: (cid, year) => request('GET', `/api/companies/${cid}/statements` + query({ year })),
   setStatementInputs: (cid, year, inputs) => request('PUT', `/api/companies/${cid}/statements/${year}`, inputs),

@@ -18,6 +18,7 @@ export function columnsFor(columns, amount) {
 
 /** Stav pohybu v denníku. */
 export function entryState(e) {
+  if (e.means === 'close') return { label: 'Uzávierka', tone: 'draft' }
   if (!e.lines?.length) return { label: 'Nerozpísaný', tone: 'overdue' }
   if (e.auto) return { label: 'Návrh Fiškusa', tone: 'issued' }
   return { label: 'Rozpísaný ručne', tone: 'paid' }

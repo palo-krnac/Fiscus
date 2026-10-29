@@ -144,3 +144,31 @@ func TestBalances(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 }
+
+func TestClosing(t *testing.T) {
+	tests := []struct {
+		name string
+		ls   []Line
+		ok   bool
+	}{
+		{"odpisy", lines(ExpOther, "1200"), true},
+		{"storno neuznaného výdavku", lines(ExpServices, "-80"), true},
+		{"viac riadkov", lines(ExpOther, "1200", IncOther, "50"), true},
+		{"prázdne", nil, false},
+		{"priebežná položka", lines(TransitIn, "10"), false},
+		{"nula", lines(ExpOther, "0"), false},
+		{"zlomky centov", lines(ExpOther, "1.001"), false},
+	}
+	for _, tt := range tests {
+		if err := CheckClosing(tt.ls); (err == nil) != tt.ok {
+			t.Errorf("%s: %v", tt.name, err)
+		}
+	}
+	tot := Sum([]Entry{{Means: Closing, Lines: lines(ExpOther, "1200")}, {Means: Bank, Amount: m.MustParse("500"), Lines: lines(IncServices, "500")}})
+	if tot.Result.String() != "-700.00" || tot.BankIn.String() != "500.00" || !tot.CashIn.IsZero() {
+		t.Fatalf("%+v", tot)
+	}
+	if b := Balances([]Entry{{Means: Closing, Lines: lines(ExpOther, "1")}}, m.Zero, nil, nil); len(b) != 1 || !b[0].Closing.IsZero() {
+		t.Fatalf("stavy: %+v", b)
+	}
+}
