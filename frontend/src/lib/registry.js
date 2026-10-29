@@ -17,8 +17,8 @@ export function validICO(s) {
 
 /**
  * Doplní údaje z registra do formulára (kontakt, odberateľ, firma).
- * Prepíše názov a adresu; DIČ, IČ DPH, e-mail a ďalšie polia nechá tak,
- * lebo RPO ich neobsahuje.
+ * Prepíše názov a adresu; DIČ doplní, ak ho register pozná (Register
+ * účtovných závierok). IČ DPH, e-mail a ďalšie polia nechá tak.
  */
 export function fillFromRegistry(target, company) {
   return {
@@ -28,6 +28,7 @@ export function fillFromRegistry(target, company) {
     street: company.street,
     zip: company.zip,
     city: company.city,
+    ...('dic' in target || company.dic ? { dic: company.dic || target.dic || '' } : {}),
     ...('country' in target || company.country !== 'SK' ? { country: company.country || 'SK' } : {}),
   }
 }

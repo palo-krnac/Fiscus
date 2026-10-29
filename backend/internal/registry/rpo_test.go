@@ -100,8 +100,9 @@ func TestUnavailable(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if atomic.LoadInt32(calls) != 2 {
-				t.Fatalf("výpadok sa nemá ukladať do pamäte, volaní %d", atomic.LoadInt32(calls))
+			// každé vyhľadanie skúsi RPO dvakrát; výpadok sa neukladá do pamäte
+			if atomic.LoadInt32(calls) != 4 {
+				t.Fatalf("volaní %d, chcem 4", atomic.LoadInt32(calls))
 			}
 		})
 	}
@@ -166,5 +167,111 @@ func TestCacheExpires(t *testing.T) {
 func TestDefaultBaseURL(t *testing.T) {
 	if r := NewRPO(""); !strings.HasPrefix(r.BaseURL, "https://") {
 		t.Fatal(r.BaseURL)
+	}
+}
+
+func TestRetryAndNotFoundTTL(t *testing.T) {
+	var n int32
+	r, calls := server(t, func(w http.ResponseWriter, _ *http.Request) {
+		switch atomic.AddInt32(&n, 1) {
+		case 1:
+			w.WriteHeader(502) // prvý pokus zlyhá, druhý uspeje
+		case 2:
+			w.Write([]byte(`{"results":[]}`))
+		default:
+			w.Write([]byte(slovnaftJSON))
+		}
+	})
+	now := time.Date(2026, 10, 29, 10, 0, 0, 0, time.UTC)
+	r.now = func() time.Time { return now }
+	if _, err := r.ByICO(context.Background(), "31322832"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("po opakovaní: %v", err)
+	}
+	now = now.Add(10 * time.Minute)
+	if _, err := r.ByICO(context.Background(), "31322832"); !errors.Is(err, ErrNotFound) || atomic.LoadInt32(calls) != 2 {
+		t.Fatalf("„nenašla sa“ platí 15 minút: %v %d", err, atomic.LoadInt32(calls))
+	}
+	now = now.Add(6 * time.Minute)
+	if c, err := r.ByICO(context.Background(), "31322832"); err != nil || c.Name != "SLOVNAFT, a.s." {
+		t.Fatalf("po 15 minútach sa opýta znova: %+v %v", c, err)
+	}
+}
+
+func ruzServer(t *testing.T, units map[string]string, ids string) *RUZ {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/cruz-public/api/uctovne-jednotky":
+			if r.URL.Query().Get("ico") != "31322832" {
+				w.Write([]byte(`{"id":[]}`))
+				return
+			}
+			w.Write([]byte(ids))
+		case "/cruz-public/api/uctovna-jednotka":
+			w.Write([]byte(units[r.URL.Query().Get("id")]))
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return NewRUZ(srv.URL + "/cruz-public/api/")
+}
+
+func TestRUZ(t *testing.T) {
+	// skutočné ID zo RÚZ pre Slovnaft: 1051838 je zmazaný záznam
+	r := ruzServer(t, map[string]string{
+		"449752":  `{"id":449752,"nazovUJ":"SLOVNAFT, a.s.","ico":"31322832","dic":"2020372640","ulica":"Vlčie hrdlo 1","mesto":"Bratislava - mestská časť Ružinov","psc":"82107","datumZalozenia":"1992-05-01","datumPoslednejUpravy":"2026-07-03"}`,
+		"1051838": `{"id":1051838,"stav":"ZMAZANÉ","datumPoslednejUpravy":"2024-05-31"}`,
+	}, `{"id":[1051838,449752],"existujeDalsieId":false}`)
+	c, err := r.ByICO(context.Background(), "31322832")
+	want := Company{ICO: "31322832", Name: "SLOVNAFT, a.s.", Street: "Vlčie hrdlo 1", Zip: "821 07", City: "Bratislava - mestská časť Ružinov",
+		Country: "SK", Established: "1992-05-01", DIC: "2020372640", Source: "Register účtovných závierok"}
+	if err != nil || c != want {
+		t.Fatalf("%+v %v", c, err)
+	}
+	if _, err := r.ByICO(context.Background(), "35763469"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("nenájdená: %v", err)
+	}
+	if _, err := r.ByICO(context.Background(), "123"); !errors.Is(err, ErrInvalidICO) {
+		t.Fatal(err)
+	}
+}
+
+type fixed struct {
+	c     Company
+	err   error
+	calls *int
+}
+
+func (f fixed) ByICO(context.Context, string) (Company, error) {
+	if f.calls != nil {
+		*f.calls++
+	}
+	return f.c, f.err
+}
+
+func TestChain(t *testing.T) {
+	rpo := Company{ICO: "31322832", Name: "Z RPO"}
+	ruz := Company{ICO: "31322832", Name: "Z RÚZ", DIC: "2020372640"}
+	tests := []struct {
+		name            string
+		primary, second fixed
+		wantName, dic   string
+		wantErr         error
+	}{
+		{"RPO nájde, DIČ z RÚZ", fixed{c: rpo}, fixed{c: ruz}, "Z RPO", "2020372640", nil},
+		{"RPO nájde, RÚZ mlčí", fixed{c: rpo}, fixed{err: ErrUnavailable}, "Z RPO", "", nil},
+		{"RPO nenájde, RÚZ áno", fixed{err: ErrNotFound}, fixed{c: ruz}, "Z RÚZ", "2020372640", nil},
+		{"RPO nedostupné, RÚZ áno", fixed{err: ErrUnavailable}, fixed{c: ruz}, "Z RÚZ", "2020372640", nil},
+		{"nikde", fixed{err: ErrNotFound}, fixed{err: ErrNotFound}, "", "", ErrNotFound},
+		{"RPO nedostupné, RÚZ nenájde", fixed{err: ErrUnavailable}, fixed{err: ErrNotFound}, "", "", ErrUnavailable},
+		{"RPO nenájde, RÚZ nedostupné", fixed{err: ErrNotFound}, fixed{err: ErrUnavailable}, "", "", ErrUnavailable},
+		{"neplatné IČO sa nehľadá ďalej", fixed{err: ErrInvalidICO}, fixed{c: ruz}, "", "", ErrInvalidICO},
+	}
+	for _, tt := range tests {
+		c, err := Chain{tt.primary, tt.second}.ByICO(context.Background(), "31322832")
+		if !errors.Is(err, tt.wantErr) || c.Name != tt.wantName || c.DIC != tt.dic {
+			t.Errorf("%s: %+v %v", tt.name, c, err)
+		}
 	}
 }

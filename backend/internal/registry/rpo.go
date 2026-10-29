@@ -41,6 +41,7 @@ type Company struct {
 	Country     string `json:"country"` // ISO kód
 	Established string `json:"established,omitempty"`
 	Terminated  string `json:"terminated,omitempty"` // dátum zániku, ak firma zanikla
+	DIC         string `json:"dic,omitempty"`        // iba z registra účtovných závierok
 	Source      string `json:"source"`               // napr. „Obchodný register“
 }
 
@@ -54,6 +55,9 @@ type RPO struct {
 	BaseURL string
 	HTTP    *http.Client
 	TTL     time.Duration // ako dlho platí výsledok v pamäti
+	// NotFoundTTL: „nenašlo sa“ platí kratšie (RPO občas vráti prázdny
+	// výsledok aj pre existujúcu firmu)
+	NotFoundTTL time.Duration
 
 	mu    sync.Mutex
 	cache map[string]cached
@@ -72,11 +76,12 @@ func NewRPO(baseURL string) *RPO {
 		baseURL = DefaultBaseURL
 	}
 	return &RPO{
-		BaseURL: strings.TrimRight(baseURL, "/"),
-		HTTP:    &http.Client{Timeout: 8 * time.Second},
-		TTL:     12 * time.Hour,
-		cache:   map[string]cached{},
-		now:     time.Now,
+		BaseURL:     strings.TrimRight(baseURL, "/"),
+		HTTP:        &http.Client{Timeout: 10 * time.Second},
+		TTL:         12 * time.Hour,
+		NotFoundTTL: 15 * time.Minute,
+		cache:       map[string]cached{},
+		now:         time.Now,
 	}
 }
 
@@ -91,19 +96,29 @@ func (r *RPO) ByICO(ctx context.Context, ico string) (Company, error) {
 	}
 
 	r.mu.Lock()
-	if c, ok := r.cache[ico]; ok && r.now().Sub(c.at) < r.TTL {
+	if c, ok := r.cache[ico]; ok && r.now().Sub(c.at) < r.ttl(c.err) {
 		r.mu.Unlock()
 		return c.c, c.err
 	}
 	r.mu.Unlock()
 
 	c, err := r.fetch(ctx, ico)
+	if errors.Is(err, ErrUnavailable) && ctx.Err() == nil {
+		c, err = r.fetch(ctx, ico) // RPO občas zlyhá — jeden pokus navyše
+	}
 	if err == nil || errors.Is(err, ErrNotFound) { // výpadky sa necachujú
 		r.mu.Lock()
 		r.cache[ico] = cached{c, r.now(), err}
 		r.mu.Unlock()
 	}
 	return c, err
+}
+
+func (r *RPO) ttl(err error) time.Duration {
+	if err != nil && r.NotFoundTTL > 0 {
+		return r.NotFoundTTL
+	}
+	return r.TTL
 }
 
 func (r *RPO) fetch(ctx context.Context, ico string) (Company, error) {

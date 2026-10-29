@@ -22,6 +22,14 @@ describe('fillFromRegistry', () => {
     expect(out).toEqual({ name: 'SLOVNAFT, a.s.', ico: '31322832', dic: '2020372640', email: 'x@y.sk', country: 'SK', street: 'Vlčie hrdlo 1', zip: '824 12', city: 'Bratislava' })
   })
 
+  it.each([
+    ['DIČ z registra prepíše prázdne', { dic: '' }, '2020372640', '2020372640'],
+    ['bez DIČ v registri ostane zadané', { dic: '1234567890' }, undefined, '1234567890'],
+    ['DIČ z registra má prednosť', { dic: '1234567890' }, '2020372640', '2020372640'],
+  ])('%s', (_, target, dic, want) => {
+    expect(fillFromRegistry({ name: '', ...target }, { ...reg, dic }).dic).toBe(want)
+  })
+
   it('formulár firmy bez krajiny nedostane pole country', () => {
     expect('country' in fillFromRegistry({ name: '' }, reg)).toBe(false)
   })
