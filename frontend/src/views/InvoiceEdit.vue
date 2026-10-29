@@ -10,7 +10,7 @@ import Textarea from 'primevue/textarea'
 import DatePicker from 'primevue/datepicker'
 import SelectButton from 'primevue/selectbutton'
 import Select from 'primevue/select'
-import { codes, ratesOn } from '../lib/codes.js'
+import { codes, ratesOn, supplyKinds, isForeign, supplyHint } from '../lib/codes.js'
 import Checkbox from 'primevue/checkbox'
 import AutoComplete from 'primevue/autocomplete'
 import IcoInput from '../components/IcoInput.vue'
@@ -94,6 +94,7 @@ async function load() {
         dueDate: toISODate(due),
         priceMode: 'net',
         reverseCharge: false,
+        supplyKind: '',
         nonVatPayer: !session.company?.vatPayer,
         contactId: 0,
         note: '',
@@ -591,6 +592,21 @@ const customerFields = reactive([
             </label>
           </div>
           <small v-if="fieldError('customer.icdph') && inv.reverseCharge" class="err">{{ fieldError('customer.icdph') }}</small>
+          <div v-if="isForeign(inv.customer.country)" class="supply">
+            <span class="supply-label">Druh plnenia</span>
+            <SelectButton
+              :model-value="inv.supplyKind || null"
+              :options="supplyKinds"
+              option-label="label"
+              option-value="value"
+              :disabled="!editable"
+              size="small"
+              aria-label="Druh plnenia"
+              @update:model-value="upd(inv, 'supplyKind')($event || '')"
+            />
+            <small v-if="fieldError('supplyKind')" class="err">{{ fieldError('supplyKind') }}</small>
+            <small v-else class="supply-hint">{{ supplyHint('sale', inv.customer.country, inv.supplyKind) }}</small>
+          </div>
         </fieldset>
 
         <fieldset class="block lines-block">
@@ -832,6 +848,25 @@ legend {
   grid-template-columns: auto 1fr;
   align-items: center;
   gap: 16px;
+}
+.supply {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 8px;
+}
+.supply-label {
+  font-size: var(--fs-sm);
+  color: var(--ink-soft);
+}
+.supply-hint,
+.supply .err {
+  flex-basis: 100%;
+  font-size: var(--fs-sm);
+}
+.supply-hint {
+  color: var(--ink-faint);
 }
 .check {
   flex-direction: row !important;

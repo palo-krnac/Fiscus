@@ -72,6 +72,7 @@ func NewCreditNote(orig Invoice, issueDate Date) (Invoice, error) {
 		Currency:      orig.Currency,
 		PriceMode:     orig.PriceMode,
 		ReverseCharge: orig.ReverseCharge,
+		SupplyKind:    orig.SupplyKind,
 		NonVATPayer:   orig.NonVATPayer,
 		PaymentMethod: orig.PaymentMethod,
 		Correction: &Correction{

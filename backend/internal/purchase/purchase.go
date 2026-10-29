@@ -57,6 +57,9 @@ type Purchase struct {
 	// ReverseCharge: tuzemské prenesenie daňovej povinnosti (§ 69 ods. 12) —
 	// dodávateľ fakturuje bez DPH, daň priznávame my (a zároveň ju odpočítavame).
 	ReverseCharge bool `json:"reverseCharge"`
+	// SupplyKind: tovar alebo služba — pri zahraničnom dodávateľovi rozhoduje
+	// medzi nadobudnutím tovaru z EÚ (r. 05–08) a službou (r. 09–10).
+	SupplyKind invoice.SupplyKind `json:"supplyKind"`
 	// NoDeduction: DPH sa neodpočítava (napr. reprezentácia, súkromná spotreba).
 	NoDeduction bool      `json:"noDeduction"`
 	Description string    `json:"description"` // predmet plnenia
@@ -157,6 +160,11 @@ func (p *Purchase) Validate() error {
 	}
 	if !p.DueDate.IsZero() && !p.IssueDate.IsZero() && p.DueDate.Before(p.IssueDate) {
 		add("dueDate", "Splatnosť nemôže byť pred dátumom vyhotovenia")
+	}
+	if !p.SupplyKind.Valid() {
+		add("supplyKind", "Neznámy druh plnenia")
+	} else if party.Foreign(s.Country) && p.SupplyKind == "" {
+		add("supplyKind", "Pri zahraničnom dodávateľovi vyberte, či ide o tovar alebo službu")
 	}
 	if !p.PaymentMethod.Valid() {
 		add("paymentMethod", "Neznámy spôsob úhrady")

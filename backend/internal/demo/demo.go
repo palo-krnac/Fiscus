@@ -122,6 +122,32 @@ func Seed(ctx context.Context, a *app.App) (store.Company, error) {
 			return c, err
 		}
 	}
+	// zahraniční odberatelia (vymyslené firmy): tovar do Nemecka, služba do Rakúska
+	foreign := []struct {
+		name, city, country, icdph, desc string
+		kind                             invoice.SupplyKind
+		qty, price                       string
+		day                              int
+	}{
+		{"Brenner Steuerungstechnik GmbH", "Regensburg", "DE", "DE299871234", "Rozvádzač RM-12 podľa výkresu", invoice.SupplyGoods, "2", "1450.00", 6},
+		{"Alpenwerk Automation GmbH", "Linz", "AT", "ATU71234567", "Programovanie PLC – oživenie linky", invoice.SupplyServices, "16", "55.00", 9},
+	}
+	for _, f := range foreign {
+		day := today.AddDays(-f.day)
+		d, err := a.SaveDraft(ctx, c.ID, invoice.Invoice{
+			Customer:  invoice.Party{Name: f.name, City: f.city, Country: f.country, ICDPH: f.icdph},
+			IssueDate: day, DeliveryDate: day, DueDate: day.AddDays(30),
+			ReverseCharge: true, SupplyKind: f.kind,
+			Lines: []invoice.Line{{Description: f.desc, Unit: "ks", Quantity: m.MustParse(f.qty), UnitPrice: m.MustParse(f.price), Rate: vat.Rate23}},
+		})
+		if err != nil {
+			return c, fmt.Errorf("demo zahraničná faktúra: %w", err)
+		}
+		if _, err := a.Issue(ctx, c.ID, d.ID); err != nil {
+			return c, err
+		}
+	}
+
 	// prijaté faktúry
 	suppliers := []struct {
 		name, ico, icdph, what string

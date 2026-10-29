@@ -58,3 +58,42 @@ export const EU = new Set(['AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI',
 export function countryName(code) {
   return countries.find((c) => c.code === code)?.name ?? code
 }
+
+export const supplyKinds = [
+  { label: 'Tovar', value: 'goods' },
+  { label: 'Služba', value: 'services' },
+]
+
+/** Je partner zo zahraničia? (prázdna krajina = Slovensko) */
+export const isForeign = (country) => !!country && country !== 'SK'
+
+/**
+ * Vysvetlenie, ako sa zahraničný obchod zaradí do priznania.
+ * side: 'sale' (vydaná faktúra) | 'purchase' (prijatá faktúra)
+ */
+export function supplyHint(side, country, kind) {
+  if (!isForeign(country) || !kind) return ''
+  const eu = EU.has(country)
+  if (side === 'sale') {
+    if (kind === 'goods') return eu ? 'Dodanie tovaru do EÚ: oslobodené (§ 43), r. 14 a súhrnný výkaz – kód 0. Odberateľ musí mať IČ DPH.' : 'Vývoz tovaru: oslobodené (§ 47), r. 15.'
+    return eu ? 'Služba do EÚ: daň platí odberateľ, súhrnný výkaz – kód 2. Odberateľ musí mať IČ DPH.' : 'Služba mimo EÚ: miesto dodania v zahraničí, do priznania sa neuvádza.'
+  }
+  if (kind === 'goods') return eu ? 'Nadobudnutie tovaru z EÚ: daň priznávate a odpočítavate vy (r. 07–08, KV B.1).' : 'Dovoz tovaru: DPH platená na colnici sa zatiaľ eviduje ručne.'
+  return 'Služba zo zahraničia: daň priznávate a odpočítavate vy (§ 69 ods. 3, r. 09–10, KV B.1).'
+}
+
+/** Povinný text na faktúre pri plnení bez DPH (prenesenie, oslobodenie). */
+export function vatExemptionNote(inv) {
+  if (!inv.reverseCharge) return ''
+  const country = inv.customer?.country
+  if (!isForeign(country)) return 'Prenesenie daňovej povinnosti podľa § 69 ods. 12 zákona o DPH. Daň odvedie odberateľ.'
+  const eu = EU.has(country)
+  if (inv.supplyKind === 'goods') {
+    return eu
+      ? 'Dodanie tovaru do iného členského štátu oslobodené od dane podľa § 43 zákona o DPH (čl. 138 smernice 2006/112/ES).'
+      : 'Vývoz tovaru oslobodený od dane podľa § 47 zákona o DPH.'
+  }
+  return eu
+    ? 'Prenesenie daňovej povinnosti – daň platí príjemca služby (reverse charge, čl. 196 smernice 2006/112/ES).'
+    : 'Miesto dodania služby je mimo územia SR (§ 15 ods. 1 zákona o DPH).'
+}

@@ -16,7 +16,7 @@ import { formatAmount, formatDate } from '../lib/format.js'
 import { session } from '../lib/session.js'
 import { defaultPeriod, dueDate, periodOptions } from '../lib/vat.js'
 import { matches, searchTerms } from '../lib/search.js'
-import { kvColumns, vatRowColumns } from '../lib/columns.js'
+import { kvColumns, svColumns, vatRowColumns } from '../lib/columns.js'
 import { saveBlob } from '../lib/export.js'
 import ExportButton from '../components/ExportButton.vue'
 
@@ -115,6 +115,13 @@ const kvSections = computed(() => {
   ]
 })
 const kvAll = computed(() => kvSections.value.flatMap((s) => s.rows))
+
+// súhrnný výkaz
+const SV_CODES = { 0: 'tovar', 1: 'trojstranný obchod', 2: 'služby' }
+const svRows = computed(() => {
+  const terms = searchTerms(search.value)
+  return (data.value?.sv ?? []).filter((l) => matches(terms, [l.country, l.vatId, l.name, l.value, SV_CODES[l.code]]))
+})
 const d2 = computed(() => data.value?.kv?.d2)
 
 function openDoc(kind, id) {
@@ -141,6 +148,7 @@ async function downloadXML(which) {
       <nav class="tabs" aria-label="Výkazy DPH">
         <RouterLink to="/dph" :class="{ on: tab === 'dph' }">Priznanie k DPH</RouterLink>
         <RouterLink to="/kontrolny-vykaz" :class="{ on: tab === 'kv' }">Kontrolný výkaz</RouterLink>
+        <RouterLink to="/suhrnny-vykaz" :class="{ on: tab === 'sv' }">Súhrnný výkaz</RouterLink>
       </nav>
       <div class="spacer" />
       <SelectButton v-model="kind" :options="kinds" option-label="label" option-value="value" :allow-empty="false" size="small" aria-label="Druh obdobia" />
@@ -210,6 +218,40 @@ async function downloadXML(which) {
             </tr>
           </tbody>
         </table>
+      </template>
+
+      <!-- SÚHRNNÝ VÝKAZ -->
+      <template v-else-if="tab === 'sv'">
+        <div class="toolbar">
+          <IconField class="search">
+            <InputIcon class="pi pi-search" />
+            <InputText v-model="search" placeholder="Hľadať štát, IČ DPH, odberateľa" size="small" aria-label="Hľadať v súhrnnom výkaze" />
+          </IconField>
+          <div class="spacer" />
+          <ExportButton :name="`Súhrnný výkaz ${period}`" :columns="svColumns" :rows="svRows" />
+          <Button label="XML pre eDane" icon="pi pi-file-export" size="small" :loading="busyXML === 'sv'" :disabled="!data.sv.length" @click="downloadXML('sv')" />
+        </div>
+        <section class="kv">
+          <h2>Dodania tovarov a služieb do iných štátov EÚ <span class="muted">{{ svRows.length }}</span></h2>
+          <div v-if="svRows.length" class="table-wrap">
+            <table class="lines">
+              <thead>
+                <tr><th>Štát</th><th>IČ DPH</th><th>Odberateľ</th><th class="num">Hodnota</th><th>Kód</th><th class="num">Dokladov</th></tr>
+              </thead>
+              <tbody>
+                <tr v-for="(l, i) in svRows" :key="i">
+                  <td>{{ l.country }}</td>
+                  <td class="mono">{{ l.vatId }}</td>
+                  <td class="partner">{{ l.name }}</td>
+                  <td class="num">{{ formatAmount(l.value) }}</td>
+                  <td>{{ l.code }} – {{ SV_CODES[l.code] }}</td>
+                  <td class="num">{{ l.count }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p v-else class="empty">V tomto období nie sú žiadne dodania do iných štátov EÚ — súhrnný výkaz sa nepodáva.</p>
+        </section>
       </template>
 
       <!-- KONTROLNÝ VÝKAZ -->
@@ -522,9 +564,14 @@ table {
 }
 
 @media (max-width: 640px) {
+  .tabs {
+    max-width: 100%;
+    overflow-x: auto;
+  }
   .tabs a {
-    font-size: var(--fs-lg);
+    font-size: var(--fs-md);
     padding: 4px 8px 6px;
+    white-space: nowrap;
   }
   .period {
     flex: 1;

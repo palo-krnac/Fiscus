@@ -39,6 +39,7 @@ export const modules = [
     items: [
       { path: '/dph', label: 'Priznanie DPH', icon: 'pi-percentage', ready: true, perm: 'vat.read' },
       { path: '/kontrolny-vykaz', label: 'Kontrolný výkaz', icon: 'pi-list-check', ready: true, perm: 'vat.read' },
+      { path: '/suhrnny-vykaz', label: 'Súhrnný výkaz', icon: 'pi-globe', ready: true, perm: 'vat.read' },
     ],
   },
   {
@@ -91,6 +92,7 @@ export const router = createRouter({
     { path: '/banka', component: Bank, meta: { title: 'Banka', perm: 'bank.read' } },
     { path: '/dph', component: VatReturn, props: { tab: 'dph' }, meta: { title: 'Priznanie k DPH', perm: 'vat.read' } },
     { path: '/kontrolny-vykaz', component: VatReturn, props: { tab: 'kv' }, meta: { title: 'Kontrolný výkaz', perm: 'vat.read' } },
+    { path: '/suhrnny-vykaz', component: VatReturn, props: { tab: 'sv' }, meta: { title: 'Súhrnný výkaz', perm: 'vat.read' } },
     { path: '/firmy', component: Companies, meta: { title: 'Firmy a licencia', superAdmin: true, noCompany: true } },
     { path: '/audit', component: AuditLog, meta: { title: 'Audit', perm: 'audit.read' } },
     ...placeholderRoutes,
