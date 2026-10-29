@@ -190,3 +190,11 @@ func TestMoneyJournalTool(t *testing.T) {
 		t.Fatalf("%s", r.Content[0].Text)
 	}
 }
+
+func TestStatementsTool(t *testing.T) {
+	s, ctx, _ := setup(t)
+	r := callTool(t, s, ctx, "simple_accounting_statements", map[string]any{"year": 2026})
+	if r.IsError || !strings.Contains(r.Content[0].Text, "Rozdiel príjmov a výdavkov") || !strings.Contains(r.Content[0].Text, "Rozdiel majetku a záväzkov") {
+		t.Fatalf("%s", r.Content[0].Text)
+	}
+}

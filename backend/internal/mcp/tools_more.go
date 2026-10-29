@@ -324,6 +324,26 @@ func (s *Server) moreTools() []Tool {
 			},
 		},
 		{
+			Name: "simple_accounting_statements", Title: "Výkazy jednoduchého účtovníctva",
+			Description: "Účtovná závierka v jednoduchom účtovníctve za rok v celých eurách: Výkaz o príjmoch a výdavkoch (Úč FO 1-01) " +
+				"a Výkaz o majetku a záväzkoch (Úč FO 2-01), bežné a predchádzajúce obdobie. Upozorní na nerozpísané pohyby v denníku.",
+			Props: map[string]any{"company_id": pCompany, "year": pYear},
+			Run: func(c *callCtx, args json.RawMessage) (any, error) {
+				var p struct {
+					CompanyID int64 `json:"company_id"`
+					Year      int   `json:"year"`
+				}
+				if err := parse(args, &p); err != nil {
+					return nil, err
+				}
+				cid, err := c.company(p.CompanyID, auth.PermLedgerRead)
+				if err != nil {
+					return nil, err
+				}
+				return a.StatementsFor(c.ctx, cid, p.Year)
+			},
+		},
+		{
 			Name: "list_overdue", Title: "Faktúry po splatnosti",
 			Description: "Neuhradené faktúry po splatnosti podľa odberateľov: dni omeškania, doterajšie upomienky a stupeň ďalšej upomienky.",
 			Props:       map[string]any{"company_id": pCompany},

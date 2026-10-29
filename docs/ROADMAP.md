@@ -76,7 +76,8 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 ## Etapa 2 — účtovníctvo
 - [x] Peňažný denník (opatrenie MF SR č. MF/27076/2007-74, § 4): pohyby z bankových výpisov a pokladne, stĺpce c, d1–d3, e1–e6, f, g; úhrady spárovaných faktúr rozpíše Fiškus (základ podľa druhu plnenia / druhu výdavku, DPH zvlášť, pomerne pri čiastočnej úhrade), ostatné pohyby ručne s rýchlymi voľbami; súčty stĺpcov a rozdiel príjmov a výdavkov; export; MCP `money_journal`
 - [x] Stavy pokladnice a účtov v peňažnom denníku (počiatočný stav účtu podľa výpisu, pokladnica z dokladov), kniha pohľadávok a záväzkov k zvolenému dňu (úhrady po dni sa neberú, cudzia mena v eurách, dni po splatnosti)
-- [ ] Jednoduché účtovníctvo ďalej: uzávierkové operácie, Výkaz o príjmoch a výdavkoch a Výkaz o majetku a záväzkoch, podklady pre daňové priznanie typu B
+- [x] Výkazy JÚ v celých eurách: Výkaz o príjmoch a výdavkoch (Úč FO 1-01) z peňažného denníka, Výkaz o majetku a záväzkoch (Úč FO 2-01) z kníh, pokladne a účtov + ručne zadané riadky (dlhodobý majetok, zásoby, úvery…), predchádzajúce obdobie, tlač, export, MCP
+- [ ] Jednoduché účtovníctvo ďalej: uzávierkové operácie (odpisy, úpravy príjmov a výdavkov), elektronické uloženie závierky do RÚZ, podklady pre daňové priznanie typu B
 - [ ] Číselníky účtovníctva: rámcová účtová osnova, účtový rozvrh firmy, predkontácie, strediská, zákazky
 - [ ] Podvojné účtovníctvo: denník, hlavná kniha, automatické účtovanie podľa predkontácií
 - [ ] Účtovné obdobia, uzávierky, výkazy, uloženie závierky do RÚZ

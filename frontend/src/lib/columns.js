@@ -240,6 +240,18 @@ export function openItemColumns(payables = false) {
   ]
 }
 
+/** Výkazy jednoduchého účtovníctva (celé eurá). */
+export function statementColumns(previousEmpty = false) {
+  const cols = [
+    t('Výkaz', (r) => r.statement, 30),
+    t('Riadok', (r) => r.code, 6),
+    t('Názov', (r) => r.label, 50),
+    { header: 'Bežné obdobie', value: (r) => Number(r.current), type: 'number', width: 14 },
+  ]
+  if (!previousEmpty) cols.push({ header: 'Predchádzajúce obdobie', value: (r) => Number(r.previous), type: 'number', width: 14 })
+  return cols
+}
+
 export const backupColumns = [
   t('Záloha', (r) => r.name, 32),
   t('Čas', (r) => new Date(r.time).toLocaleString('sk-SK'), 20),
