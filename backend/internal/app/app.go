@@ -60,6 +60,8 @@ type App struct {
 	legal   atomic.Pointer[legal.Params]
 	// mfaTickets sú rozpracované prihlásenia, ktoré čakajú na kód 2FA.
 	mfaTickets mfaTickets
+	// oauth: podpisový kľúč a autorizačné kódy OAuth (oauth.go)
+	oauth oauthState
 }
 
 // New vytvorí službu.

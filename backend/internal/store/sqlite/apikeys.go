@@ -79,3 +79,22 @@ func (s *Store) RevokeAPIKey(ctx context.Context, userID, id int64) error {
 	}
 	return nil
 }
+
+func (s *Store) GetAPIKey(ctx context.Context, id int64) (auth.APIKey, error) {
+	k, err := scanAPIKey(s.db.QueryRowContext(ctx, "SELECT "+apiKeyCols+" FROM api_keys WHERE id = ?", id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return k, store.ErrNotFound
+	}
+	return k, err
+}
+
+func (s *Store) RotateAPIKey(ctx context.Context, id int64, oldHash, newHash string) error {
+	res, err := s.db.ExecContext(ctx, "UPDATE api_keys SET hash = ? WHERE id = ? AND hash = ? AND revoked = 0", newHash, id, oldHash)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}

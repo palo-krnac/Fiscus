@@ -64,6 +64,11 @@ const isActive = (path) => route.path === path || route.path.startsWith(path + '
     <Login />
     <Toast position="bottom-right" />
   </template>
+  <!-- súhlas s pripojením aplikácie (OAuth): bez menu, nepotrebuje firmu -->
+  <template v-else-if="route.meta.consent">
+    <RouterView v-if="session.ready" />
+    <Toast position="bottom-right" />
+  </template>
   <!-- tlačové zobrazenie bez menu a hlavičky -->
   <template v-else-if="route.meta.bare">
     <RouterView v-if="session.ready && session.companyId && allowed" />

@@ -42,6 +42,12 @@ claude mcp add --transport http fiskus http://127.0.0.1:48080/mcp --header "Auth
 
 Most `fiskus-mcp` sa predvolene pripája na `http://127.0.0.1:48080/mcp` (iná adresa: `-url`). Ak aplikácia nebeží, most ju spustí na pozadí bez okna prehliadača; kým asistent pracuje, aplikácia sa neukončí.
 
+### Claude na webe a v mobile (serverová verzia)
+
+Serverová verzia je zároveň autorizačný server OAuth 2.1 (dynamická registrácia klienta, PKCE S256, obnovovacie tokeny s výmenou). V Claude stačí pridať vlastný konektor s adresou `https://vas-server/mcp`. Claude otvorí Fiškus, používateľ sa prihlási (aj s 2FA) a povolí prístup ako on alebo iba na čítanie. Pripojenie je v *Prístup pre AI* a dá sa zrušiť.
+
+Fiškus musí byť dostupný z internetu cez HTTPS. Za reverznou proxy ho spustite s `-public-url https://vas-server`, aby adresy v metadátach OAuth sedeli.
+
 Nástroje:
 - čítanie: `list_companies`, `company_overview`, `list_invoices`, `get_invoice`, `list_quotes`, `list_recurring_invoices`, `list_catalog_items`, `list_purchases`, `list_contacts`, `list_bank_transactions`, `bank_match_suggestions`, `cash_book`, `list_overdue`, `vat_return`
 - zmeny: `create_invoice_draft`, `issue_invoice`, `mark_invoice_paid`, `create_credit_note`, `create_purchase`, `mark_purchase_paid`, `match_bank_transaction`, `create_reminder`, `create_contact`

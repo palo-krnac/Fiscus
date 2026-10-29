@@ -863,6 +863,25 @@ func Run(t *testing.T, newStore Factory) {
 		if _, err := s.GetAPIKeyByHash(ctx, "nie"); !errors.Is(err, store.ErrNotFound) {
 			t.Fatal("neznámy hash")
 		}
+		if g, err := s.GetAPIKey(ctx, k2.ID); err != nil || g.Hash != "h2" {
+			t.Fatalf("podľa ID: %+v %v", g, err)
+		}
+		if _, err := s.GetAPIKey(ctx, 999); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("neznáme ID")
+		}
+		// výmena odtlačku iba zo správneho starého (obnovovací token OAuth)
+		if err := s.RotateAPIKey(ctx, k2.ID, "zly", "h2b"); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("výmena so zlým starým odtlačkom")
+		}
+		if err := s.RotateAPIKey(ctx, k2.ID, "h2", "h2b"); err != nil {
+			t.Fatal(err)
+		}
+		if g, _ := s.GetAPIKeyByHash(ctx, "h2b"); g.ID != k2.ID {
+			t.Fatal("po výmene")
+		}
+		if err := s.RotateAPIKey(ctx, k2.ID, "h2", "h2c"); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("starý odtlačok druhýkrát")
+		}
 		if err := s.TouchAPIKey(ctx, k1.ID, 5000); err != nil {
 			t.Fatal(err)
 		}
@@ -875,6 +894,9 @@ func Run(t *testing.T, newStore Factory) {
 		got, _ = s.GetAPIKeyByHash(ctx, "h1")
 		if !got.Revoked || got.LastUsedAt != 5000 {
 			t.Fatalf("po zrušení: %+v", got)
+		}
+		if err := s.RotateAPIKey(ctx, k1.ID, "h1", "h1b"); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("zrušený kľúč sa nevymieňa")
 		}
 	})
 

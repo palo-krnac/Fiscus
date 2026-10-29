@@ -77,6 +77,14 @@ func (a *App) KeyActor(ctx context.Context, token string, channel auth.Channel, 
 	if err != nil {
 		return auth.Actor{}, err
 	}
+	if k.Prefix == oauthGrantPrefix {
+		return auth.Actor{}, ErrBadKey // povolenie OAuth sa používa iba cez prístupový token
+	}
+	return a.keyActor(ctx, k, channel, ip)
+}
+
+// keyActor vráti actora pre platný kľúč alebo povolenie OAuth.
+func (a *App) keyActor(ctx context.Context, k auth.APIKey, channel auth.Channel, ip string) (auth.Actor, error) {
 	var act auth.Actor
 	if k.UserID == 0 {
 		// kľúč lokálneho používateľa platí iba v desktopovej verzii

@@ -62,6 +62,7 @@ func main() {
 	claudeURL := flag.String("claude-url", "", "adresa Claude API na čítanie dokladov (prázdne = api.anthropic.com)")
 	restoreFile := flag.String("restore", "", "pred spustením obnoviť databázu zo zálohy (.fbk); pôvodná sa premenuje na .pred-obnovou")
 	licensePath := flag.String("license", "", "súbor s licenčným kľúčom (server, viac firiem); predvolene fiskus.license vedľa databázy")
+	publicURL := flag.String("public-url", "", "server: verejná adresa https://… (pripojenie Claude cez OAuth za reverznou proxy); prázdne = podľa požiadavky")
 	adminEmail := flag.String("admin-email", "", "e-mail prvého správcu (server); heslo v FISKUS_ADMIN_PASSWORD")
 	showVersion := flag.Bool("version", false, "vypíše verziu a skončí")
 	openBrowser := flag.Bool("open", true, "aplikácia: otvoriť prehliadač po spustení (most fiskus-mcp spúšťa bez neho)")
@@ -184,7 +185,7 @@ func main() {
 	if webFS == nil {
 		log.Print("upozornenie: frontend nie je zostavený, beží iba API")
 	}
-	apiSrv := &api.Server{App: a, Web: webFS, Registry: lookup, VAT: vies, MCP: mcp.New(a, version), Version: version}
+	apiSrv := &api.Server{App: a, Web: webFS, Registry: lookup, VAT: vies, MCP: mcp.New(a, version), Version: version, PublicURL: *publicURL}
 	var watchdog *desktop.Watchdog
 	if *appMode {
 		watchdog = desktop.NewWatchdog()

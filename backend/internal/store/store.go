@@ -280,6 +280,10 @@ type Store interface {
 	CreateAPIKey(ctx context.Context, k *auth.APIKey) error               // nastaví ID
 	ListAPIKeys(ctx context.Context, userID int64) ([]auth.APIKey, error) // kľúče používateľa, najnovšie prvé
 	GetAPIKeyByHash(ctx context.Context, hash string) (auth.APIKey, error)
+	GetAPIKey(ctx context.Context, id int64) (auth.APIKey, error)
+	// RotateAPIKey vymení odtlačok, iba ak je stále oldHash (obnovovací token
+	// OAuth); inak ErrNotFound — starý token bol už použitý.
+	RotateAPIKey(ctx context.Context, id int64, oldHash, newHash string) error
 	TouchAPIKey(ctx context.Context, id int64, at int64) error // čas posledného použitia
 	RevokeAPIKey(ctx context.Context, userID, id int64) error  // ErrNotFound pre cudzí kľúč
 
