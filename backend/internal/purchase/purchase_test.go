@@ -83,6 +83,8 @@ func TestValidate(t *testing.T) {
 	}{
 		{"platná", func(*Purchase) {}, ""},
 		{"bez dodávateľa", func(p *Purchase) { p.Supplier.Name = "" }, "supplier.name"},
+		{"druh výdavku zásoby", func(p *Purchase) { p.Expense = ExpenseStock }, ""},
+		{"neznámy druh výdavku", func(p *Purchase) { p.Expense = "x" }, "expense"},
 		{"bez čísla dokladu", func(p *Purchase) { p.SupplierNumber = " " }, "supplierNumber"},
 		{"bez dátumu doručenia", func(p *Purchase) { p.ReceivedDate = invoice.Date{} }, "receivedDate"},
 		{"doručená pred vystavením", func(p *Purchase) { p.ReceivedDate = invoice.MustDate("2026-10-01") }, "receivedDate"},

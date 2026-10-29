@@ -62,11 +62,13 @@ type Purchase struct {
 	// medzi nadobudnutím tovaru z EÚ (r. 05–08) a službou (r. 09–10).
 	SupplyKind invoice.SupplyKind `json:"supplyKind"`
 	// NoDeduction: DPH sa neodpočítava (napr. reprezentácia, súkromná spotreba).
-	NoDeduction bool      `json:"noDeduction"`
-	Description string    `json:"description"` // predmet plnenia
-	Note        string    `json:"note"`
-	Rates       []RateRow `json:"rates"`
-	Summary     Summary   `json:"summary"`
+	NoDeduction bool   `json:"noDeduction"`
+	Description string `json:"description"` // predmet plnenia
+	// Expense je druh výdavku pre peňažný denník (zásoby, služby…); prázdny = služby.
+	Expense ExpenseKind `json:"expense"`
+	Note    string      `json:"note"`
+	Rates   []RateRow   `json:"rates"`
+	Summary Summary     `json:"summary"`
 
 	// Cudzia mena: sumy dokladu sú v mene Currency, do DPH sa prepočítajú
 	// kurzom ECB (FXRate jednotiek meny za 1 EUR, vyhlásený FXDate).
@@ -75,6 +77,41 @@ type Purchase struct {
 	FXDate   invoice.Date `json:"fxDate"`
 	FXManual bool         `json:"fxManual"`
 	Local    *Amounts     `json:"local,omitempty"` // sumy v eurách
+}
+
+// ExpenseKind je druh výdavku v peňažnom denníku (opatrenie MF SR
+// č. MF/27076/2007-74, § 4 ods. 6 písm. e a g).
+type ExpenseKind string
+
+const (
+	ExpenseServices ExpenseKind = "services" // služby (energie, nájom, telefón…)
+	ExpenseStock    ExpenseKind = "stock"    // zásoby: materiál a tovar
+	ExpenseOther    ExpenseKind = "other"    // ostatné výdavky
+	ExpenseAsset    ExpenseKind = "asset"    // dlhodobý majetok — do základu dane cez odpisy
+)
+
+// ExpenseKinds je číselník druhov výdavku (poradie v ponuke).
+var ExpenseKinds = []struct {
+	Code  ExpenseKind `json:"code"`
+	Label string      `json:"label"`
+}{
+	{ExpenseServices, "Služby"},
+	{ExpenseStock, "Zásoby (materiál, tovar)"},
+	{ExpenseOther, "Ostatné výdavky"},
+	{ExpenseAsset, "Dlhodobý majetok"},
+}
+
+// Valid vráti true pre prázdny alebo známy druh.
+func (k ExpenseKind) Valid() bool {
+	if k == "" {
+		return true
+	}
+	for _, x := range ExpenseKinds {
+		if x.Code == k {
+			return true
+		}
+	}
+	return false
 }
 
 // Amounts sú rekapitulácia a súčty (v eurách pri doklade v cudzej mene).
@@ -198,6 +235,9 @@ func (p *Purchase) Validate() error {
 	s := p.Supplier
 	if strings.TrimSpace(s.Name) == "" {
 		add("supplier.name", "Zadajte dodávateľa")
+	}
+	if !p.Expense.Valid() {
+		add("expense", "Neznámy druh výdavku")
 	}
 	if s.ICO != "" && (s.Country == "" || s.Country == "SK") && !party.ValidICO(s.ICO) {
 		add("supplier.ico", "Neplatné IČO")

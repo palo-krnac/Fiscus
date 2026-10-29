@@ -177,3 +177,16 @@ func TestRequiredArguments(t *testing.T) {
 		}
 	}
 }
+
+func TestMoneyJournalTool(t *testing.T) {
+	s, ctx, cid := setup(t)
+	_, _, err := s.App.Store.SaveBankTransactions(ctx, cid, []bank.Transaction{{Account: "SK3112000000198742637541",
+		Date: invoice.MustDate("2026-10-10"), Amount: money.MustParse("4.90"), Currency: "EUR", Direction: bank.Out, Fingerprint: "f", Status: bank.StatusOpen}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := callTool(t, s, ctx, "money_journal", map[string]any{"year": 2026, "unclassified_only": true})
+	if r.IsError || !strings.Contains(r.Content[0].Text, `"unclassified": 1`) || !strings.Contains(r.Content[0].Text, `"amount": "-4.90"`) {
+		t.Fatalf("%s", r.Content[0].Text)
+	}
+}

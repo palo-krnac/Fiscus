@@ -37,6 +37,7 @@ type Store struct {
 	purchases map[int64]purchase.Purchase
 	bankTx    map[int64]bank.Transaction
 	apiKeys   map[int64]auth.APIKey
+	journal   map[int64]map[string]store.JournalOverride // firma → zdroj → rozpis
 	cashDocs  map[int64]cash.Document
 	quotes    map[int64]quote.Quote
 	recurring map[int64]recurring.Template

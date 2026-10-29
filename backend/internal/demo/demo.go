@@ -184,7 +184,7 @@ func Seed(ctx context.Context, a *app.App) (store.Company, error) {
 		}
 	}
 
-	// prijaté faktúry
+	// prijaté faktúry (druh výdavku pre peňažný denník podľa predmetu)
 	suppliers := []struct {
 		name, ico, icdph, what string
 		base                   string
@@ -207,6 +207,7 @@ func Seed(ctx context.Context, a *app.App) (store.Company, error) {
 			ReceivedDate:   received,
 			DueDate:        received.AddDays(12),
 			Description:    sp.what,
+			Expense:        demoExpense(sp.what),
 			Rates:          []purchase.RateRow{{Rate: sp.rate, Base: m.MustParse(sp.base)}},
 		}
 		saved, _, err := a.SavePurchase(ctx, c.ID, pu)
@@ -523,4 +524,15 @@ func seedDomesticRC(ctx context.Context, a *app.App, c store.Company) error {
 	}
 	_, err = a.Issue(ctx, c.ID, d.ID)
 	return err
+}
+
+// demoExpense priradí ukážkovým nákupom druh výdavku pre peňažný denník.
+func demoExpense(what string) purchase.ExpenseKind {
+	switch {
+	case strings.Contains(what, "materiál"), strings.Contains(what, "Pohonné"):
+		return purchase.ExpenseStock
+	case strings.Contains(what, "literatúra"):
+		return purchase.ExpenseOther
+	}
+	return purchase.ExpenseServices
 }

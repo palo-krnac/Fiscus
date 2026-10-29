@@ -380,6 +380,9 @@ const set = (obj, key) => (v) => {
             <FormField label="Predmet" :span="p.paymentMethod === 'transfer' ? 2 : 4">
               <InputText :model-value="p.description" :disabled="locked" placeholder="Napr. pohonné hmoty, nájom, materiál" size="small" @update:model-value="set(p, 'description')($event)" />
             </FormField>
+            <FormField label="Druh výdavku" :error="fieldError('expense')" hint="Stĺpec v peňažnom denníku">
+              <Select :model-value="p.expense || 'services'" :options="codes.expenseKinds" option-label="label" option-value="code" :disabled="locked" size="small" aria-label="Druh výdavku" @update:model-value="set(p, 'expense')($event)" />
+            </FormField>
             <FormField label="Mena" :error="fieldError('currency')">
               <Select :model-value="p.currency || 'EUR'" :options="currencies" option-label="label" option-value="code" filter :disabled="locked" size="small" aria-label="Mena" @update:model-value="setCurrency" />
             </FormField>

@@ -18,7 +18,7 @@ import (
 
 const purchaseCols = `id, company_id, number, supplier_number, variable_symbol, status, contact_id,
 	supplier_json, supplier_iban, issue_date, delivery_date, received_date, due_date, paid_date,
-	payment_method, reverse_charge, no_deduction, description, note, rates_json, summary_json, supply_kind, fx_json`
+	payment_method, reverse_charge, no_deduction, description, note, rates_json, summary_json, supply_kind, fx_json, expense`
 
 func scanPurchase(r interface{ Scan(...any) error }) (purchase.Purchase, error) {
 	var p purchase.Purchase
@@ -26,7 +26,7 @@ func scanPurchase(r interface{ Scan(...any) error }) (purchase.Purchase, error) 
 	var dates [5]string
 	err := r.Scan(&p.ID, &p.CompanyID, &p.Number, &p.SupplierNumber, &p.VariableSymbol, &p.Status, &p.ContactID,
 		&supplier, &p.SupplierIBAN, &dates[0], &dates[1], &dates[2], &dates[3], &dates[4],
-		&p.PaymentMethod, &p.ReverseCharge, &p.NoDeduction, &p.Description, &p.Note, &rates, &summary, &p.SupplyKind, &fxJSON)
+		&p.PaymentMethod, &p.ReverseCharge, &p.NoDeduction, &p.Description, &p.Note, &rates, &summary, &p.SupplyKind, &fxJSON, &p.Expense)
 	if err != nil {
 		return p, err
 	}
@@ -130,12 +130,12 @@ func (s *Store) SavePurchase(ctx context.Context, companyID int64, p *purchase.P
 	vals := []any{p.Number, p.SupplierNumber, p.VariableSymbol, string(p.Status), p.ContactID,
 		string(supplier), p.SupplierIBAN, p.IssueDate.String(), p.DeliveryDate.String(), p.ReceivedDate.String(),
 		p.DueDate.String(), p.PaidDate.String(), string(p.PaymentMethod), p.ReverseCharge, p.NoDeduction,
-		p.Description, p.Note, string(ratesJSON), string(summary), string(p.SupplyKind), fxJSON}
+		p.Description, p.Note, string(ratesJSON), string(summary), string(p.SupplyKind), fxJSON, string(p.Expense)}
 	if p.ID == 0 {
 		res, err := s.db.ExecContext(ctx, `INSERT INTO purchases (company_id, number, supplier_number, variable_symbol,
 			status, contact_id, supplier_json, supplier_iban, issue_date, delivery_date, received_date, due_date,
-			paid_date, payment_method, reverse_charge, no_deduction, description, note, rates_json, summary_json, supply_kind, fx_json)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, append([]any{companyID}, vals...)...)
+			paid_date, payment_method, reverse_charge, no_deduction, description, note, rates_json, summary_json, supply_kind, fx_json, expense)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, append([]any{companyID}, vals...)...)
 		if err != nil {
 			return err
 		}
@@ -146,7 +146,7 @@ func (s *Store) SavePurchase(ctx context.Context, companyID int64, p *purchase.P
 		res, err := s.db.ExecContext(ctx, `UPDATE purchases SET number = ?, supplier_number = ?, variable_symbol = ?,
 			status = ?, contact_id = ?, supplier_json = ?, supplier_iban = ?, issue_date = ?, delivery_date = ?,
 			received_date = ?, due_date = ?, paid_date = ?, payment_method = ?, reverse_charge = ?, no_deduction = ?,
-			description = ?, note = ?, rates_json = ?, summary_json = ?, supply_kind = ?, fx_json = ?
+			description = ?, note = ?, rates_json = ?, summary_json = ?, supply_kind = ?, fx_json = ?, expense = ?
 			WHERE id = ? AND company_id = ?`, append(vals, p.ID, companyID)...)
 		if err != nil {
 			return err
