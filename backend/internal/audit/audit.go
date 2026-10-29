@@ -28,6 +28,7 @@ const (
 	CatAuth      Category = "auth"      // prihlásenia
 	CatBackups   Category = "backups"   // zálohy a obnovy
 	CatTaxes     Category = "taxes"     // priznanie k DPH, kontrolný výkaz
+	CatBank      Category = "bank"      // import výpisov a párovanie úhrad
 )
 
 // Categories je číselník kategórií pre filter.
@@ -41,6 +42,7 @@ var Categories = []struct {
 	{CatSettings, "Nastavenia"},
 	{CatUsers, "Používatelia"},
 	{CatAuth, "Prihlásenia"},
+	{CatBank, "Banka"},
 	{CatTaxes, "Dane"},
 	{CatBackups, "Zálohy"},
 }

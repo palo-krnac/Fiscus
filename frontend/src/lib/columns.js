@@ -130,3 +130,21 @@ export const kvColumns = [
   { header: 'Sadzba %', value: (r) => r.rate, type: 'number', width: 8 },
   money('Odpočítaná daň', (r) => r.deducted),
 ]
+
+const bankStatus = { open: 'Nespárované', matched: 'Spárované', ignored: 'Nepárované' }
+
+export const bankColumns = [
+  date('Dátum', (r) => r.date),
+  money('Suma', (r) => (r.direction === 'out' ? '-' : '') + r.amount),
+  t('Mena', (r) => r.currency, 6),
+  t('Protistrana', (r) => r.counterName, 28),
+  t('IBAN protistrany', (r) => r.counterIban, 26),
+  t('VS', (r) => r.vs, 12),
+  t('ŠS', (r) => r.ss, 8),
+  t('KS', (r) => r.ks, 6),
+  t('Správa', (r) => r.message, 40),
+  t('Stav', (r) => bankStatus[r.status] ?? r.status, 14),
+  t('Doklad', (r) => r.match?.number, 14),
+  t('Poznámka', (r) => r.note, 24),
+  t('Účet', (r) => r.account, 26),
+]

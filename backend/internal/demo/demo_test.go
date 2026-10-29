@@ -25,6 +25,16 @@ func TestSeed(t *testing.T) {
 	if p, _ := a.Store.ListPurchases(context.Background(), c.ID, store.PurchaseFilter{}); len(p) != 6 {
 		t.Fatalf("%d prijatých faktúr", len(p))
 	}
+	txs, _ := a.Store.ListBankTransactions(context.Background(), c.ID, store.BankFilter{})
+	matched := 0
+	for _, tx := range txs {
+		if tx.Status == "matched" {
+			matched++
+		}
+	}
+	if len(txs) != 6 || matched != 3 {
+		t.Fatalf("výpis: %d pohybov, %d spárovaných", len(txs), matched)
+	}
 	for _, cu := range customers {
 		if !party.ValidICO(cu.ico) {
 			t.Errorf("neplatné demo IČO %s", cu.ico)

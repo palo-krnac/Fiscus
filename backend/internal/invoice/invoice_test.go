@@ -113,6 +113,12 @@ func TestLifecycle(t *testing.T) {
 	if err := inv.Cancel(); !errors.Is(err, ErrBadTransition) {
 		t.Fatal("uhradenú faktúru nemožno stornovať")
 	}
+	if err := inv.Unpay(); err != nil || inv.Status != StatusIssued || !inv.PaidDate.IsZero() {
+		t.Fatalf("zrušenie úhrady: %v %s", err, inv.Status)
+	}
+	if err := inv.Unpay(); !errors.Is(err, ErrBadTransition) {
+		t.Fatal("neuhradenej faktúre nemožno zrušiť úhradu")
+	}
 }
 
 func TestIssueRejectsInvalid(t *testing.T) {

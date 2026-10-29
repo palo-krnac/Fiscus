@@ -26,7 +26,8 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [ ] Zálohová faktúra a daňový doklad k prijatej platbe, cenová ponuka, pravidelná fakturácia
 - [x] Prijaté faktúry: evidencia z rekapitulácie DPH dodávateľa, odpočet / bez odpočtu, prenesenie, kontrola duplicít, úhrady
 - [ ] AI vyťaženie prijatých faktúr z PDF (AI iba navrhuje, účtuje pevne naprogramovaný automat)
-- [ ] Banka: import výpisov (camt.053 / CSV), párovanie platieb
+- [x] Banka: import výpisov camt.053, automatické párovanie podľa VS a sumy, návrhy, ručné párovanie, nepárované pohyby
+- [ ] Banka: CSV / GPC výpisy, čiastočné úhrady a preplatky, viac účtov, platobné príkazy (pain.001), napojenie na banku cez API
 - [ ] Pokladňa
 - [x] **Priznanie k DPH (DPHv25) a kontrolný výkaz (KVDPHv25)**: výpočet z dokladov, XML pre eDane, mesačne aj štvrťročne
 - [ ] Súhrnný výkaz (dodania do EÚ), A.2 a tuzemské prenesenie pri dodaní, nadobudnutie tovaru z EÚ (r. 05–08), dovoz

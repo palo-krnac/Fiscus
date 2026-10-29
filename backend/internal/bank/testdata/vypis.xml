@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.02">
+  <BkToCstmrStmt>
+    <GrpHdr><MsgId>STMT-2026-10</MsgId><CreDtTm>2026-10-31T23:00:00</CreDtTm></GrpHdr>
+    <Stmt>
+      <Id>2026-10</Id>
+      <Acct><Id><IBAN>SK31 1200 0000 1987 4263 7541</IBAN></Id><Ccy>EUR</Ccy></Acct>
+      <Ntry>
+        <NtryRef>1</NtryRef>
+        <Amt Ccy="EUR">2275.50</Amt>
+        <CdtDbtInd>CRDT</CdtDbtInd>
+        <Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-10-20</Dt></BookgDt>
+        <ValDt><Dt>2026-10-20</Dt></ValDt>
+        <AcctSvcrRef>REF-0001</AcctSvcrRef>
+        <NtryDtls><TxDtls>
+          <Refs><EndToEndId>/VS20260037/SS/KS0308</EndToEndId></Refs>
+          <RltdPties><Dbtr><Nm>Stavmont Zvolen, a.s.</Nm></Dbtr><DbtrAcct><Id><IBAN>SK8975000000000012345671</IBAN></Id></DbtrAcct></RltdPties>
+          <RmtInf><Ustrd>Uhrada FA20260037</Ustrd></RmtInf>
+        </TxDtls></NtryDtls>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="EUR">100.00</Amt>
+        <CdtDbtInd>DBIT</CdtDbtInd>
+        <Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-10-25</Dt></BookgDt>
+        <AcctSvcrRef>REF-0002</AcctSvcrRef>
+        <NtryDtls><TxDtls>
+          <Refs><EndToEndId>NOTPROVIDED</EndToEndId></Refs>
+          <RltdPties><Cdtr><Nm>Čerpacia stanica Hron s.r.o.</Nm></Cdtr><CdtrAcct><Id><IBAN>SK0211000000002612345678</IBAN></Id></CdtrAcct></RltdPties>
+          <RmtInf><Ustrd>Faktura VS: 0202601200 pohonne hmoty</Ustrd></RmtInf>
+        </TxDtls></NtryDtls>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="EUR">50.00</Amt>
+        <CdtDbtInd>DBIT</CdtDbtInd>
+        <Sts>PDNG</Sts>
+        <BookgDt><Dt>2026-10-30</Dt></BookgDt>
+        <AcctSvcrRef>REF-0003</AcctSvcrRef>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="EUR">300.00</Amt>
+        <CdtDbtInd>CRDT</CdtDbtInd>
+        <Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-10-28</Dt></BookgDt>
+        <AcctSvcrRef>REF-0004</AcctSvcrRef>
+        <NtryDtls>
+          <TxDtls>
+            <Amt Ccy="EUR">120.00</Amt>
+            <Refs><EndToEndId>20260031</EndToEndId></Refs>
+            <RltdPties><Dbtr><Nm>Mlyn Brezno s.r.o.</Nm></Dbtr></RltdPties>
+          </TxDtls>
+          <TxDtls>
+            <Amt Ccy="EUR">180.00</Amt>
+            <Refs><EndToEndId>/VS20260032</EndToEndId></Refs>
+            <RltdPties><Dbtr><Nm>Agro Liptov družstvo</Nm></Dbtr></RltdPties>
+          </TxDtls>
+        </NtryDtls>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="EUR">2.50</Amt>
+        <CdtDbtInd>DBIT</CdtDbtInd>
+        <Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-10-31</Dt></BookgDt>
+        <AddtlNtryInf>Poplatok za vedenie uctu</AddtlNtryInf>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="EUR">2.50</Amt>
+        <CdtDbtInd>DBIT</CdtDbtInd>
+        <Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-10-31</Dt></BookgDt>
+        <AddtlNtryInf>Poplatok za vedenie uctu</AddtlNtryInf>
+      </Ntry>
+    </Stmt>
+  </BkToCstmrStmt>
+</Document>

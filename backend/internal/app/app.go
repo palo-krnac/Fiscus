@@ -406,6 +406,11 @@ func (a *App) MarkPaid(ctx context.Context, companyID, id int64, on invoice.Date
 	})
 }
 
+// Unpay zruší úhradu faktúry.
+func (a *App) Unpay(ctx context.Context, companyID, id int64) (invoice.Invoice, error) {
+	return a.transition(ctx, companyID, id, "unpay", "Zrušená úhrada ", (*invoice.Invoice).Unpay)
+}
+
 // Cancel stornuje faktúru.
 func (a *App) Cancel(ctx context.Context, companyID, id int64) (invoice.Invoice, error) {
 	return a.transition(ctx, companyID, id, "cancel", "Stornovaná ", (*invoice.Invoice).Cancel)

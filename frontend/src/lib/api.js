@@ -25,7 +25,11 @@ export async function request(method, path, body, fetchImpl = globalThis.fetch) 
   // ochrana proti CSRF: cudzia stránka túto hlavičku poslať nevie
   if (method !== 'GET') init.headers['X-Fiskus'] = '1'
 
-  if (body !== undefined) {
+  if (typeof Blob !== 'undefined' && body instanceof Blob) {
+    // súbor (napr. bankový výpis) sa posiela tak, ako je
+    init.headers['Content-Type'] = body.type || 'application/octet-stream'
+    init.body = body
+  } else if (body !== undefined) {
     init.headers['Content-Type'] = 'application/json'
     init.body = JSON.stringify(body)
   }
@@ -80,6 +84,13 @@ export const api = {
   /** Audit firmy; cid = 0 → celá inštalácia (iba správca inštalácie). */
   audit: (cid, filter) => request('GET', (cid ? `/api/companies/${cid}/audit` : '/api/audit') + query(filter)),
   verifyAudit: () => request('GET', '/api/audit/verify'),
+
+  bank: (cid, { year, status } = {}) => request('GET', `/api/companies/${cid}/bank` + query({ year, status })),
+  importBank: (cid, file) => request('POST', `/api/companies/${cid}/bank/import` + query({ name: file.name }), file),
+  bankSuggestions: (cid, id) => request('GET', `/api/companies/${cid}/bank/${id}/suggestions`),
+  bankMatch: (cid, id, kind, docId) => request('POST', `/api/companies/${cid}/bank/${id}/match`, { kind, id: docId }),
+  bankUnmatch: (cid, id) => request('POST', `/api/companies/${cid}/bank/${id}/unmatch`),
+  bankIgnore: (cid, id, ignore, note) => request('POST', `/api/companies/${cid}/bank/${id}/ignore`, { ignore, note }),
 
   vat: (cid, period, excess) => request('GET', `/api/companies/${cid}/vat` + query({ period, excess })),
   /** XML pre eDane ako Blob (kind: 'dph' | 'kv'). */
