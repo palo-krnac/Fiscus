@@ -1,5 +1,5 @@
 <script setup>
-// Banka: import výpisov camt.053 a párovanie platieb s faktúrami.
+// Banka: import výpisov (camt.053, GPC, CSV, Excel) a párovanie platieb s faktúrami.
 import { computed, onMounted, ref, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { AgGridVue } from 'ag-grid-vue3'
@@ -128,7 +128,7 @@ async function onFile(e) {
     if (r.autoMatched) parts.push(`${r.autoMatched} automaticky spárovaných`)
     if (r.open) parts.push(`${r.open} na spárovanie`)
     if (r.duplicates) parts.push(`${r.duplicates} už importovaných`)
-    toast.add({ severity: 'success', summary: `Výpis ${file.name} načítaný`, detail: parts.join(', '), life: 6000 })
+    toast.add({ severity: 'success', summary: `Výpis ${file.name} načítaný${r.format ? ` (${r.format})` : ""}`, detail: parts.join(', '), life: 6000 })
     for (const w of r.warnings) toast.add({ severity: 'warn', summary: 'Upozornenie', detail: w, life: 8000 })
     if (r.open) view.value = 'open'
     await load()
@@ -204,8 +204,8 @@ const kindLabel = (k) => (k === 'purchase' ? 'prijatá' : 'vydaná')
       <Select v-model="year" :options="years" option-label="label" option-value="value" size="small" aria-label="Rok" />
       <div class="spacer" />
       <template v-if="canWrite">
-        <input ref="fileEl" type="file" accept=".xml,application/xml,text/xml" hidden @change="onFile" />
-        <Button size="small" icon="pi pi-upload" label="Načítať výpis" :loading="importing" v-tooltip.bottom="'Výpis vo formáte XML camt.053 z internetbankingu'" @click="fileEl.click()" />
+        <input ref="fileEl" type="file" accept=".xml,.gpc,.abo,.txt,.csv,.xlsx,application/xml,text/xml,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden @change="onFile" />
+        <Button size="small" icon="pi pi-upload" label="Načítať výpis" :loading="importing" v-tooltip.bottom="'Výpis z internetbankingu: XML camt.053, GPC (ABO), CSV alebo Excel'" @click="fileEl.click()" />
       </template>
     </header>
 
@@ -246,7 +246,7 @@ const kindLabel = (k) => (k === 'purchase' ? 'prijatá' : 'vydaná')
         :loading="loading"
         :get-row-id="(p) => String(p.data.id)"
         :row-class-rules="{ 'row-open': (p) => p.data.status === 'open' }"
-        :overlay-no-rows-template="'<span>Žiadne pohyby. Výpis z internetbankingu (XML camt.053) načítate tlačidlom Načítať výpis.</span>'"
+        :overlay-no-rows-template="'<span>Žiadne pohyby. Výpis z internetbankingu (XML camt.053, GPC, CSV alebo Excel) načítate tlačidlom Načítať výpis.</span>'"
         @grid-ready="(e) => { gridApi = e.api; applyResponsive() }"
         @row-clicked="(e) => openTx(e.data)"
       />

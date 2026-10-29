@@ -63,8 +63,10 @@ func Suggest(t Transaction, cands []Candidate) []Suggestion {
 		switch {
 		case vsOK && amountOK:
 			s.Score, s.Reason = ScoreExact, "sedí variabilný symbol aj suma"
+		case vsOK && t.Amount.Cmp(c.Amount) < 0:
+			s.Score, s.Reason = ScoreVS, "sedí variabilný symbol — čiastočná úhrada, zostane "+c.Amount.Sub(t.Amount).Display()+" €"
 		case vsOK:
-			s.Score, s.Reason = ScoreVS, "sedí variabilný symbol, suma je iná"
+			s.Score, s.Reason = ScoreVS, "sedí variabilný symbol, suma je vyššia (preplatok)"
 		case amountOK && whoOK:
 			s.Score, s.Reason = ScoreAmountWho, "sedí suma aj protistrana"
 		case amountOK:

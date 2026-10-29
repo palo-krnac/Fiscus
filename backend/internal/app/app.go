@@ -21,6 +21,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/legal"
 	"github.com/palo-krnac/fiscus/backend/internal/license"
 	"github.com/palo-krnac/fiscus/backend/internal/mail"
+	"github.com/palo-krnac/fiscus/backend/internal/money"
 	"github.com/palo-krnac/fiscus/backend/internal/party"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 )
@@ -437,29 +438,63 @@ func (a *App) Issue(ctx context.Context, companyID, id int64) (invoice.Invoice, 
 	return inv, nil
 }
 
-// MarkPaid označí faktúru ako uhradenú.
+// MarkPaid označí faktúru ako uhradenú (doplatí zostatok).
 func (a *App) MarkPaid(ctx context.Context, companyID, id int64, on invoice.Date) (invoice.Invoice, error) {
-	inv, err := a.transition(ctx, companyID, id, "pay", "Uhradená ", func(inv *invoice.Invoice) error {
-		if on.IsZero() {
-			on = a.Today()
+	return a.AddPayment(ctx, companyID, id, invoice.Payment{Date: on, Source: invoice.PaymentManual}, true)
+}
+
+// AddPayment pripíše úhradu faktúry (aj čiastočnú). S rest=true sa suma
+// doplní na celý zostatok. Pri zálohovej faktúre vznikne po úplnej úhrade
+// daňový doklad k prijatej platbe.
+func (a *App) AddPayment(ctx context.Context, companyID, id int64, p invoice.Payment, rest bool) (invoice.Invoice, error) {
+	inv, err := a.transition(ctx, companyID, id, "pay", "Úhrada ", func(inv *invoice.Invoice) error {
+		if p.Date.IsZero() {
+			p.Date = a.Today()
 		}
-		return inv.MarkPaid(on)
+		if rest {
+			p.Amount = inv.Remaining()
+		}
+		return inv.AddPayment(p)
 	})
-	if err == nil && inv.NeedsReceipt() {
+	if err == nil && inv.Status == invoice.StatusPaid && inv.NeedsReceipt() {
 		// prijatá záloha: daňová povinnosť vzniká dňom prijatia platby
 		inv, err = a.issueAdvanceReceipt(ctx, companyID, inv)
 	}
 	return inv, err
 }
 
+// RemovePayment zruší úhradu z banky alebo pokladne (zrušené spárovanie,
+// storno pokladničného dokladu). Úhrada spred evidencie úhrad sa zruší celá.
+func (a *App) RemovePayment(ctx context.Context, companyID, id int64, source string, ref int64) (invoice.Invoice, error) {
+	return a.transition(ctx, companyID, id, "unpay", "Zrušená úhrada ", func(inv *invoice.Invoice) error {
+		if err := receiptGuard(inv); err != nil {
+			return err
+		}
+		if inv.RemovePayment(source, ref) {
+			return nil
+		}
+		if len(inv.Payments) == 0 && inv.Status == invoice.StatusPaid {
+			return inv.Unpay()
+		}
+		return invoice.ErrBadTransition
+	})
+}
+
+func receiptGuard(inv *invoice.Invoice) error {
+	if inv.Advance != nil && inv.Advance.ReceiptID != 0 {
+		return fmt.Errorf("%w %s", ErrReceiptIssued, inv.Advance.ReceiptNumber)
+	}
+	if inv.Kind == invoice.KindAdvanceReceipt {
+		return ErrReceiptIssued
+	}
+	return nil
+}
+
 // Unpay zruší úhradu faktúry.
 func (a *App) Unpay(ctx context.Context, companyID, id int64) (invoice.Invoice, error) {
 	return a.transition(ctx, companyID, id, "unpay", "Zrušená úhrada ", func(inv *invoice.Invoice) error {
-		if inv.Advance != nil && inv.Advance.ReceiptID != 0 {
-			return fmt.Errorf("%w %s", ErrReceiptIssued, inv.Advance.ReceiptNumber)
-		}
-		if inv.Kind == invoice.KindAdvanceReceipt {
-			return ErrReceiptIssued
+		if err := receiptGuard(inv); err != nil {
+			return err
 		}
 		return inv.Unpay()
 	})
@@ -476,16 +511,18 @@ func (a *App) transition(ctx context.Context, companyID, id int64, action, what 
 		return inv, err
 	}
 	type state struct {
-		Status   invoice.Status `json:"status"`
-		PaidDate invoice.Date   `json:"paidDate"`
+		Status   invoice.Status    `json:"status"`
+		PaidDate invoice.Date      `json:"paidDate"`
+		Paid     money.Dec         `json:"paid"`
+		Payments []invoice.Payment `json:"payments,omitempty"`
 	}
-	before := state{inv.Status, inv.PaidDate}
+	before := state{inv.Status, inv.PaidDate, inv.Paid(), inv.Payments}
 	if err := fn(&inv); err != nil {
 		return inv, err
 	}
 	if err := a.Store.SaveInvoice(ctx, companyID, &inv); err != nil {
 		return inv, err
 	}
-	a.record(ctx, companyID, audit.CatInvoices, action, "invoice", inv.ID, what+docName(inv), before, state{inv.Status, inv.PaidDate})
+	a.record(ctx, companyID, audit.CatInvoices, action, "invoice", inv.ID, what+docName(inv), before, state{inv.Status, inv.PaidDate, inv.Paid(), inv.Payments})
 	return inv, nil
 }

@@ -15,7 +15,7 @@ import { fiskusGridTheme, skGridLocale, gridRows } from '../lib/grid.js'
 import { matches, searchTerms } from '../lib/search.js'
 import { invoiceColumns } from '../lib/columns.js'
 import { kindBadge } from '../lib/advance.js'
-import { eurSummary, isForeignCurrency } from '../lib/fx.js'
+import { eurBalance, eurSummary, isForeignCurrency } from '../lib/fx.js'
 import ExportButton from '../components/ExportButton.vue'
 
 const router = useRouter()
@@ -79,11 +79,13 @@ const ledger = computed(() => {
   const counted = rows.value.filter((r) => (r.status === 'issued' || r.status === 'paid') && r.kind !== 'proforma')
   const unpaid = rows.value.filter((r) => r.status === 'issued')
   const overdue = unpaid.filter((r) => r.overdue)
+  // neuhradené = zostatky po čiastočných úhradách
+  const due = (list) => list.reduce((acc, r) => acc + Number(eurBalance(r)), 0)
   return {
     invoiced: sum(counted),
-    unpaid: sum(unpaid),
+    unpaid: due(unpaid),
     unpaidCount: unpaid.length,
-    overdue: sum(overdue),
+    overdue: due(overdue),
     overdueCount: overdue.length,
   }
 })

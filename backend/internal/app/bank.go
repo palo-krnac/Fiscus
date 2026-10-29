@@ -25,6 +25,7 @@ var (
 // ImportResult je výsledok importu výpisu.
 type ImportResult struct {
 	Account     string   `json:"account"`
+	Format      string   `json:"format"`      // camt.053 | GPC | CSV/Excel
 	Imported    int      `json:"imported"`    // nové pohyby
 	Duplicates  int      `json:"duplicates"`  // už importované skôr
 	AutoMatched int      `json:"autoMatched"` // automaticky spárované
@@ -51,11 +52,12 @@ func (a *App) candidates(ctx context.Context, companyID int64) ([]bank.Candidate
 		if inv.Status != invoice.StatusIssued || (inv.Currency != "" && inv.Currency != "EUR") {
 			continue
 		}
+		// suma kandidáta je zostatok na úhradu (po čiastočných platbách)
 		c := bank.Candidate{Kind: "invoice", ID: inv.ID, Number: inv.Number, VS: inv.VariableSymbol, Partner: inv.Customer.Name,
-			Amount: inv.Summary.Total, Direction: bank.In, Due: inv.DueDate}
+			Amount: inv.Remaining(), Direction: bank.In, Due: inv.DueDate}
 		if inv.Kind == invoice.KindCreditNote {
 			// dobropis vraciame odberateľovi
-			c.Amount, c.Direction = inv.Summary.Total.Neg(), bank.Out
+			c.Amount, c.Direction = inv.Remaining().Neg(), bank.Out
 		} else if inv.Kind != invoice.KindInvoice && inv.Kind != invoice.KindProforma {
 			continue // doklad k prijatej platbe je už uhradený
 		}
@@ -75,7 +77,11 @@ func (a *App) candidates(ctx context.Context, companyID int64) ([]bank.Candidate
 	return out, nil
 }
 
-// ImportStatement načíta výpis camt.053, uloží nové pohyby a jednoznačné spáruje.
+func isIBAN(s string) bool {
+	return len(s) > 4 && s[0] >= 'A' && s[0] <= 'Z' && s[1] >= 'A' && s[1] <= 'Z'
+}
+
+// ImportStatement načíta výpis (camt.053, GPC, CSV alebo Excel), uloží nové pohyby a jednoznačné spáruje.
 func (a *App) ImportStatement(ctx context.Context, companyID int64, fileName string, data []byte) (ImportResult, error) {
 	res := ImportResult{Warnings: []string{}}
 	if err := a.Require(ctx, companyID, auth.PermBankWrite); err != nil {
@@ -85,15 +91,17 @@ func (a *App) ImportStatement(ctx context.Context, companyID int64, fileName str
 	if err != nil {
 		return res, err
 	}
-	txs, err := bank.ParseCAMT053(data)
+	own := strings.ToUpper(strings.ReplaceAll(c.IBAN, " ", ""))
+	txs, format, err := bank.Parse(data, own)
 	if err != nil {
 		return res, err
 	}
+	res.Format = format
 	if len(txs) > 0 {
 		res.Account = txs[0].Account
 	}
-	own := strings.ReplaceAll(c.IBAN, " ", "")
-	if own != "" && res.Account != "" && !strings.EqualFold(own, res.Account) {
+	// účet z GPC je číslo účtu, nie IBAN — porovná sa iba IBAN
+	if own != "" && isIBAN(res.Account) && !strings.EqualFold(own, res.Account) {
 		res.Warnings = append(res.Warnings, "Výpis je z účtu "+res.Account+", v nastaveniach firmy je iný IBAN. Skontrolujte, či ide o správnu firmu.")
 	}
 	saved, dup, err := a.Store.SaveBankTransactions(ctx, companyID, txs)
@@ -151,7 +159,11 @@ func (a *App) pair(ctx context.Context, companyID int64, t *bank.Transaction, c 
 		if inv.Status != invoice.StatusIssued {
 			return ErrDocumentPaid
 		}
-		if _, err := a.MarkPaid(ctx, companyID, c.ID, t.Date); err != nil {
+		amount := t.Amount // čiastočná platba ostane ako úhrada, faktúra čaká na zvyšok
+		if inv.Kind == invoice.KindCreditNote {
+			amount = amount.Neg()
+		}
+		if _, err := a.AddPayment(ctx, companyID, c.ID, invoice.Payment{Date: t.Date, Amount: amount, Source: invoice.PaymentBank, Ref: t.ID}, false); err != nil {
 			return err
 		}
 		number = inv.Number
@@ -255,7 +267,7 @@ func (a *App) UnmatchTransaction(ctx context.Context, companyID, id int64) (bank
 	m := *t.Match
 	switch m.Kind {
 	case "invoice":
-		_, err = a.Unpay(ctx, companyID, m.ID)
+		_, err = a.RemovePayment(ctx, companyID, m.ID, invoice.PaymentBank, t.ID)
 	case "purchase":
 		_, err = a.UnpayPurchase(ctx, companyID, m.ID)
 	}

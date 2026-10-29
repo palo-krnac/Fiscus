@@ -7,7 +7,7 @@ import { intervalLabel, recurringStatusOf } from './recurring.js'
 import { levelShort } from './reminders.js'
 import { kindLabel } from './advance.js'
 import { docKindLabel, emailStatus } from './emails.js'
-import { eurSummary, isForeignCurrency, sourceLabel } from './fx.js'
+import { eurBalance, eurSummary, isForeignCurrency, sourceLabel } from './fx.js'
 
 const t = (header, value, width) => ({ header, value, width })
 const money = (header, value) => ({ header, value, type: 'money', width: 14 })
@@ -37,6 +37,8 @@ export const invoiceColumns = [
   money('Základ €', (r) => eurSummary(r)?.base),
   money('DPH €', (r) => eurSummary(r)?.vat),
   money('Spolu €', (r) => eurSummary(r)?.total),
+  money('Uhradené', (r) => r.paidAmount),
+  money('Zostáva €', (r) => (r.status === 'issued' ? eurBalance(r) : '0')),
   t('Prenesenie DPH', (r) => yes(r.reverseCharge), 8),
   t('Stav', (r) => statusOf(r).label, 18),
   t('Poznámka', (r) => r.note, 30),

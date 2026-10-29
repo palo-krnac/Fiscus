@@ -16,6 +16,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/edition"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/mcp"
+	"github.com/palo-krnac/fiscus/backend/internal/money"
 	"github.com/palo-krnac/fiscus/backend/internal/registry"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 )
@@ -218,6 +219,8 @@ func fail(w http.ResponseWriter, err error) {
 		writeErr(w, http.StatusNotFound, "Záznam neexistuje", nil)
 	case errors.Is(err, invoice.ErrLocked), errors.Is(err, invoice.ErrBadTransition), errors.Is(err, app.ErrReceiptIssued):
 		writeErr(w, http.StatusConflict, err.Error(), nil)
+	case errors.Is(err, invoice.ErrBadPayment), errors.Is(err, invoice.ErrPartialAdvance):
+		writeErr(w, http.StatusUnprocessableEntity, err.Error(), nil)
 	case errors.Is(err, app.ErrCompanyLimit), errors.Is(err, app.ErrForbidden), errors.Is(err, app.ErrReadOnly):
 		writeErr(w, http.StatusForbidden, err.Error(), nil)
 	case errors.Is(err, app.ErrNotVATPayer), errors.Is(err, app.ErrPeriodTooOld), errors.Is(err, app.ErrPeriodInFuture),
@@ -456,13 +459,17 @@ func (s *Server) cancel(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) pay(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Date invoice.Date `json:"date"`
+		Date   invoice.Date `json:"date"`
+		Amount *money.Dec   `json:"amount"` // nepovinné: čiastočná úhrada, inak celý zostatok
 	}
 	if r.ContentLength > 0 && !decode(w, r, &body) {
 		return
 	}
 	s.action(w, r, func(cid, id int64) (invoice.Invoice, error) {
-		return s.App.MarkPaid(r.Context(), cid, id, body.Date)
+		if body.Amount == nil {
+			return s.App.MarkPaid(r.Context(), cid, id, body.Date)
+		}
+		return s.App.AddPayment(r.Context(), cid, id, invoice.Payment{Date: body.Date, Amount: *body.Amount, Source: invoice.PaymentManual}, false)
 	})
 }
 

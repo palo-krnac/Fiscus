@@ -12,13 +12,13 @@ import (
 // payCode vráti reťazec PAY by square pre faktúru, alebo "" ak QR nedáva
 // zmysel — rovnaké pravidlá ako payModel vo frontende (lib/payqr.js).
 func payCode(inv invoice.Invoice, co store.Company) string {
-	if co.IBAN == "" || inv.Status != invoice.StatusIssued || inv.Summary.Total.Sign() <= 0 {
+	if co.IBAN == "" || inv.Status != invoice.StatusIssued || inv.Remaining().Sign() <= 0 {
 		return ""
 	}
 	if inv.PaymentMethod != "" && inv.PaymentMethod != invoice.PayTransfer {
 		return ""
 	}
-	amount := inv.Summary.Total.String() // „269.12“, „100.00“ → „100“
+	amount := inv.Remaining().String() // zostatok: „269.12“, „100.00“ → „100“
 	if strings.Contains(amount, ".") {
 		amount = strings.TrimSuffix(strings.TrimRight(amount, "0"), ".")
 	}

@@ -75,9 +75,14 @@ export function purchaseStatusOf(row) {
 
 /** Stav riadku zoznamu vrátane omeškania. */
 export function statusOf(row) {
+  const partly = row.status === 'issued' && Number(row.paidAmount) !== 0 && !Number.isNaN(Number(row.paidAmount))
   if (row.overdue) {
     const d = row.daysOverdue
-    return { label: `Po splatnosti ${d} ${d === 1 ? 'deň' : d < 5 ? 'dni' : 'dní'}`, tone: 'overdue' }
+    return { label: `Po splatnosti ${d} ${d === 1 ? 'deň' : d < 5 ? 'dni' : 'dní'}${partly ? ', čiastočne uhradená' : ''}`, tone: 'overdue' }
   }
+  if (partly) return { label: 'Čiastočne uhradená', tone: 'issued' }
   return STATUS[row.status] ?? { label: row.status, tone: 'draft' }
 }
+
+/** Odkiaľ je úhrada faktúry. */
+export const paymentSource = (s) => ({ bank: 'banka', cash: 'pokladňa', manual: 'ručne' })[s] ?? s

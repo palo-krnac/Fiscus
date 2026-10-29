@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { currencyOptions, eurSummary, filterRates, formatRate, isForeignCurrency, rateHint, rateText } from './fx.js'
+import { currencyOptions, eurBalance, eurSummary, filterRates, formatRate, isForeignCurrency, rateHint, rateText } from './fx.js'
 
 describe('fx', () => {
   it.each([
@@ -60,4 +60,11 @@ describe('filterRates', () => {
     ['25,123', 1],
     ['usd 1,08', 1],
   ])('„%s“ → %d', (q, n) => expect(filterRates(rows, q)).toHaveLength(n))
+})
+
+describe('eurBalance', () => {
+  it.each([
+    [{ balanceEur: '13.96', summary: { total: '448.93' } }, '13.96'],
+    [{ summary: { total: '448.93' } }, '448.93'],
+  ])('%j', (inv, want) => expect(eurBalance(inv)).toBe(want))
 })

@@ -30,14 +30,20 @@ func Read(data []byte) ([][]string, error) {
 	return readCSV(data)
 }
 
+// Text prevedie textový súbor na reťazec: odstráni BOM a súbor, ktorý nie
+// je platné UTF-8, prečíta ako Windows-1250 (staršie slovenské a české systémy).
+func Text(data []byte) string {
+	data = bytes.TrimPrefix(data, []byte{0xEF, 0xBB, 0xBF})
+	if !utf8.Valid(data) {
+		return decode1250(data)
+	}
+	return string(data)
+}
+
 // readCSV zvládne UTF-8 (aj s BOM) aj Windows-1250 (CSV z Excelu v slovenských
 // Windows) a oddeľovač ; , alebo tabulátor.
 func readCSV(data []byte) ([][]string, error) {
-	data = bytes.TrimPrefix(data, []byte{0xEF, 0xBB, 0xBF})
-	if !utf8.Valid(data) {
-		data = []byte(decode1250(data))
-	}
-	text := string(data)
+	text := Text(data)
 	if strings.ContainsRune(text, 0) {
 		return nil, ErrFormat
 	}

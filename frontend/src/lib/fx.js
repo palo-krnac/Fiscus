@@ -42,3 +42,6 @@ export function filterRates(rows, search) {
   const terms = searchTerms(search)
   return rows.filter((r) => matches(terms, [r.currency, r.date, formatDate(r.date), r.rate, formatRate(r.rate), sourceLabel(r.source)]))
 }
+
+/** Zostatok na úhradu v eurách (zo servera; starší záznam bez neho = celá suma). */
+export const eurBalance = (inv) => inv?.balanceEur ?? eurSummary(inv)?.total

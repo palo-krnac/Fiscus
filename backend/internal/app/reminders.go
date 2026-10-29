@@ -89,7 +89,7 @@ func (a *App) Overdue(ctx context.Context, companyID int64) ([]OverdueGroup, err
 			order = append(order, key)
 		}
 		oi := OverdueInvoice{ID: inv.ID, Number: inv.Number, IssueDate: inv.IssueDate, DueDate: inv.DueDate,
-			Total: inv.Summary.Total, Days: inv.DueDate.DaysUntil(today), Reminded: level[inv.ID], LastRemind: last[inv.ID]}
+			Total: inv.Remaining(), Days: inv.DueDate.DaysUntil(today), Reminded: level[inv.ID], LastRemind: last[inv.ID]}
 		g.Invoices = append(g.Invoices, oi)
 		g.Total = g.Total.Add(oi.Total)
 		if oi.Days > g.MaxDays {

@@ -68,6 +68,12 @@ it('stav prijatej faktúry', async () => {
 })
 
 describe('statusOf', () => {
+  it.each([
+    [{ status: 'issued', paidAmount: '200.00' }, 'Čiastočne uhradená'],
+    [{ status: 'issued', paidAmount: '0.00' }, 'Vystavená'],
+    [{ status: 'issued', paidAmount: '50.00', overdue: true, daysOverdue: 3 }, 'Po splatnosti 3 dni, čiastočne uhradená'],
+    [{ status: 'paid', paidAmount: '492.00' }, 'Uhradená'],
+  ])('čiastočná úhrada %j', (row, label) => expect(statusOf(row).label).toBe(label))
   it('omeškanie má prednosť a skloňuje dni', () => {
     expect(statusOf({ status: 'issued', overdue: true, daysOverdue: 1 }).label).toBe('Po splatnosti 1 deň')
     expect(statusOf({ status: 'issued', overdue: true, daysOverdue: 3 }).label).toBe('Po splatnosti 3 dni')

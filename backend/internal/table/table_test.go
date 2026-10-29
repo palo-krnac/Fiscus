@@ -21,9 +21,9 @@ func xlsx(t *testing.T, files map[string]string) []byte {
 
 func TestRead(t *testing.T) {
 	book := xlsx(t, map[string]string{
-		"xl/workbook.xml": `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Cenník" sheetId="1" r:id="rId3"/></sheets></workbook>`,
+		"xl/workbook.xml":            `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Cenník" sheetId="1" r:id="rId3"/></sheets></workbook>`,
 		"xl/_rels/workbook.xml.rels": `<Relationships><Relationship Id="rId3" Target="worksheets/data.xml"/></Relationships>`,
-		"xl/sharedStrings.xml": `<sst><si><t>Kód</t></si><si><t>Názov</t></si><si><r><t>Kábel </t></r><r><t>CYKY</t></r></si></sst>`,
+		"xl/sharedStrings.xml":       `<sst><si><t>Kód</t></si><si><t>Názov</t></si><si><r><t>Kábel </t></r><r><t>CYKY</t></r></si></sst>`,
 		"xl/worksheets/data.xml": `<worksheet><sheetData>
 			<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c><c r="C1" t="inlineStr"><is><t>Cena</t></is></c></row>
 			<row r="2"><c r="A2"><v>101</v></c><c r="B2" t="s"><v>2</v></c><c r="D2" t="b"><v>1</v></c><c r="C2"><v>2.19</v></c></row>
