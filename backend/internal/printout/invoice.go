@@ -125,7 +125,7 @@ func render(v view, sup Supplier) (*sheet, error) {
 		s.y += pdf.MM(4)
 		s.deductions(inv, deductions)
 	}
-	s.totals(v, len(deductions) > 0)
+	s.totals(v, len(deductions) > 0, sup)
 	s.notes(v)
 	return s.finish(), nil
 }
@@ -400,7 +400,7 @@ func (s *sheet) deductions(inv invoice.Invoice, ds []invoice.Deduction) {
 }
 
 // totals: rekapitulácia DPH a suma na úhradu s dvojitým podčiarknutím.
-func (s *sheet) totals(v view, deducted bool) {
+func (s *sheet) totals(v view, deducted bool, sup Supplier) {
 	inv := v.inv
 	w := pdf.MM(92)
 	x := right - w
@@ -412,8 +412,23 @@ func (s *sheet) totals(v view, deducted bool) {
 	if deducted && inv.Advance != nil && inv.Advance.Supply != nil {
 		h += lh(9.5) + pdf.MM(3)
 	}
+	code := ""
+	if !v.quote {
+		code = payCode(inv, sup.Company)
+	}
+	qrSize := pdf.MM(30)
+	if code != "" {
+		h = max(h, qrSize)
+	}
 	s.y += pdf.MM(7)
 	s.ensure(h)
+	top := s.y
+	if code != "" && s.qr(code, left, top, qrSize) {
+		tx := left + qrSize + pdf.MM(4)
+		s.text(tx, top+qrSize/2-lh(8.5), s.f.Regular, 8.5, muted, "Zaplaťte mobilom")
+		s.text(tx, top+qrSize/2, s.f.Bold, 8.5, ink, "PAY by square")
+		defer func() { s.y = max(s.y, top+qrSize) }()
+	}
 	if !inv.NonVATPayer {
 		first := "Sadzba DPH"
 		if deducted {
