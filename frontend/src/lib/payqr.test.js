@@ -4,6 +4,7 @@ import { decode } from 'bysquare/pay'
 import QRCode from 'qrcode'
 import jsQR from 'jsqr'
 import { PNG } from 'pngjs'
+import { readFileSync } from 'node:fs'
 import { payBySquare, payModel } from './payqr.js'
 
 const company = {
@@ -62,5 +63,47 @@ describe('PAY by square', () => {
     const png = PNG.sync.read(buf)
     const read = jsQR(new Uint8ClampedArray(png.data), png.width, png.height)
     expect(read?.data).toBe(code)
+  })
+})
+
+// QR do PDF skladá server (backend/internal/payqr). Jeho vzorky musia prečítať
+// rovnaké knižnice ako QR z frontendu: bysquare (obsah) a jsQR (obrázok).
+describe('PAY by square zo servera', () => {
+  const deburr = (t) => t.normalize('NFD').replace(/\p{M}/gu, '')
+  const golden = JSON.parse(readFileSync(new URL('../../../backend/internal/payqr/testdata/golden.json', import.meta.url), 'utf8'))
+
+  function render(rows, scale = 4, quiet = 4) {
+    const n = rows.length
+    const size = (n + 2 * quiet) * scale
+    const png = new PNG({ width: size, height: size })
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const mx = Math.floor(x / scale) - quiet
+        const my = Math.floor(y / scale) - quiet
+        const dark = mx >= 0 && my >= 0 && mx < n && my < n && rows[my][mx] === '1'
+        const i = (y * size + x) * 4
+        png.data[i] = png.data[i + 1] = png.data[i + 2] = dark ? 0 : 255
+        png.data[i + 3] = 255
+      }
+    }
+    return png
+  }
+
+  it.each(golden.map((g) => [g.name, g]))('%s', (_, g) => {
+    const back = decode(g.text)
+    const p = back.payments[0]
+    expect(back.invoiceId).toBe(g.id)
+    expect(p.amount).toBe(Number(g.payment.Amount))
+    expect(p.currencyCode).toBe(g.payment.Currency)
+    expect(p.paymentDueDate).toBe(g.payment.DueDate)
+    expect(p.variableSymbol).toBe(g.payment.VariableSymbol)
+    expect(p.bankAccounts[0].iban).toBe(g.payment.IBAN.replace(/\s/g, '').toUpperCase())
+    expect(p.beneficiary.name).toBe(deburr(g.payment.Name))
+    expect(p.paymentNote).toBe(deburr(g.payment.Note))
+
+    expect(g.rows.length).toBe(g.version * 4 + 17)
+    const png = render(g.rows)
+    const read = jsQR(new Uint8ClampedArray(png.data), png.width, png.height)
+    expect(read?.data).toBe(g.text)
   })
 })
