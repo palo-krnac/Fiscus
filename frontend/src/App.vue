@@ -1,11 +1,14 @@
 <script setup>
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import Select from 'primevue/select'
 import Toast from 'primevue/toast'
 import ConfirmDialog from 'primevue/confirmdialog'
 import { modules } from './router.js'
-import { session, loadSession, selectCompany } from './lib/session.js'
+import { session, loadSession, selectCompany, can } from './lib/session.js'
+import { visibleModules } from './lib/access.js'
+import Login from './views/Login.vue'
+import UserMenu from './components/UserMenu.vue'
 
 const route = useRoute()
 const navOpen = ref(false)
@@ -13,13 +16,21 @@ const navOpen = ref(false)
 onMounted(loadSession)
 watch(() => route.path, () => (navOpen.value = false))
 
+const menu = computed(() =>
+  visibleModules(modules, (i) => can(i.perm) && (!i.serverOnly || session.caps.mode === 'server')),
+)
+const allowed = computed(() => can(route.meta.perm))
 const isActive = (path) => route.path === path || route.path.startsWith(path + '/')
 </script>
 
 <template>
+  <template v-if="session.needLogin">
+    <Login />
+    <Toast position="bottom-right" />
+  </template>
   <!-- tlačové zobrazenie bez menu a hlavičky -->
-  <template v-if="route.meta.bare">
-    <RouterView v-if="session.ready && session.companyId" />
+  <template v-else-if="route.meta.bare">
+    <RouterView v-if="session.ready && session.companyId && allowed" />
     <Toast position="bottom-right" />
   </template>
   <div v-else class="shell" :class="{ 'nav-open': navOpen }">
@@ -34,7 +45,7 @@ const isActive = (path) => route.path === path || route.path.startsWith(path + '
       </RouterLink>
 
       <nav>
-        <section v-for="g in modules" :key="g.group" class="nav-group">
+        <section v-for="g in menu" :key="g.group" class="nav-group">
           <h2>{{ g.group }}</h2>
           <RouterLink
             v-for="item in g.items"
@@ -78,12 +89,21 @@ const isActive = (path) => route.path === path || route.path.startsWith(path + '
             <span v-if="session.company.ico" class="muted">IČO {{ session.company.ico }}</span>
           </template>
         </div>
+        <UserMenu />
       </header>
 
       <main class="content">
         <div v-if="session.error" class="fatal">
           <i class="pi pi-exclamation-triangle" />
           <p>{{ session.error }}</p>
+        </div>
+        <div v-else-if="session.ready && !session.companyId" class="fatal muted-box">
+          <i class="pi pi-building" />
+          <p>Nemáte prístup do žiadnej firmy. Požiadajte správcu, aby vás pridal.</p>
+        </div>
+        <div v-else-if="session.ready && !allowed" class="fatal muted-box">
+          <i class="pi pi-lock" />
+          <p>Na túto časť nemáte oprávnenie.</p>
         </div>
         <RouterView v-else-if="session.ready && session.companyId" :key="session.companyId" />
       </main>
@@ -229,6 +249,9 @@ nav {
   max-width: 440px;
   text-align: center;
   color: var(--tone-overdue);
+}
+.muted-box {
+  color: var(--ink-faint);
 }
 .fatal .pi {
   font-size: 1.5rem;

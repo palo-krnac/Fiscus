@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/palo-krnac/fiscus/backend/internal/audit"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/purchase"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
@@ -50,11 +51,13 @@ func (a *App) SavePurchase(ctx context.Context, companyID int64, p purchase.Purc
 	if err != nil {
 		return p, nil, err
 	}
+	var before any
 	if p.ID != 0 {
 		old, err := a.Store.GetPurchase(ctx, companyID, p.ID)
 		if err != nil {
 			return p, nil, err
 		}
+		before = old
 		if old.Status == purchase.StatusPaid {
 			return p, nil, purchase.ErrPaid
 		}
@@ -91,12 +94,22 @@ func (a *App) SavePurchase(ctx context.Context, companyID int64, p purchase.Purc
 		}
 		p.Number = invoice.FormatNumberWith(format, year, month, seq)
 	}
-	return p, warns, a.Store.SavePurchase(ctx, companyID, &p)
+	if err := a.Store.SavePurchase(ctx, companyID, &p); err != nil {
+		return p, warns, err
+	}
+	if before == nil {
+		a.record(ctx, companyID, audit.CatPurchases, "create", "purchase", p.ID,
+			"Zaevidovaná prijatá faktúra "+p.Number+" od "+p.Supplier.Name+", "+p.Summary.Total.Display()+" €", nil, p)
+	} else {
+		a.record(ctx, companyID, audit.CatPurchases, "update", "purchase", p.ID,
+			"Úprava prijatej faktúry "+p.Number, before, p)
+	}
+	return p, warns, nil
 }
 
 // MarkPurchasePaid označí prijatú faktúru ako uhradenú.
 func (a *App) MarkPurchasePaid(ctx context.Context, companyID, id int64, on invoice.Date) (purchase.Purchase, error) {
-	return a.purchaseTransition(ctx, companyID, id, func(p *purchase.Purchase) error {
+	return a.purchaseTransition(ctx, companyID, id, "pay", "Uhradená prijatá faktúra ", func(p *purchase.Purchase) error {
 		if on.IsZero() {
 			on = a.Today()
 		}
@@ -106,18 +119,24 @@ func (a *App) MarkPurchasePaid(ctx context.Context, companyID, id int64, on invo
 
 // UnpayPurchase zruší označenie úhrady.
 func (a *App) UnpayPurchase(ctx context.Context, companyID, id int64) (purchase.Purchase, error) {
-	return a.purchaseTransition(ctx, companyID, id, (*purchase.Purchase).Unpay)
+	return a.purchaseTransition(ctx, companyID, id, "unpay", "Zrušená úhrada prijatej faktúry ", (*purchase.Purchase).Unpay)
 }
 
-func (a *App) purchaseTransition(ctx context.Context, companyID, id int64, fn func(*purchase.Purchase) error) (purchase.Purchase, error) {
+func (a *App) purchaseTransition(ctx context.Context, companyID, id int64, action, what string, fn func(*purchase.Purchase) error) (purchase.Purchase, error) {
 	p, err := a.Store.GetPurchase(ctx, companyID, id)
 	if err != nil {
 		return p, err
 	}
+	before := map[string]any{"status": p.Status, "paidDate": p.PaidDate}
 	if err := fn(&p); err != nil {
 		return p, err
 	}
-	return p, a.Store.SavePurchase(ctx, companyID, &p)
+	if err := a.Store.SavePurchase(ctx, companyID, &p); err != nil {
+		return p, err
+	}
+	a.record(ctx, companyID, audit.CatPurchases, action, "purchase", p.ID, what+p.Number, before,
+		map[string]any{"status": p.Status, "paidDate": p.PaidDate})
+	return p, nil
 }
 
 // DeletePurchase zmaže neuhradenú prijatú faktúru (napr. zaevidovanú omylom).
@@ -129,5 +148,10 @@ func (a *App) DeletePurchase(ctx context.Context, companyID, id int64) error {
 	if p.Status == purchase.StatusPaid {
 		return purchase.ErrPaid
 	}
-	return a.Store.DeletePurchase(ctx, companyID, id)
+	if err := a.Store.DeletePurchase(ctx, companyID, id); err != nil {
+		return err
+	}
+	a.record(ctx, companyID, audit.CatPurchases, "delete", "purchase", id,
+		"Zmazaná prijatá faktúra "+p.Number+" od "+p.Supplier.Name, p, nil)
+	return nil
 }

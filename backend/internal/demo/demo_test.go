@@ -31,3 +31,23 @@ func TestSeed(t *testing.T) {
 		}
 	}
 }
+
+func TestSeedUsers(t *testing.T) {
+	caps, _ := edition.For(edition.Server)
+	a := app.New(memstore.New(), caps)
+	ctx := context.Background()
+	c, err := Seed(ctx, a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := SeedUsers(ctx, a, c.ID); err != nil {
+		t.Fatal(err)
+	}
+	members, err := a.CompanyUsers(ctx, c.ID)
+	if err != nil || len(members) != len(demoUsers) {
+		t.Fatalf("členovia %d, %v", len(members), err)
+	}
+	if _, _, err := a.Login(ctx, "fakturant@demo.sk", DemoPassword); err != nil {
+		t.Fatal(err)
+	}
+}

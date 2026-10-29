@@ -3,6 +3,9 @@
 //	fiskus -demo                          ukážkové dáta v pamäti
 //	fiskus -db fiskus.db                  SQLite (zostaviť s -tags sqlite)
 //	fiskus -mode server -addr :8080 ...   serverový režim (viac firiem)
+//
+// V serverovom režime sa prvý správca vytvorí cez -admin-email a heslo
+// v premennej FISKUS_ADMIN_PASSWORD (iba ak ešte nie je žiadny používateľ).
 package main
 
 import (
@@ -39,6 +42,7 @@ func main() {
 	backupDir := flag.String("backup-dir", "", "priečinok na automatické zálohy (heslo v FISKUS_BACKUP_PASSWORD)")
 	demoData := flag.Bool("demo", false, "spustiť s ukážkovými dátami v pamäti")
 	rpoURL := flag.String("rpo-url", registry.DefaultBaseURL, "adresa API Registra právnických osôb; prázdne = vypnuté")
+	adminEmail := flag.String("admin-email", "", "e-mail prvého správcu (server); heslo v FISKUS_ADMIN_PASSWORD")
 	flag.Parse()
 
 	log.Printf("Fiskus %s", version)
@@ -67,10 +71,26 @@ func main() {
 
 	a := app.New(st, caps)
 	if *demoData {
-		if _, err := demo.Seed(context.Background(), a); err != nil {
+		c, err := demo.Seed(context.Background(), a)
+		if err != nil {
 			log.Fatal(err)
 		}
 		log.Print("načítané ukážkové dáta")
+		if caps.Mode == edition.Server {
+			if err := demo.SeedUsers(context.Background(), a, c.ID); err != nil {
+				log.Fatal(err)
+			}
+			log.Printf("prihlásenie: %s / %s (aj uctovnicka@, fakturant@, klient@demo.sk)", demo.DemoAdmin, demo.DemoPassword)
+		}
+	}
+	if caps.Mode == edition.Server && *adminEmail != "" {
+		created, err := a.EnsureAdmin(context.Background(), *adminEmail, "Správca", os.Getenv("FISKUS_ADMIN_PASSWORD"))
+		if err != nil {
+			log.Fatalf("správca: %v", err)
+		}
+		if created {
+			log.Printf("vytvorený správca %s", *adminEmail)
+		}
 	}
 
 	var lookup registry.Lookup

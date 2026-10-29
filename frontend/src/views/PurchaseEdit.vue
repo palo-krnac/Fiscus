@@ -13,7 +13,7 @@ import AutoComplete from 'primevue/autocomplete'
 import FormField from '../components/FormField.vue'
 import IcoInput from '../components/IcoInput.vue'
 import { api, ApiError } from '../lib/api.js'
-import { session } from '../lib/session.js'
+import { session, can } from '../lib/session.js'
 import { codes, ratesOn } from '../lib/codes.js'
 import { filterContacts, customerFromContact } from '../lib/contacts.js'
 import { fillFromRegistry } from '../lib/registry.js'
@@ -35,7 +35,8 @@ const showErrors = ref(false)
 const summary = ref({ base: '0', vat: '0', total: '0' })
 const computedVat = ref([]) // DPH z náhľadu pre riadky bez vyplnenej DPH
 
-const locked = computed(() => p.value?.status === 'paid')
+const canWrite = computed(() => can('purchases.write'))
+const locked = computed(() => p.value?.status === 'paid' || !canWrite.value)
 const title = computed(() => (p.value?.number ? `Prijatá faktúra ${p.value.number}` : 'Nová prijatá faktúra'))
 const status = computed(() => (p.value?.id ? purchaseStatusOf(p.value) : null))
 
@@ -254,7 +255,8 @@ const set = (obj, key) => (v) => {
       <span v-if="dirty && !locked" class="unsaved">neuložené zmeny</span>
       <div class="spacer" />
       <Button v-if="p.id && !locked" label="Zmazať" severity="danger" text size="small" @click="remove" />
-      <template v-if="locked">
+      <template v-if="!canWrite" />
+      <template v-else-if="locked">
         <span class="paid-on">Uhradená {{ formatDate(p.paidDate) }}</span>
         <Button label="Zrušiť úhradu" severity="secondary" text size="small" :loading="busy" @click="pay(true)" />
       </template>

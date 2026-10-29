@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/palo-krnac/fiscus/backend/internal/audit"
+	"github.com/palo-krnac/fiscus/backend/internal/auth"
 	"github.com/palo-krnac/fiscus/backend/internal/edition"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/party"
@@ -42,19 +44,35 @@ func (a *App) CreateCompany(ctx context.Context, c store.Company) (store.Company
 	if err := validateCompany(c); err != nil {
 		return store.Company{}, err
 	}
-	return a.Store.CreateCompany(ctx, c)
+	c, err = a.Store.CreateCompany(ctx, c)
+	if err != nil {
+		return c, err
+	}
+	// zakladateľ (prihlásený používateľ) je správcom novej firmy
+	if act := auth.ActorFrom(ctx); act.UserID != 0 {
+		if err := a.Store.SetMembership(ctx, auth.Membership{UserID: act.UserID, CompanyID: c.ID, Role: auth.RoleAdmin}); err != nil {
+			return c, err
+		}
+	}
+	a.record(ctx, c.ID, audit.CatSettings, "create", "company", c.ID, "Založená firma "+c.Name, nil, c)
+	return c, nil
 }
 
 // UpdateCompany uloží nastavenia firmy.
 func (a *App) UpdateCompany(ctx context.Context, c store.Company) (store.Company, error) {
-	if _, err := a.Store.GetCompany(ctx, c.ID); err != nil {
+	old, err := a.Store.GetCompany(ctx, c.ID)
+	if err != nil {
 		return c, err
 	}
 	normalizeCompany(&c)
 	if err := validateCompany(c); err != nil {
 		return c, err
 	}
-	return c, a.Store.UpdateCompany(ctx, c)
+	if err := a.Store.UpdateCompany(ctx, c); err != nil {
+		return c, err
+	}
+	a.record(ctx, c.ID, audit.CatSettings, "update", "company", c.ID, "Zmena nastavení firmy", old, c)
+	return c, nil
 }
 
 func normalizeCompany(c *store.Company) {
@@ -190,11 +208,13 @@ func (a *App) Preview(ctx context.Context, companyID int64, inv invoice.Invoice)
 
 // SaveDraft uloží nový alebo upravený koncept.
 func (a *App) SaveDraft(ctx context.Context, companyID int64, inv invoice.Invoice) (invoice.Invoice, error) {
+	var before *invoice.Invoice
 	if inv.ID != 0 {
 		old, err := a.Store.GetInvoice(ctx, companyID, inv.ID)
 		if err != nil {
 			return inv, err
 		}
+		before = &old
 		if !old.Editable() {
 			return inv, invoice.ErrLocked
 		}
@@ -214,7 +234,30 @@ func (a *App) SaveDraft(ctx context.Context, companyID int64, inv invoice.Invoic
 		return inv, &invoice.ValidationError{Fields: []invoice.FieldError{{Field: "kind",
 			Message: "Dobropis sa vytvára z vystavenej faktúry tlačidlom Dobropis"}}}
 	}
-	return a.saveDraft(ctx, companyID, inv)
+	saved, err := a.saveDraft(ctx, companyID, inv)
+	if err != nil {
+		return saved, err
+	}
+	if before == nil {
+		a.record(ctx, companyID, audit.CatInvoices, "create", "invoice", saved.ID,
+			"Nový koncept "+docName(saved)+" pre "+saved.Customer.Name, nil, saved)
+	} else {
+		a.record(ctx, companyID, audit.CatInvoices, "update", "invoice", saved.ID,
+			"Úprava konceptu "+docName(saved)+" pre "+saved.Customer.Name, before, saved)
+	}
+	return saved, nil
+}
+
+// docName vráti „faktúry FA…“ / „dobropisu DB…“ na popis v audite.
+func docName(inv invoice.Invoice) string {
+	kind := "faktúry"
+	if inv.Kind == invoice.KindCreditNote {
+		kind = "dobropisu"
+	}
+	if inv.Number != "" {
+		return kind + " " + inv.Number
+	}
+	return kind
 }
 
 // CreateCreditNote vytvorí koncept dobropisu k vystavenej faktúre.
@@ -227,7 +270,12 @@ func (a *App) CreateCreditNote(ctx context.Context, companyID, originalID int64)
 	if err != nil {
 		return cn, &invoice.ValidationError{Fields: []invoice.FieldError{{Field: "kind", Message: err.Error()}}}
 	}
-	return a.saveDraft(ctx, companyID, cn)
+	saved, err := a.saveDraft(ctx, companyID, cn)
+	if err == nil {
+		a.record(ctx, companyID, audit.CatInvoices, "create", "invoice", saved.ID,
+			"Koncept dobropisu k faktúre "+orig.Number, nil, saved)
+	}
+	return saved, err
 }
 
 // creditNotesOf vráti dobropisy k danej faktúre.
@@ -318,12 +366,21 @@ func (a *App) Issue(ctx context.Context, companyID, id int64) (invoice.Invoice, 
 	if err := inv.Issue(number); err != nil {
 		return inv, fmt.Errorf("vystavenie: %w", err)
 	}
-	return inv, a.Store.SaveInvoice(ctx, companyID, &inv)
+	if err := a.Store.SaveInvoice(ctx, companyID, &inv); err != nil {
+		return inv, err
+	}
+	what := "Vystavená faktúra "
+	if inv.Kind == invoice.KindCreditNote {
+		what = "Vystavený dobropis "
+	}
+	a.record(ctx, companyID, audit.CatInvoices, "issue", "invoice", inv.ID,
+		what+inv.Number+" pre "+inv.Customer.Name+", "+inv.Summary.Total.Display()+" €", nil, inv)
+	return inv, nil
 }
 
 // MarkPaid označí faktúru ako uhradenú.
 func (a *App) MarkPaid(ctx context.Context, companyID, id int64, on invoice.Date) (invoice.Invoice, error) {
-	return a.transition(ctx, companyID, id, func(inv *invoice.Invoice) error {
+	return a.transition(ctx, companyID, id, "pay", "Uhradená ", func(inv *invoice.Invoice) error {
 		if on.IsZero() {
 			on = a.Today()
 		}
@@ -333,16 +390,25 @@ func (a *App) MarkPaid(ctx context.Context, companyID, id int64, on invoice.Date
 
 // Cancel stornuje faktúru.
 func (a *App) Cancel(ctx context.Context, companyID, id int64) (invoice.Invoice, error) {
-	return a.transition(ctx, companyID, id, (*invoice.Invoice).Cancel)
+	return a.transition(ctx, companyID, id, "cancel", "Stornovaná ", (*invoice.Invoice).Cancel)
 }
 
-func (a *App) transition(ctx context.Context, companyID, id int64, fn func(*invoice.Invoice) error) (invoice.Invoice, error) {
+func (a *App) transition(ctx context.Context, companyID, id int64, action, what string, fn func(*invoice.Invoice) error) (invoice.Invoice, error) {
 	inv, err := a.Store.GetInvoice(ctx, companyID, id)
 	if err != nil {
 		return inv, err
 	}
+	type state struct {
+		Status   invoice.Status `json:"status"`
+		PaidDate invoice.Date   `json:"paidDate"`
+	}
+	before := state{inv.Status, inv.PaidDate}
 	if err := fn(&inv); err != nil {
 		return inv, err
 	}
-	return inv, a.Store.SaveInvoice(ctx, companyID, &inv)
+	if err := a.Store.SaveInvoice(ctx, companyID, &inv); err != nil {
+		return inv, err
+	}
+	a.record(ctx, companyID, audit.CatInvoices, action, "invoice", inv.ID, what+docName(inv), before, state{inv.Status, inv.PaidDate})
+	return inv, nil
 }

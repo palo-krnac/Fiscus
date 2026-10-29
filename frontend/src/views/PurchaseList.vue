@@ -9,7 +9,7 @@ import InputIcon from 'primevue/inputicon'
 import Select from 'primevue/select'
 import SelectButton from 'primevue/selectbutton'
 import { api } from '../lib/api.js'
-import { session } from '../lib/session.js'
+import { session, can } from '../lib/session.js'
 import { formatAmount, formatDate, formatMoney, purchaseStatusOf } from '../lib/format.js'
 import { searchKey } from '../lib/contacts.js'
 import { fiskusGridTheme, skGridLocale } from '../lib/grid.js'
@@ -120,7 +120,7 @@ const rowId = (p) => (p.data._totals ? 'totals' : String(p.data.id))
 function onKey(e) {
   const t = e.target
   const typing = t instanceof HTMLElement && /INPUT|TEXTAREA|SELECT/.test(t.tagName)
-  if (!typing && !e.ctrlKey && !e.metaKey && !e.altKey && e.key === 'n') {
+  if (!typing && !e.ctrlKey && !e.metaKey && !e.altKey && e.key === 'n' && can('purchases.write')) {
     e.preventDefault()
     router.push('/prijate/nova')
   }
@@ -138,7 +138,7 @@ onBeforeUnmount(() => {
       <h1>Prijaté faktúry</h1>
       <Select v-model="year" :options="years" option-label="label" option-value="value" size="small" aria-label="Rok" />
       <div class="spacer" />
-      <Button size="small" @click="router.push('/prijate/nova')">
+      <Button v-if="can('purchases.write')" size="small" @click="router.push('/prijate/nova')">
         <i class="pi pi-plus" /><span>Nová prijatá faktúra</span><kbd class="hint">N</kbd>
       </Button>
     </header>

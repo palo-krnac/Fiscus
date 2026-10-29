@@ -16,7 +16,7 @@ import Select from 'primevue/select'
 import { countries } from '../lib/codes.js'
 import { fillFromRegistry } from '../lib/registry.js'
 import { api, ApiError } from '../lib/api.js'
-import { session } from '../lib/session.js'
+import { session, can } from '../lib/session.js'
 import { fiskusGridTheme, skGridLocale } from '../lib/grid.js'
 import { filterContacts } from '../lib/contacts.js'
 
@@ -148,12 +148,12 @@ function remove() {
 function onKey(e) {
   const t = e.target
   const typing = t instanceof HTMLElement && /INPUT|TEXTAREA|SELECT/.test(t.tagName)
-  if ((e.ctrlKey || e.metaKey) && e.key === 's' && form.value) {
+  if ((e.ctrlKey || e.metaKey) && e.key === 's' && form.value && can('contacts.write')) {
     e.preventDefault()
     if (!busy.value) save()
   } else if (e.key === 'Escape' && form.value) {
     router.push('/adresar')
-  } else if (!typing && !e.ctrlKey && !e.metaKey && e.key === 'n') {
+  } else if (!typing && !e.ctrlKey && !e.metaKey && e.key === 'n' && can('contacts.write')) {
     e.preventDefault()
     router.push('/adresar/novy')
   }
@@ -172,7 +172,7 @@ onBeforeUnmount(() => {
         <h1>Adresár</h1>
         <span class="count">{{ contacts.length }}</span>
         <div class="spacer" />
-        <Button size="small" @click="router.push('/adresar/novy')">
+        <Button v-if="can('contacts.write')" size="small" @click="router.push('/adresar/novy')">
           <i class="pi pi-plus" /><span>Nový kontakt</span><kbd class="hint">N</kbd>
         </Button>
       </header>
@@ -236,10 +236,10 @@ onBeforeUnmount(() => {
         </div>
       </div>
       <footer class="panel-foot">
-        <Button v-if="form.id" label="Zmazať" severity="danger" text size="small" @click="remove" />
+        <Button v-if="form.id && can('contacts.write')" label="Zmazať" severity="danger" text size="small" @click="remove" />
         <div class="spacer" />
-        <Button v-if="form.id" label="Nová faktúra" icon="pi pi-file-plus" severity="secondary" outlined size="small" @click="router.push(`/faktury/nova?kontakt=${form.id}`)" />
-        <Button label="Uložiť" icon="pi pi-check" size="small" :loading="busy" @click="save" />
+        <Button v-if="form.id && can('invoices.write')" label="Nová faktúra" icon="pi pi-file-plus" severity="secondary" outlined size="small" @click="router.push(`/faktury/nova?kontakt=${form.id}`)" />
+        <Button v-if="can('contacts.write')" label="Uložiť" icon="pi pi-check" size="small" :loading="busy" @click="save" />
       </footer>
     </aside>
   </div>

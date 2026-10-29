@@ -1,7 +1,8 @@
-// Spoločný stav aplikácie: edícia, firmy, aktuálna firma.
+// Spoločný stav aplikácie: edícia, prihlásený používateľ, firmy, aktuálna firma.
 import { reactive } from 'vue'
-import { api } from './api.js'
+import { api, setUnauthorizedHandler } from './api.js'
 import { loadCodes } from './codes.js'
+import { hasPerm, roleFor } from './access.js'
 
 const KEY = 'fiskus.companyId'
 
@@ -11,16 +12,46 @@ export const session = reactive({
   caps: { mode: 'desktop', multiCompany: false },
   companies: [],
   companyId: null,
+  me: null, // odpoveď /api/me
+  needLogin: false, // serverová verzia bez platnej relácie
 
   get company() {
     return this.companies.find((c) => c.id === this.companyId) ?? null
   },
 })
 
+/** Má prihlásený používateľ v aktuálnej firme právo? */
+export function can(perm) {
+  return hasPerm(session.me, session.companyId, perm)
+}
+
+export function currentRole() {
+  return roleFor(session.me, session.companyId)
+}
+
+setUnauthorizedHandler(() => {
+  session.needLogin = true
+  session.me = null
+})
+
 export async function loadSession() {
   try {
-    const [caps, companies] = await Promise.all([api.capabilities(), api.companies(), loadCodes()])
+    const [caps] = await Promise.all([api.capabilities(), loadCodes()])
     session.caps = caps
+    let me
+    try {
+      me = await api.me()
+    } catch (e) {
+      if (e.status === 401) {
+        session.needLogin = true
+        session.me = null
+        return
+      }
+      throw e
+    }
+    const companies = await api.companies()
+    session.me = me
+    session.needLogin = false
     session.companies = companies
     let saved = null
     try {
@@ -50,4 +81,15 @@ export function selectCompany(id) {
 export function replaceCompany(c) {
   const i = session.companies.findIndex((x) => x.id === c.id)
   if (i >= 0) session.companies.splice(i, 1, c)
+}
+
+export async function logout() {
+  try {
+    await api.logout()
+  } finally {
+    session.me = null
+    session.companies = []
+    session.companyId = null
+    session.needLogin = true
+  }
 }

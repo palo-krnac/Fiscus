@@ -35,10 +35,12 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [ ] E-faktúra (UBL / Peppol): pripraviť sa na povinnú e-fakturáciu na Slovensku (termín overiť)
 
 ## Používatelia, práva a audit (pre účtovné kancelárie a poskytovateľov služieb)
-- [ ] Používatelia a prihlasovanie v serverovom režime (heslo, neskôr 2FA); desktop voliteľne PIN
-- [ ] Roly pre každú firmu zvlášť: správca, účtovník, fakturant, zákazník (klient kancelárie), len čítanie
-- [ ] Práva kontroluje backend pri každej požiadavke
-- [ ] Audit všetkých zmien (kto, kedy, čo, pred/po) vrátane volaní cez MCP a API; filter podľa firmy a kategórie (doklady, nákup, nastavenia, používatelia, zálohy, prístupy)
+- [x] Používatelia a prihlasovanie v serverovom režime (heslo PBKDF2, relácia v HttpOnly cookie, limit pokusov, ochrana CSRF)
+- [ ] 2FA; desktop voliteľne PIN
+- [x] Roly pre každú firmu zvlášť: správca, účtovník, fakturant, zákazník (klient kancelárie), len čítanie
+- [x] Práva kontroluje backend pri každej požiadavke; rozhranie skrýva nepovolené akcie
+- [x] Audit všetkých zmien (kto, kedy, kanál, čo, pred/po), nemenný reťazec s odtlačkami; filter podľa firmy a kategórie
+- [ ] Audit API kľúčov a MCP (kanály sú pripravené, chýbajú samotné API kľúče a MCP server)
 - [ ] MCP server pre AI asistentov: čítanie dát a kontrolované akcie v rámci práv používateľa, každé volanie auditované
 
 ## Etapa 2 — účtovníctvo

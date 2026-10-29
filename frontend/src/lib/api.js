@@ -13,8 +13,18 @@ export class ApiError extends Error {
   }
 }
 
+let onUnauthorized = null
+
+/** Zavolá sa pri odpovedi 401 (vypršaná relácia) — aplikácia zobrazí prihlásenie. */
+export function setUnauthorizedHandler(fn) {
+  onUnauthorized = fn
+}
+
 export async function request(method, path, body, fetchImpl = globalThis.fetch) {
-  const init = { method, headers: {} }
+  const init = { method, headers: {}, credentials: 'same-origin' }
+  // ochrana proti CSRF: cudzia stránka túto hlavičku poslať nevie
+  if (method !== 'GET') init.headers['X-Fiskus'] = '1'
+
   if (body !== undefined) {
     init.headers['Content-Type'] = 'application/json'
     init.body = JSON.stringify(body)
@@ -35,6 +45,7 @@ export async function request(method, path, body, fetchImpl = globalThis.fetch) 
     }
   }
   if (!res.ok) {
+    if (res.status === 401 && onUnauthorized && !path.startsWith('/api/auth/')) onUnauthorized()
     throw new ApiError(res.status, data?.error ?? `Chyba servera (${res.status})`, data?.fields ?? [])
   }
   return data
@@ -42,8 +53,32 @@ export async function request(method, path, body, fetchImpl = globalThis.fetch) 
 
 const inv = (cid) => `/api/companies/${cid}/invoices`
 
+/** Query string z filtra (prázdne hodnoty vynechá). */
+export function query(params = {}) {
+  const p = new URLSearchParams()
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== '') p.set(k, v)
+  }
+  const qs = p.toString()
+  return qs ? `?${qs}` : ''
+}
+
 export const api = {
   capabilities: () => request('GET', '/api/capabilities'),
+  me: () => request('GET', '/api/me'),
+  login: (email, password) => request('POST', '/api/auth/login', { email, password }),
+  logout: () => request('POST', '/api/auth/logout'),
+  changePassword: (current, password) => request('POST', '/api/auth/password', { current, password }),
+
+  members: (cid) => request('GET', `/api/companies/${cid}/users`),
+  addMember: (cid, m) => request('POST', `/api/companies/${cid}/users`, m),
+  setRole: (cid, uid, role) => request('PUT', `/api/companies/${cid}/users/${uid}`, { role }),
+  removeMember: (cid, uid) => request('DELETE', `/api/companies/${cid}/users/${uid}`),
+
+  /** Audit firmy; cid = 0 → celá inštalácia (iba správca inštalácie). */
+  audit: (cid, filter) => request('GET', (cid ? `/api/companies/${cid}/audit` : '/api/audit') + query(filter)),
+  verifyAudit: () => request('GET', '/api/audit/verify'),
+
   codes: () => request('GET', '/api/codes'),
   companies: () => request('GET', '/api/companies'),
   createCompany: (c) => request('POST', '/api/companies', c),

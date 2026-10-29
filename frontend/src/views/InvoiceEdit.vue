@@ -16,7 +16,7 @@ import AutoComplete from 'primevue/autocomplete'
 import IcoInput from '../components/IcoInput.vue'
 import { fillFromRegistry } from '../lib/registry.js'
 import { api, ApiError } from '../lib/api.js'
-import { session } from '../lib/session.js'
+import { session, can } from '../lib/session.js'
 import {
   formatAmount, formatDate, formatMoney, formatQuantity,
   fromISODate, parseNumber, statusOf, toISODate,
@@ -43,7 +43,8 @@ const showErrors = ref(false)
 const errors = ref({}) // pole → správa
 const previewErrors = ref({})
 
-const editable = computed(() => !inv.value?.status || inv.value.status === 'draft')
+const canWrite = computed(() => can('invoices.write'))
+const editable = computed(() => canWrite.value && (!inv.value?.status || inv.value.status === 'draft'))
 // neplatiteľ DPH: faktúra bez DPH (o režime rozhoduje backend podľa nastavení firmy)
 const nonVat = computed(() => !!inv.value?.nonVatPayer)
 const status = computed(() => (inv.value ? statusOf(inv.value) : null))
@@ -433,7 +434,7 @@ const customerFields = reactive([
         <Button label="Uložiť koncept" severity="secondary" outlined size="small" :loading="busy" @click="save()" v-tooltip.bottom="'Ctrl+S'" />
         <Button label="Vystaviť" icon="pi pi-check" size="small" :disabled="busy" @click="issue" />
       </template>
-      <template v-else-if="inv.status === 'issued' || inv.status === 'paid'">
+      <template v-else-if="canWrite && (inv.status === 'issued' || inv.status === 'paid')">
         <Button
           v-if="!isCredit"
           label="Dobropis"

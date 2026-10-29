@@ -10,12 +10,17 @@ import (
 	"context"
 	"errors"
 
+	"github.com/palo-krnac/fiscus/backend/internal/audit"
+	"github.com/palo-krnac/fiscus/backend/internal/auth"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/purchase"
 )
 
 // ErrNotFound — záznam neexistuje (alebo patrí inej firme).
 var ErrNotFound = errors.New("záznam neexistuje")
+
+// ErrDuplicate — záznam s rovnakým jedinečným kľúčom už existuje (napr. e-mail).
+var ErrDuplicate = errors.New("záznam už existuje")
 
 // Company je účtovná jednotka (firma alebo živnostník).
 type Company struct {
@@ -102,6 +107,29 @@ type Store interface {
 	// SavePurchase vloží (ID == 0) alebo prepíše prijatú faktúru. Nastaví ID.
 	SavePurchase(ctx context.Context, companyID int64, p *purchase.Purchase) error
 	DeletePurchase(ctx context.Context, companyID, id int64) error
+
+	// ---- používatelia a prístupy ----
+	CreateUser(ctx context.Context, u auth.User) (auth.User, error) // ErrDuplicate pri rovnakom e-maile
+	GetUser(ctx context.Context, id int64) (auth.User, error)
+	GetUserByEmail(ctx context.Context, email string) (auth.User, error) // e-mail bez ohľadu na veľkosť písmen
+	UpdateUser(ctx context.Context, u auth.User) error
+	ListUsers(ctx context.Context) ([]auth.User, error)
+	SetMembership(ctx context.Context, m auth.Membership) error // vloží alebo zmení rolu
+	RemoveMembership(ctx context.Context, userID, companyID int64) error
+	UserMemberships(ctx context.Context, userID int64) ([]auth.Membership, error)
+	CompanyMembers(ctx context.Context, companyID int64) ([]auth.Membership, error)
+	CreateSession(ctx context.Context, s auth.Session) error
+	GetSession(ctx context.Context, tokenHash string) (auth.Session, error)
+	DeleteSession(ctx context.Context, tokenHash string) error
+	DeleteUserSessions(ctx context.Context, userID int64) error
+
+	// ---- audit (iba pridávanie, nikdy úprava ani mazanie) ----
+	// AppendAudit atomicky pridá záznam na koniec reťazca (nastaví ID, PrevHash, Hash).
+	AppendAudit(ctx context.Context, e *audit.Entry) error
+	// ListAudit vráti záznamy podľa filtra, najnovšie prvé, a celkový počet.
+	ListAudit(ctx context.Context, f audit.Filter) ([]audit.Entry, int, error)
+	// AuditChain vráti celý reťazec od najstaršieho (na overenie integrity).
+	AuditChain(ctx context.Context) ([]audit.Entry, error)
 
 	// NextSequence atomicky zvýši a vráti poradové číslo radu za rok.
 	NextSequence(ctx context.Context, companyID int64, series string, year int) (int, error)

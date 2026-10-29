@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/palo-krnac/fiscus/backend/internal/audit"
+	"github.com/palo-krnac/fiscus/backend/internal/auth"
 	"github.com/palo-krnac/fiscus/backend/internal/backup"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 	"github.com/palo-krnac/fiscus/backend/internal/store/storetest"
@@ -119,5 +121,20 @@ func TestUpgradeFromV1(t *testing.T) {
 	_ = s.db.QueryRow("PRAGMA user_version").Scan(&v)
 	if v != len(migrations) {
 		t.Fatalf("verzia schémy %d", v)
+	}
+}
+
+// Audit sa nedá zmeniť ani zmazať ani priamo v databáze (triggery).
+func TestAuditIsAppendOnly(t *testing.T) {
+	s := open(t)
+	e := audit.New(auth.Local, 1, audit.CatInvoices, "issue", "invoice", 1, "Vystavená faktúra", nil, nil)
+	if err := s.AppendAudit(context.Background(), &e); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec("UPDATE audit_log SET summary = 'podvrh'"); err == nil {
+		t.Fatal("audit sa dal zmeniť")
+	}
+	if _, err := s.db.Exec("DELETE FROM audit_log"); err == nil {
+		t.Fatal("audit sa dal zmazať")
 	}
 }
