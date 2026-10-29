@@ -148,3 +148,12 @@ export const bankColumns = [
   t('Poznámka', (r) => r.note, 24),
   t('Účet', (r) => r.account, 26),
 ]
+
+export const svColumns = [
+  t('Štát', (r) => r.country, 6),
+  t('IČ DPH', (r) => r.vatId, 16),
+  t('Odberateľ', (r) => r.name, 30),
+  money('Hodnota', (r) => r.value),
+  { header: 'Kód plnenia', value: (r) => r.code, type: 'number', width: 8 },
+  { header: 'Počet dokladov', value: (r) => r.count, type: 'number', width: 8 },
+]

@@ -95,6 +95,8 @@ func TestValidate(t *testing.T) {
 		{"bez odpočtu nepotrebuje IČ DPH", func(p *Purchase) { p.Supplier.ICDPH = ""; p.NoDeduction = true }, ""},
 		{"neplatiteľ (0 %) nepotrebuje IČ DPH", func(p *Purchase) { p.Supplier.ICDPH = ""; p.Rates[0].Rate = 0 }, ""},
 		{"zlý IBAN", func(p *Purchase) { p.SupplierIBAN = "SK00 1234" }, "supplierIban"},
+		{"zahraničný dodávateľ bez druhu plnenia", func(p *Purchase) { p.Supplier.Country = "CZ" }, "supplyKind"},
+		{"zahraničný dodávateľ – tovar", func(p *Purchase) { p.Supplier.Country = "CZ"; p.SupplyKind = invoice.SupplyGoods }, ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

@@ -14,7 +14,8 @@ import FormField from '../components/FormField.vue'
 import IcoInput from '../components/IcoInput.vue'
 import { api, ApiError } from '../lib/api.js'
 import { session, can } from '../lib/session.js'
-import { codes, ratesOn } from '../lib/codes.js'
+import { codes, ratesOn, supplyKinds, isForeign, supplyHint } from '../lib/codes.js'
+import SelectButton from 'primevue/selectbutton'
 import { filterContacts, customerFromContact } from '../lib/contacts.js'
 import { fillFromRegistry } from '../lib/registry.js'
 import { formatAmount, formatDate, formatMoney, fromISODate, parseNumber, purchaseStatusOf, toISODate } from '../lib/format.js'
@@ -57,7 +58,7 @@ async function load() {
         supplierNumber: '', variableSymbol: '', contactId: 0,
         supplier: { name: '', street: '', city: '', zip: '', country: 'SK', ico: '', dic: '', icdph: '', email: '' },
         supplierIban: '', issueDate: today, deliveryDate: today, receivedDate: today, dueDate: null,
-        paymentMethod: 'transfer', reverseCharge: false, noDeduction: false, description: '', note: '',
+        paymentMethod: 'transfer', reverseCharge: false, noDeduction: false, supplyKind: '', description: '', note: '',
         rates: [blankRow()],
       }
     }
@@ -386,6 +387,21 @@ const set = (obj, key) => (v) => {
             </label>
           </div>
           <small v-if="fieldError('supplier.icdph')" class="err">{{ fieldError('supplier.icdph') }}</small>
+          <div v-if="isForeign(p.supplier.country)" class="supply">
+            <span class="supply-label">Druh plnenia</span>
+            <SelectButton
+              :model-value="p.supplyKind || null"
+              :options="supplyKinds"
+              option-label="label"
+              option-value="value"
+              :disabled="locked"
+              size="small"
+              aria-label="Druh plnenia"
+              @update:model-value="set(p, 'supplyKind')($event || '')"
+            />
+            <small v-if="fieldError('supplyKind')" class="err">{{ fieldError('supplyKind') }}</small>
+            <small v-else class="supply-hint">{{ supplyHint('purchase', p.supplier.country, p.supplyKind) }}</small>
+          </div>
         </fieldset>
 
         <fieldset class="form-section">
@@ -526,6 +542,25 @@ const set = (obj, key) => (v) => {
   flex-direction: column;
   gap: 6px;
   margin-top: 10px;
+}
+.supply {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 8px;
+}
+.supply-label {
+  font-size: var(--fs-sm);
+  color: var(--ink-soft);
+}
+.supply-hint,
+.supply .err {
+  flex-basis: 100%;
+  font-size: var(--fs-sm);
+}
+.supply-hint {
+  color: var(--ink-faint);
 }
 .check {
   display: flex;

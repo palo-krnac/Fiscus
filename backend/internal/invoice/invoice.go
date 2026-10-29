@@ -103,6 +103,9 @@ type Invoice struct {
 	Currency       string        `json:"currency"`
 	PriceMode      vat.PriceMode `json:"priceMode"`
 	ReverseCharge  bool          `json:"reverseCharge"`
+	// SupplyKind: tovar alebo služba — rozhoduje pri zahraničnom odberateľovi
+	// (dodanie do EÚ / vývoz, súhrnný výkaz).
+	SupplyKind SupplyKind `json:"supplyKind"`
 	// NonVATPayer: dodávateľ nie je platiteľ DPH — faktúra je bez DPH.
 	NonVATPayer bool  `json:"nonVatPayer"`
 	ContactID   int64 `json:"contactId"` // odkaz do adresára (0 = zadané ručne)
@@ -174,6 +177,11 @@ func (inv *Invoice) Validate() error {
 	}
 	if inv.ReverseCharge && c.ICDPH == "" {
 		add("customer.icdph", "Pri prenesení daňovej povinnosti je IČ DPH odberateľa povinné")
+	}
+	if !inv.SupplyKind.Valid() {
+		add("supplyKind", "Neznámy druh plnenia")
+	} else if party.Foreign(c.Country) && inv.SupplyKind == "" && !inv.NonVATPayer {
+		add("supplyKind", "Pri zahraničnom odberateľovi vyberte, či ide o tovar alebo službu")
 	}
 	if len(inv.Lines) == 0 {
 		add("lines", "Faktúra musí mať aspoň jednu položku")
@@ -295,3 +303,14 @@ func digitsOnly(s string) string {
 	}
 	return b.String()
 }
+
+// SupplyKind je druh plnenia.
+type SupplyKind string
+
+const (
+	SupplyGoods    SupplyKind = "goods"    // dodanie tovaru
+	SupplyServices SupplyKind = "services" // poskytnutie služby
+)
+
+// Valid vráti true pre prázdny alebo známy druh.
+func (k SupplyKind) Valid() bool { return k == "" || k == SupplyGoods || k == SupplyServices }

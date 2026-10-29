@@ -40,8 +40,8 @@ func (s *Server) vatReturn(w http.ResponseWriter, r *http.Request) {
 func (s *Server) vatExport(w http.ResponseWriter, r *http.Request) {
 	cid, _ := pathID(w, r, "cid")
 	kind := strings.TrimSuffix(r.PathValue("kind"), ".xml")
-	if kind != "dph" && kind != "kv" {
-		writeErr(w, http.StatusNotFound, "Neznámy výstup (dph.xml alebo kv.xml)", nil)
+	if kind != "dph" && kind != "kv" && kind != "sv" {
+		writeErr(w, http.StatusNotFound, "Neznámy výstup (dph.xml, kv.xml alebo sv.xml)", nil)
 		return
 	}
 	excess, ok := excessParam(w, r)

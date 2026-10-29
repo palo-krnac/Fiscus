@@ -73,8 +73,11 @@ func TestVATReturn(t *testing.T) {
 	if _, name, _ := a.VATExport(ctx, c.ID, "dph", "2026-10", m.Zero); name != "dph-2026-10.xml" {
 		t.Fatal(name)
 	}
+	if out, name, _ := a.VATExport(ctx, c.ID, "sv", "2026-10", m.Zero); name != "sv-dph-2026-10.xml" || !bytes.Contains(out, []byte("<riadny>1</riadny>")) {
+		t.Fatal(name)
+	}
 	list, _, _ := a.Store.ListAudit(ctx, audit.Filter{Category: audit.CatTaxes})
-	if len(list) != 2 {
+	if len(list) != 3 {
 		t.Fatalf("audit exportov: %d", len(list))
 	}
 }

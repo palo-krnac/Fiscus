@@ -7,7 +7,7 @@ import { api } from '../lib/api.js'
 import { session } from '../lib/session.js'
 import { formatAmount, formatDate, formatMoney, formatQuantity } from '../lib/format.js'
 import { payBySquare, qrSvg } from '../lib/payqr.js'
-import { countryName, paymentLabel } from '../lib/codes.js'
+import { countryName, paymentLabel, vatExemptionNote } from '../lib/codes.js'
 
 const props = defineProps({ id: String })
 const print = () => window.print()
@@ -171,7 +171,7 @@ const ids = (p) =>
 
       <footer class="notes">
         <p v-if="nonVat">Dodávateľ nie je platiteľ DPH.</p>
-        <p v-if="inv.reverseCharge && !nonVat">Prenesenie daňovej povinnosti podľa § 69 ods. 12 zákona o DPH. Daň odvedie odberateľ.</p>
+        <p v-if="inv.reverseCharge && !nonVat">{{ vatExemptionNote(inv) }}</p>
         <p v-if="inv.note" class="user-note">{{ inv.note }}</p>
       </footer>
     </article>

@@ -86,6 +86,8 @@ func (a *App) VATExport(ctx context.Context, companyID int64, kind, period strin
 	switch kind {
 	case "kv":
 		out, name, what = vatreturn.KVXML(r, tp), "kv-dph-"+r.Period.String()+".xml", "kontrolný výkaz"
+	case "sv":
+		out, name, what = vatreturn.SVXML(r, tp, a.Today()), "sv-dph-"+r.Period.String()+".xml", "súhrnný výkaz"
 	default:
 		out, name, what = vatreturn.DPHXML(r, tp, a.Today()), "dph-"+r.Period.String()+".xml", "priznanie k DPH"
 	}

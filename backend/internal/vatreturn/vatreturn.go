@@ -20,6 +20,7 @@ import (
 
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/money"
+	"github.com/palo-krnac/fiscus/backend/internal/party"
 	"github.com/palo-krnac/fiscus/backend/internal/purchase"
 	"github.com/palo-krnac/fiscus/backend/internal/vat"
 )
@@ -83,6 +84,23 @@ type KV struct {
 	D2 KVSum          `json:"d2"`
 }
 
+// Kódy plnenia v súhrnnom výkaze.
+const (
+	SVGoods      = 0 // dodanie tovaru do iného členského štátu (§ 43)
+	SVTriangular = 1 // trojstranný obchod
+	SVServices   = 2 // služby, pri ktorých daň platí príjemca v inom členskom štáte
+)
+
+// SVLine je riadok súhrnného výkazu (súčet za odberateľa a kód plnenia).
+type SVLine struct {
+	Country string    `json:"country"` // kód štátu z IČ DPH (EL pre Grécko)
+	VATID   string    `json:"vatId"`   // IČ DPH bez kódu štátu
+	Name    string    `json:"name"`
+	Value   money.Dec `json:"value"`
+	Code    int       `json:"code"`
+	Count   int       `json:"count"` // počet dokladov
+}
+
 // Return je priznanie k DPH spolu s kontrolným výkazom.
 type Return struct {
 	Period Period               `json:"period"`
@@ -91,6 +109,7 @@ type Return struct {
 	// Deduction je odpočet dane spolu (r. 18 + 18a + 19) na prehľad.
 	Deduction money.Dec `json:"deduction"`
 	KV        KV        `json:"kv"`
+	SV        []SVLine  `json:"sv"` // súhrnný výkaz
 	Warnings  []Warning `json:"warnings"`
 	Invoices  int       `json:"invoices"`  // počet zahrnutých vydaných dokladov
 	Purchase  int       `json:"purchases"` // počet zahrnutých prijatých faktúr
@@ -109,11 +128,12 @@ type Input struct {
 type rowPair struct{ base, tax string }
 
 var (
-	outputRows  = map[vat.Rate]rowPair{19: {"r01", "r02"}, 5: {"r01a", "r02a"}, 23: {"r03", "r04"}}
-	reverseRows = map[vat.Rate]rowPair{19: {"r09", "r10"}, 5: {"r09a", "r10a"}, 23: {"r09b", "r10b"}}
-	deductRows  = map[vat.Rate]string{19: "r18", 5: "r18a", 23: "r19"}
-	domesticRow = map[vat.Rate]string{19: "r20", 5: "r20a", 23: "r21"}
-	taxRows     = []string{"r02", "r02a", "r04", "r06", "r06a", "r08", "r10", "r10a", "r10b", "r12", "r12a", "r12b", "r12c", "r12d", "r12e", "r16"}
+	outputRows      = map[vat.Rate]rowPair{19: {"r01", "r02"}, 5: {"r01a", "r02a"}, 23: {"r03", "r04"}}
+	acquisitionRows = map[vat.Rate]rowPair{19: {"r05", "r06"}, 5: {"r05a", "r06a"}, 23: {"r07", "r08"}}
+	reverseRows     = map[vat.Rate]rowPair{19: {"r09", "r10"}, 5: {"r09a", "r10a"}, 23: {"r09b", "r10b"}}
+	deductRows      = map[vat.Rate]string{19: "r18", 5: "r18a", 23: "r19"}
+	domesticRow     = map[vat.Rate]string{19: "r20", 5: "r20a", 23: "r21"}
+	taxRows         = []string{"r02", "r02a", "r04", "r06", "r06a", "r08", "r10", "r10a", "r10b", "r12", "r12a", "r12b", "r12c", "r12d", "r12e", "r16"}
 )
 
 // Reduced vráti true pre zníženú sadzbu (v D.2 sa sčítavajú spolu).
@@ -131,7 +151,7 @@ func noSpaces(s string) string { return strings.Join(strings.Fields(s), "") }
 func Compute(in Input) Return {
 	ret := Return{Period: in.Period, Label: in.Period.Label(), Rows: map[string]money.Dec{}, KV: KV{
 		A1: []KVLine{}, B1: []KVLine{}, B2: []KVLine{}, C1: []KVCorrection{},
-	}, Warnings: []Warning{}}
+	}, SV: []SVLine{}, Warnings: []Warning{}}
 	add := func(row string, v money.Dec) { ret.Rows[row] = ret.Rows[row].Add(v) }
 	warn := func(doc, kind string, id int64, msg string) {
 		ret.Warnings = append(ret.Warnings, Warning{doc, kind, id, msg})
@@ -156,11 +176,15 @@ func Compute(in Input) Return {
 		case inv.Currency != "" && inv.Currency != "EUR":
 			warn(inv.Number, "invoice", inv.ID, "Faktúra v mene "+inv.Currency+" — prepočet na eurá zatiaľ nie je podporovaný, doplňte ručne")
 			continue
-		case inv.ReverseCharge:
-			warn(inv.Number, "invoice", inv.ID, "Prenesenie daňovej povinnosti — dodanie do EÚ / tuzemské prenesenie (r. 14, 15, A.2, súhrnný výkaz) doplňte ručne")
+		case foreign(c.Country) && inv.Summary.VAT.IsZero():
+			if msg := ret.addForeignSale(inv); msg != "" {
+				warn(inv.Number, "invoice", inv.ID, msg)
+			} else {
+				ret.Invoices++
+			}
 			continue
-		case foreign(c.Country):
-			warn(inv.Number, "invoice", inv.ID, "Odberateľ mimo Slovenska ("+c.Country+") — dodanie do EÚ alebo vývoz doplňte ručne")
+		case inv.ReverseCharge:
+			warn(inv.Number, "invoice", inv.ID, "Tuzemské prenesenie daňovej povinnosti (§ 69 ods. 12, A.2) zatiaľ nie je podporované — doplňte ručne")
 			continue
 		}
 		payer := isSKPayer(c.ICDPH)
@@ -227,7 +251,13 @@ func Compute(in Input) Return {
 			warn(doc, "purchase", p.ID, "Dobropis od dodávateľa (C.2, r. 28) zatiaľ nie je podporovaný — doplňte ručne")
 			continue
 		case foreign(s.Country) && !p.ReverseCharge:
-			warn(doc, "purchase", p.ID, "Zahraničná faktúra s DPH — zahraničnú daň nemožno odpočítať v SR (vrátenie DPH z iného štátu)")
+			warn(doc, "purchase", p.ID, "Zahraničná faktúra bez prenesenia daňovej povinnosti — zahraničnú DPH nemožno odpočítať v SR. Ak daň platíte vy, označte prenesenie.")
+			continue
+		case foreign(s.Country) && p.SupplyKind == "":
+			warn(doc, "purchase", p.ID, "Pri zahraničnom dodávateľovi vyberte, či ide o tovar alebo službu")
+			continue
+		case foreign(s.Country) && p.SupplyKind == invoice.SupplyGoods && !party.IsEU(s.Country):
+			warn(doc, "purchase", p.ID, "Dovoz tovaru z tretej krajiny (DPH platená colnému úradu, r. 22–23) zatiaľ nie je podporovaný — doplňte ručne")
 			continue
 		case p.NoDeduction && !p.ReverseCharge:
 			continue // bez odpočtu: neuvádza sa ani v KV
@@ -246,7 +276,11 @@ func Compute(in Input) Return {
 				deducted = money.Zero
 			}
 			if p.ReverseCharge {
-				rows, ok := reverseRows[r.Rate]
+				table := reverseRows // služby zo zahraničia, tuzemské prenesenie (§ 69)
+				if foreign(s.Country) && p.SupplyKind == invoice.SupplyGoods {
+					table = acquisitionRows // nadobudnutie tovaru z EÚ (§ 11)
+				}
+				rows, ok := table[r.Rate]
 				if !ok {
 					warn(doc, "purchase", p.ID, fmt.Sprintf("Sadzba %d %% nepatrí do tlačiva DPHv25", r.Rate))
 					continue
@@ -279,9 +313,6 @@ func Compute(in Input) Return {
 		}
 		if included {
 			ret.Purchase++
-		}
-		if p.ReverseCharge && foreign(s.Country) {
-			warn(doc, "purchase", p.ID, "Dodávateľ z EÚ: zaradené ako služba (r. 09/10). Ak ide o tovar, patrí do nadobudnutia (r. 05–08)")
 		}
 	}
 
@@ -319,4 +350,53 @@ func Compute(in Input) Return {
 		}
 	}
 	return ret
+}
+
+// addForeignSale zaradí faktúru zahraničnému odberateľovi bez DPH:
+// tovar do EÚ (r. 13, 14, SV kód 0), vývoz tovaru (r. 13, 15),
+// služby do EÚ (iba SV kód 2), služby mimo EÚ (mimo priznania).
+// Vráti text upozornenia, ak faktúru nemožno zaradiť.
+func (ret *Return) addForeignSale(inv invoice.Invoice) string {
+	c := inv.Customer
+	eu := party.IsEU(c.Country)
+	base := inv.Summary.Base
+	add := func(row string) { ret.Rows[row] = ret.Rows[row].Add(base) }
+	switch inv.SupplyKind {
+	case "":
+		return "Pri zahraničnom odberateľovi vyberte na faktúre, či ide o tovar alebo službu"
+	case invoice.SupplyGoods:
+		if !eu {
+			add("r13")
+			add("r15")
+			return ""
+		}
+		if c.ICDPH == "" {
+			return "Dodanie tovaru do EÚ je oslobodené iba pre odberateľa s IČ DPH — doplňte ho alebo fakturujte s DPH"
+		}
+		add("r13")
+		add("r14")
+		ret.addSV(c, SVGoods, base)
+	case invoice.SupplyServices:
+		if !eu {
+			return "" // služba mimo EÚ: miesto dodania v zahraničí, do priznania sa neuvádza
+		}
+		if c.ICDPH == "" {
+			return "Služba do EÚ s prenesením daňovej povinnosti vyžaduje IČ DPH odberateľa"
+		}
+		ret.addSV(c, SVServices, base)
+	}
+	return ""
+}
+
+func (ret *Return) addSV(c invoice.Party, code int, value money.Dec) {
+	country := party.VATCountry(c.ICDPH, c.Country)
+	id := strings.TrimPrefix(party.NormalizeID(c.ICDPH), country)
+	for i := range ret.SV {
+		if l := &ret.SV[i]; l.Country == country && l.VATID == id && l.Code == code {
+			l.Value = l.Value.Add(value)
+			l.Count++
+			return
+		}
+	}
+	ret.SV = append(ret.SV, SVLine{Country: country, VATID: id, Name: c.Name, Value: value, Code: code, Count: 1})
 }

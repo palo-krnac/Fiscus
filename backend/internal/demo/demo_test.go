@@ -19,7 +19,7 @@ func TestSeed(t *testing.T) {
 		t.Fatal(err)
 	}
 	list, _ := a.Store.ListInvoices(context.Background(), c.ID, store.InvoiceFilter{})
-	if len(list) != 40 {
+	if len(list) != 42 {
 		t.Fatalf("%d faktúr", len(list))
 	}
 	if p, _ := a.Store.ListPurchases(context.Background(), c.ID, store.PurchaseFilter{}); len(p) != 6 {
