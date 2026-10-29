@@ -4,6 +4,7 @@ import { purchaseStatusOf, statusOf } from './format.js'
 import { actionLabel, channelLabel } from './audit.js'
 import { quoteStatusOf } from './quotes.js'
 import { intervalLabel, recurringStatusOf } from './recurring.js'
+import { levelShort } from './reminders.js'
 
 const t = (header, value, width) => ({ header, value, width })
 const money = (header, value) => ({ header, value, type: 'money', width: 14 })
@@ -221,4 +222,31 @@ export const recurringColumns = [
   { header: 'Vytvorených faktúr', value: (r) => r.generated ?? 0, type: 'number', width: 10 },
   t('Stav', (r) => recurringStatusOf(r).label, 14),
   t('Položky', (r) => (r.lines ?? []).map((l) => l.description).join('; '), 40),
+]
+
+export const reminderColumns = [
+  t('Číslo', (r) => r.number, 14),
+  date('Dátum', (r) => r.date),
+  t('Stupeň', (r) => levelShort(r.level), 12),
+  t('Odberateľ', (r) => r.customer?.name, 32),
+  t('IČO', (r) => r.customer?.ico, 11),
+  t('Faktúry', (r) => (r.items ?? []).map((i) => i.number).join(', '), 30),
+  money('Dlžná suma', (r) => r.principal),
+  money('Úrok z omeškania', (r) => r.interestTotal),
+  money('Paušálna náhrada', (r) => r.fees),
+  money('Spolu', (r) => r.total),
+  date('Uhradiť do', (r) => r.payBy),
+  t('Poznámka', (r) => r.note, 30),
+]
+
+export const overdueColumns = [
+  t('Odberateľ', (r) => r.customer?.name, 32),
+  t('IČO', (r) => r.customer?.ico, 11),
+  t('Faktúra', (r) => r.number, 14),
+  date('Vystavená', (r) => r.issueDate),
+  date('Splatná', (r) => r.dueDate),
+  { header: 'Dní po splatnosti', value: (r) => r.days, type: 'number', width: 10 },
+  money('Suma', (r) => r.total),
+  t('Upomenutá', (r) => (r.reminded ? levelShort(r.reminded) : ''), 12),
+  date('Posledná upomienka', (r) => r.lastReminded),
 ]

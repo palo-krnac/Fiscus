@@ -102,6 +102,13 @@ func (s *Server) Handler() http.Handler {
 	need("POST /api/companies/{cid}/recurring/{id}/resume", auth.PermInvoicesWrite, s.setRecurringActive(true))
 	need("POST /api/companies/{cid}/recurring/{id}/generate", auth.PermInvoicesWrite, s.generateRecurring)
 
+	need("GET /api/companies/{cid}/overdue", auth.PermInvoicesRead, s.overdue)
+	need("GET /api/companies/{cid}/reminders", auth.PermInvoicesRead, s.listReminders)
+	need("GET /api/companies/{cid}/reminders/{id}", auth.PermInvoicesRead, s.getReminder)
+	need("POST /api/companies/{cid}/reminders/preview", auth.PermInvoicesWrite, s.reminderRequest(false))
+	need("POST /api/companies/{cid}/reminders", auth.PermInvoicesWrite, s.reminderRequest(true))
+	need("DELETE /api/companies/{cid}/reminders/{id}", auth.PermInvoicesWrite, s.deleteReminder)
+
 	need("GET /api/companies/{cid}/purchases", auth.PermPurchasesRead, s.listPurchases)
 	need("GET /api/companies/{cid}/purchases/{id}", auth.PermPurchasesRead, s.getPurchase)
 	need("POST /api/companies/{cid}/purchases", auth.PermPurchasesWrite, s.savePurchase)

@@ -15,6 +15,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/purchase"
 	"github.com/palo-krnac/fiscus/backend/internal/quote"
 	"github.com/palo-krnac/fiscus/backend/internal/recurring"
+	"github.com/palo-krnac/fiscus/backend/internal/reminder"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 	"github.com/palo-krnac/fiscus/backend/internal/vat"
 )
@@ -204,6 +205,17 @@ func Seed(ctx context.Context, a *app.App) (store.Company, error) {
 	}
 	if err := seedRecurring(ctx, a, c, contactIDs); err != nil {
 		return c, fmt.Errorf("demo pravidelná fakturácia: %w", err)
+	}
+	// upomienka najväčšiemu dlžníkovi (ostatní čakajú na prvú upomienku)
+	if groups, err := a.Overdue(ctx, c.ID); err == nil && len(groups) > 0 {
+		ids := []int64{}
+		for _, inv := range groups[0].Invoices {
+			ids = append(ids, inv.ID)
+		}
+		if _, err := a.CreateReminder(ctx, c.ID, app.ReminderRequest{InvoiceIDs: ids,
+			Options: reminder.Options{Date: a.Today().AddDays(-3), PayBy: a.Today().AddDays(4), ChargeFee: true}}); err != nil {
+			return c, fmt.Errorf("demo upomienka: %w", err)
+		}
 	}
 	return c, nil
 }
