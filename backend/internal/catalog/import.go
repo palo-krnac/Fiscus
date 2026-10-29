@@ -54,8 +54,11 @@ type ImportRow struct {
 // parseNumber prečíta číslo v slovenskom aj anglickom zápise: „1 234,50“, „1234.5“, „23 %“, „12,50 €“.
 func parseNumber(s string) (money.Dec, error) {
 	s = strings.NewReplacer(" ", "", " ", "", " ", "", "%", "", "€", "", "EUR", "").Replace(strings.TrimSpace(s))
-	if strings.Contains(s, ",") {
+	// desatinný oddeľovač je posledná čiarka alebo bodka („1.234,50“ aj „1,234.50“)
+	if c, d := strings.LastIndex(s, ","), strings.LastIndex(s, "."); c > d {
 		s = strings.ReplaceAll(strings.ReplaceAll(s, ".", ""), ",", ".")
+	} else if c >= 0 {
+		s = strings.ReplaceAll(s, ",", "")
 	}
 	return money.Parse(s)
 }

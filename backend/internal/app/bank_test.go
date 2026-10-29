@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 	"fmt"
+	"github.com/palo-krnac/fiscus/backend/internal/money"
 	"strings"
 	"testing"
 
@@ -165,5 +166,73 @@ func TestBankPermissions(t *testing.T) {
 	}
 	if _, err := o.a.ImportStatement(as(o.jana), o.alfa.ID, "v.xml", []byte("nie je výpis")); !errors.Is(err, bank.ErrFormat) {
 		t.Errorf("zlý súbor: %v", err)
+	}
+}
+
+func TestBankImportCSV(t *testing.T) {
+	a, c := newApp(t, edition.Desktop)
+	c.IBAN = "SK31 1200 0000 1987 4263 7541"
+	if _, err := a.UpdateCompany(ctx, c); err != nil {
+		t.Fatal(err)
+	}
+	d, _ := a.SaveDraft(ctx, c.ID, validDraft())
+	inv, err := a.Issue(ctx, c.ID, d.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	csv := []byte("Dátum;Suma;VS;Názov protiúčtu\n20.10.2026;492,00;" + inv.VariableSymbol + ";Odberateľ\n21.10.2026;-3,00;;Banka\n")
+	res, err := a.ImportStatement(ctx, c.ID, "pohyby.csv", csv)
+	if err != nil || res.Format != "CSV/Excel" || res.Imported != 2 || res.AutoMatched != 1 || res.Account != "SK3112000000198742637541" || len(res.Warnings) != 0 {
+		t.Fatalf("CSV: %+v %v", res, err)
+	}
+	// opakovaný import nič nezdvojí
+	if res, _ := a.ImportStatement(ctx, c.ID, "pohyby.csv", csv); res.Imported != 0 || res.Duplicates != 2 {
+		t.Fatalf("opakovane: %+v", res)
+	}
+	if got, _ := a.Store.GetInvoice(ctx, c.ID, inv.ID); got.Status != invoice.StatusPaid || got.PaidDate.String() != "2026-10-20" {
+		t.Fatalf("faktúra: %s %s", got.Status, got.PaidDate)
+	}
+}
+
+func TestPartialBankPayment(t *testing.T) {
+	a, c := newApp(t, edition.Desktop)
+	d, _ := a.SaveDraft(ctx, c.ID, validDraft())
+	inv, _ := a.Issue(ctx, c.ID, d.ID) // 492,00 €
+	vs := inv.VariableSymbol
+	res, err := a.ImportStatement(ctx, c.ID, "1.csv", []byte("Dátum;Suma;VS\n20.10.2026;200,00;"+vs+"\n"))
+	if err != nil || res.AutoMatched != 0 || res.Open != 1 {
+		t.Fatalf("čiastočná platba sa nespáruje sama: %+v %v", res, err)
+	}
+	txs, _ := a.Store.ListBankTransactions(ctx, c.ID, store.BankFilter{})
+	if _, err := a.MatchTransaction(ctx, c.ID, txs[0].ID, "invoice", inv.ID); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := a.Store.GetInvoice(ctx, c.ID, inv.ID)
+	if got.Status != invoice.StatusIssued || got.PaidAmount.String() != "200.00" || got.Remaining().String() != "292.00" {
+		t.Fatalf("po prvej platbe: %s %s", got.Status, got.PaidAmount)
+	}
+	// doplatok so zostatkom sa spáruje automaticky
+	res, _ = a.ImportStatement(ctx, c.ID, "2.csv", []byte("Dátum;Suma;VS\n25.10.2026;292,00;"+vs+"\n"))
+	if res.AutoMatched != 1 {
+		t.Fatalf("doplatok: %+v", res)
+	}
+	got, _ = a.Store.GetInvoice(ctx, c.ID, inv.ID)
+	if got.Status != invoice.StatusPaid || got.PaidDate.String() != "2026-10-25" || len(got.Payments) != 2 {
+		t.Fatalf("uhradená: %s %s %+v", got.Status, got.PaidDate, got.Payments)
+	}
+	// zrušenie prvej platby vráti faktúru medzi neuhradené so zostatkom 200
+	if _, err := a.UnmatchTransaction(ctx, c.ID, txs[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = a.Store.GetInvoice(ctx, c.ID, inv.ID)
+	if got.Status != invoice.StatusIssued || got.Remaining().String() != "200.00" {
+		t.Fatalf("po zrušení: %s %s", got.Status, got.Remaining())
+	}
+	// ručná čiastočná úhrada a doplatenie
+	if got, err = a.AddPayment(ctx, c.ID, inv.ID, invoice.Payment{Amount: money.MustParse("50"), Source: invoice.PaymentManual}, false); err != nil || got.Remaining().String() != "150.00" {
+		t.Fatalf("ručne: %v %s", err, got.Remaining())
+	}
+	if got, err = a.MarkPaid(ctx, c.ID, inv.ID, invoice.MustDate("2026-10-29")); err != nil || got.Status != invoice.StatusPaid {
+		t.Fatalf("doplatenie: %v", err)
 	}
 }

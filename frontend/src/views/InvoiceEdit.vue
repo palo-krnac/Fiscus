@@ -8,6 +8,7 @@ import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Textarea from 'primevue/textarea'
 import DatePicker from 'primevue/datepicker'
+import Dialog from 'primevue/dialog'
 import SelectButton from 'primevue/selectbutton'
 import Select from 'primevue/select'
 import { codes, ratesOn, supplyKinds, isForeign, supplyHint } from '../lib/codes.js'
@@ -19,7 +20,7 @@ import { api, ApiError } from '../lib/api.js'
 import { session, can } from '../lib/session.js'
 import {
   formatAmount, formatDate, formatMoney, formatQuantity,
-  fromISODate, parseNumber, statusOf, toISODate,
+  fromISODate, parseNumber, paymentSource, statusOf, toISODate,
 } from '../lib/format.js'
 import { fiskusGridTheme, skGridLocale } from '../lib/grid.js'
 import { contactFromCustomer, customerFromContact, dueDaysFor, filterContacts } from '../lib/contacts.js'
@@ -438,14 +439,25 @@ async function settle() {
   }
 }
 
+// ---- úhrada (aj čiastočná) ----
+const payDlg = ref(null) // { date: Date, amount: number }
+const balanceAbs = computed(() => Math.abs(Number(inv.value?.balance ?? inv.value?.summary?.total ?? 0)))
+function openPay() {
+  payDlg.value = { date: new Date(), amount: balanceAbs.value }
+}
 async function markPaid() {
+  const d = payDlg.value
   busy.value = true
   try {
-    inv.value = await api.pay(session.companyId, inv.value.id)
+    // celý zostatok sa posiela bez sumy (server doplatí presne zostatok)
+    const partial = d.amount && Math.abs(d.amount - balanceAbs.value) > 0.004
+    const amount = partial ? (isCredit.value ? -d.amount : d.amount).toFixed(2) : undefined
+    inv.value = await api.pay(session.companyId, inv.value.id, toISODate(d.date), amount)
+    payDlg.value = null
     const rn = inv.value.advance?.receiptNumber
     toast.add({
       severity: 'success',
-      summary: 'Označená ako uhradená',
+      summary: inv.value.status === 'paid' ? 'Označená ako uhradená' : `Čiastočná úhrada, zostáva ${formatMoney(inv.value.balance, inv.value.currency)}`,
       detail: rn ? `Vystavený daňový doklad k prijatej platbe ${rn}.` : undefined,
       life: rn ? 5000 : 2500,
     })
@@ -722,7 +734,7 @@ const customerFields = reactive([
         />
         <template v-if="inv.status === 'issued'">
           <Button label="Stornovať" severity="secondary" text size="small" @click="cancelInvoice" />
-          <Button :label="isCredit ? 'Označiť ako vrátené' : 'Označiť ako uhradenú'" icon="pi pi-wallet" size="small" :loading="busy" @click="markPaid" />
+          <Button :label="isCredit ? 'Označiť ako vrátené' : 'Označiť ako uhradenú'" icon="pi pi-wallet" size="small" :loading="busy" @click="openPay" />
         </template>
       </template>
     </header>
@@ -1176,8 +1188,40 @@ const customerFields = reactive([
             <dd>{{ formatDate(inv.paidDate) }}</dd>
           </template>
         </dl>
+        <div v-if="!isQuote && inv.payments?.length" class="payments">
+          <h3>Úhrady</h3>
+          <ul>
+            <li v-for="(p, i) in inv.payments" :key="i">
+              <span>{{ formatDate(p.date) }}</span>
+              <span class="src">{{ paymentSource(p.source) }}</span>
+              <strong class="num">{{ formatMoney(p.amount, inv.currency) }}</strong>
+            </li>
+          </ul>
+          <div v-if="inv.status === 'issued'" class="rest">
+            <span>Zostáva {{ isCredit ? 'vrátiť' : 'uhradiť' }}</span>
+            <strong class="num">{{ formatMoney(inv.balance, inv.currency) }}</strong>
+          </div>
+        </div>
       </aside>
     </div>
+    <Dialog :visible="!!payDlg" modal :header="isCredit ? 'Vrátenie peňazí' : 'Úhrada faktúry'" :style="{ width: '24rem' }" :breakpoints="{ '760px': '96vw' }"
+      @update:visible="(v) => !v && (payDlg = null)">
+      <div v-if="payDlg" class="pay-form">
+        <label>
+          <span>Dátum úhrady</span>
+          <DatePicker v-model="payDlg.date" date-format="d. m. yy" show-icon icon-display="input" size="small" />
+        </label>
+        <label>
+          <span>Suma ({{ inv.currency || 'EUR' }})</span>
+          <InputNumber v-model="payDlg.amount" :min="0.01" :min-fraction-digits="2" :max-fraction-digits="2" locale="sk-SK" size="small" />
+          <small>Zostatok {{ formatMoney(balanceAbs, inv.currency) }}. Menšia suma = čiastočná úhrada.</small>
+        </label>
+      </div>
+      <template #footer>
+        <Button label="Zrušiť" severity="secondary" text size="small" @click="payDlg = null" />
+        <Button label="Uložiť úhradu" icon="pi pi-check" size="small" :loading="busy" :disabled="!payDlg?.amount" @click="markPaid" />
+      </template>
+    </Dialog>
     <SendMailDialog v-if="canMail" v-model:visible="mailOpen" :kind="isQuote ? 'quotes' : 'invoices'" :id="inv.id" />
   </div>
 </template>
@@ -1440,6 +1484,53 @@ legend {
   padding-left: 18px;
   color: var(--tone-overdue);
   font-size: var(--fs-sm);
+}
+.payments {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--rule);
+  font-size: var(--fs-sm);
+}
+.payments h3 {
+  margin: 0 0 4px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+.payments ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.payments li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  padding: 2px 0;
+}
+.payments .src {
+  color: var(--ink-faint);
+}
+.payments .rest {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px dashed var(--rule);
+}
+.pay-form {
+  display: grid;
+  gap: 12px;
+}
+.pay-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--fs-sm);
+  color: var(--ink-soft);
+}
+.pay-form small {
+  color: var(--ink-faint);
 }
 .local {
   margin-top: 10px;

@@ -117,12 +117,13 @@ func (a *App) checkLink(ctx context.Context, companyID int64, d *cash.Document) 
 		if inv.Status != invoice.StatusIssued {
 			return bad("Faktúra " + inv.Number + " nie je vystavená a neuhradená")
 		}
-		total := inv.Summary.Total
+		rest := inv.Remaining()
 		if inv.Kind == invoice.KindCreditNote {
-			total = total.Neg()
+			rest = rest.Neg()
 		}
-		if !total.Equal(d.Amount) {
-			return bad(fmt.Sprintf("Suma sa musí rovnať sume dokladu %s (%s €)", inv.Number, total.Display()))
+		// pokladňou sa dá uhradiť aj časť faktúry, nie viac ako zostatok
+		if d.Amount.Cmp(rest) > 0 {
+			return bad(fmt.Sprintf("Suma je vyššia ako zostatok dokladu %s (%s €)", inv.Number, rest.Display()))
 		}
 		d.LinkNumber = inv.Number
 	case "purchase":
@@ -195,7 +196,11 @@ func (a *App) CreateCash(ctx context.Context, companyID int64, d cash.Document) 
 
 	switch d.LinkKind {
 	case "invoice":
-		_, err = a.MarkPaid(ctx, companyID, d.LinkID, d.Date)
+		amount := d.Amount
+		if d.Kind == cash.Out {
+			amount = amount.Neg() // výdavok vracia peniaze k dobropisu
+		}
+		_, err = a.AddPayment(ctx, companyID, d.LinkID, invoice.Payment{Date: d.Date, Amount: amount, Source: invoice.PaymentCash, Ref: d.ID}, false)
 	case "purchase":
 		_, err = a.MarkPurchasePaid(ctx, companyID, d.LinkID, d.Date)
 	}
@@ -257,7 +262,7 @@ func (a *App) CancelCash(ctx context.Context, companyID, id int64) (cash.Documen
 		fmt.Sprintf("Stornovaný pokladničný doklad %s, %s €", d.Number, d.Amount.Display()), nil, nil)
 	switch d.LinkKind {
 	case "invoice":
-		_, err = a.Unpay(ctx, companyID, d.LinkID)
+		_, err = a.RemovePayment(ctx, companyID, d.LinkID, invoice.PaymentCash, d.ID)
 	case "purchase":
 		_, err = a.UnpayPurchase(ctx, companyID, d.LinkID)
 	}

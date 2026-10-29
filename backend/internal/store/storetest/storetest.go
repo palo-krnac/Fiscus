@@ -629,6 +629,25 @@ func Run(t *testing.T, newStore Factory) {
 		}
 	})
 
+	t.Run("úhrady faktúry", func(t *testing.T) {
+		s := newStore(t)
+		c, _ := s.CreateCompany(ctx, store.Company{Name: "Alfa"})
+		inv := draft("Odberateľ", "2026-10-01")
+		if err := inv.Issue("FA1"); err != nil {
+			t.Fatal(err)
+		}
+		if err := inv.AddPayment(invoice.Payment{Date: invoice.MustDate("2026-10-05"), Amount: m.MustParse("10"), Source: invoice.PaymentBank, Ref: 3}); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.SaveInvoice(ctx, c.ID, inv); err != nil {
+			t.Fatal(err)
+		}
+		got, err := s.GetInvoice(ctx, c.ID, inv.ID)
+		if err != nil || !reflect.DeepEqual(got.Payments, inv.Payments) || got.PaidAmount.String() != "10.00" || got.Status != invoice.StatusIssued {
+			t.Fatalf("načítanie: %+v %s %v", got.Payments, got.PaidAmount, err)
+		}
+	})
+
 	t.Run("faktúra v cudzej mene", func(t *testing.T) {
 		s := newStore(t)
 		c, _ := s.CreateCompany(ctx, store.Company{Name: "Alfa"})

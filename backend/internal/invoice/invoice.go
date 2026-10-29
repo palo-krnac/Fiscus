@@ -90,20 +90,27 @@ type Line struct {
 
 // Invoice je vydaná faktúra.
 type Invoice struct {
-	ID             int64         `json:"id"`
-	CompanyID      int64         `json:"companyId"`
-	Kind           Kind          `json:"kind"`
-	Status         Status        `json:"status"`
-	Number         string        `json:"number"`
-	VariableSymbol string        `json:"variableSymbol"`
-	Customer       Party         `json:"customer"`
-	IssueDate      Date          `json:"issueDate"`
-	DeliveryDate   Date          `json:"deliveryDate"` // dátum dodania tovaru/služby
-	DueDate        Date          `json:"dueDate"`
-	PaidDate       Date          `json:"paidDate"`
-	Currency       string        `json:"currency"`
-	PriceMode      vat.PriceMode `json:"priceMode"`
-	ReverseCharge  bool          `json:"reverseCharge"`
+	ID             int64  `json:"id"`
+	CompanyID      int64  `json:"companyId"`
+	Kind           Kind   `json:"kind"`
+	Status         Status `json:"status"`
+	Number         string `json:"number"`
+	VariableSymbol string `json:"variableSymbol"`
+	Customer       Party  `json:"customer"`
+	IssueDate      Date   `json:"issueDate"`
+	DeliveryDate   Date   `json:"deliveryDate"` // dátum dodania tovaru/služby
+	DueDate        Date   `json:"dueDate"`
+	PaidDate       Date   `json:"paidDate"`
+	// Payments sú úhrady (aj čiastočné); PaidAmount je ich súčet (dopĺňa program).
+	Payments   []Payment `json:"payments,omitempty"`
+	PaidAmount money.Dec `json:"paidAmount"`
+	// Balance je zostatok na úhradu, BalanceEUR v eurách (pri cudzej mene
+	// prepočítaný kurzom faktúry) — pre zoznamy a QR platbu (dopĺňa program).
+	Balance       money.Dec     `json:"balance"`
+	BalanceEUR    money.Dec     `json:"balanceEur"`
+	Currency      string        `json:"currency"`
+	PriceMode     vat.PriceMode `json:"priceMode"`
+	ReverseCharge bool          `json:"reverseCharge"`
 	// SupplyKind: tovar alebo služba — rozhoduje pri zahraničnom odberateľovi
 	// (dodanie do EÚ / vývoz, súhrnný výkaz).
 	SupplyKind SupplyKind `json:"supplyKind"`
@@ -180,6 +187,7 @@ func (inv *Invoice) Recalculate() error {
 	}
 	inv.Summary = s
 	inv.applyDeductions()
+	inv.SyncPaid()
 	inv.Local = nil
 	if inv.Foreign() && inv.FXRate.Sign() > 0 {
 		local := ToEUR(inv.Summary, inv.FXRate)
@@ -305,21 +313,21 @@ func (inv *Invoice) Issue(number string) error {
 
 // MarkPaid označí vystavenú faktúru ako uhradenú.
 func (inv *Invoice) MarkPaid(on Date) error {
-	if inv.Status != StatusIssued {
-		return ErrBadTransition
-	}
-	inv.Status = StatusPaid
-	inv.PaidDate = on
-	return nil
+	return inv.AddPayment(Payment{Date: on, Amount: inv.Remaining(), Source: PaymentManual})
 }
 
-// Unpay zruší úhradu (napr. platba bola omylom priradená k inej faktúre).
+// Unpay zruší všetky úhrady (napr. platba bola omylom priradená k inej faktúre).
 func (inv *Invoice) Unpay() error {
-	if inv.Status != StatusPaid {
+	if inv.Status != StatusPaid && len(inv.Payments) == 0 {
 		return ErrBadTransition
 	}
+	if inv.Status != StatusPaid && inv.Status != StatusIssued {
+		return ErrBadTransition
+	}
+	inv.Payments = nil
 	inv.Status = StatusIssued
 	inv.PaidDate = Date{}
+	inv.SyncPaid()
 	return nil
 }
 

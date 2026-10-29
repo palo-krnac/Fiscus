@@ -30,14 +30,23 @@ func TestCash(t *testing.T) {
 	// úhrada vydanej faktúry v hotovosti (492,00 €)
 	dr, _ := a.SaveDraft(ctx, c.ID, validDraft())
 	inv, _ := a.Issue(ctx, c.ID, dr.ID)
-	pay := d(cash.In, "2026-10-02", "100", "Úhrada")
+	pay := d(cash.In, "2026-10-02", "600", "Úhrada")
 	pay.LinkKind, pay.LinkID = "invoice", inv.ID
 	if _, err := a.CreateCash(ctx, c.ID, pay); !fieldErr(err, "linkId") {
-		t.Fatalf("nesprávna suma: %v", err)
+		t.Fatalf("suma nad zostatok: %v", err)
 	}
-	pay.Amount = inv.Summary.Total
+	// čiastočná úhrada v hotovosti, potom zvyšok
+	pay.Amount = m.MustParse("100")
+	part, err := a.CreateCash(ctx, c.ID, pay)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := a.Store.GetInvoice(ctx, c.ID, inv.ID); got.Status != invoice.StatusIssued || got.PaidAmount.String() != "100.00" {
+		t.Fatalf("čiastočne: %s %s", got.Status, got.PaidAmount)
+	}
+	pay.Amount = m.MustParse("392")
 	ppd, err := a.CreateCash(ctx, c.ID, pay)
-	if err != nil || ppd.Number != "PPD20260002" || ppd.LinkNumber != inv.Number {
+	if err != nil || ppd.Number != "PPD20260003" || ppd.LinkNumber != inv.Number || part.Number != "PPD20260002" {
 		t.Fatalf("úhrada faktúry: %+v %v", ppd, err)
 	}
 	if got, _ := a.Store.GetInvoice(ctx, c.ID, inv.ID); got.Status != invoice.StatusPaid || got.PaidDate.String() != "2026-10-02" {
@@ -66,7 +75,7 @@ func TestCash(t *testing.T) {
 	}
 
 	book, err := a.CashBook(ctx, c.ID, 2026)
-	if err != nil || len(book.Documents) != 3 || !book.Balance.Equal(m.MustParse("892")) || !book.In.Equal(m.MustParse("992")) || !book.Out.Equal(m.MustParse("100")) {
+	if err != nil || len(book.Documents) != 4 || !book.Balance.Equal(m.MustParse("892")) || !book.In.Equal(m.MustParse("992")) || !book.Out.Equal(m.MustParse("100")) {
 		t.Fatalf("kniha: %+v %v", book, err)
 	}
 	if b27, _ := a.CashBook(ctx, c.ID, 2027); !b27.Opening.Equal(m.MustParse("892")) || len(b27.Documents) != 0 {
@@ -77,11 +86,17 @@ func TestCash(t *testing.T) {
 	if _, err := a.CancelCash(ctx, c.ID, ppd.ID); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := a.Store.GetInvoice(ctx, c.ID, inv.ID); got.Status != invoice.StatusIssued {
-		t.Fatalf("po storne: %s", got.Status)
+	if got, _ := a.Store.GetInvoice(ctx, c.ID, inv.ID); got.Status != invoice.StatusIssued || got.PaidAmount.String() != "100.00" {
+		t.Fatalf("po storne: %s %s", got.Status, got.PaidAmount)
 	}
 	if _, err := a.CancelCash(ctx, c.ID, ppd.ID); !errors.Is(err, cash.ErrCancelled) {
 		t.Fatalf("dvojité storno: %v", err)
+	}
+	if _, err := a.CancelCash(ctx, c.ID, part.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := a.Store.GetInvoice(ctx, c.ID, inv.ID); !got.PaidAmount.IsZero() {
+		t.Fatalf("po storne oboch: %s", got.PaidAmount)
 	}
 	// teraz by storno vkladu poslalo pokladňu do mínusu (výdavok 100)
 	if _, err := a.CancelCash(ctx, c.ID, vklad.ID); !errors.Is(err, cash.ErrNegative) {
@@ -93,7 +108,7 @@ func TestCash(t *testing.T) {
 		t.Fatalf("úprava: %+v %v", upd, err)
 	}
 	list, _, _ := a.Store.ListAudit(ctx, audit.Filter{Category: audit.CatCash})
-	if len(list) != 5 { // 3 doklady, storno, úprava
+	if len(list) != 7 { // 4 doklady, 2 storná, úprava
 		t.Fatalf("audit pokladne: %d", len(list))
 	}
 }

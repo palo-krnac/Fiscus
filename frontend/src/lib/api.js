@@ -152,7 +152,9 @@ export const api = {
       : request('POST', inv(cid), invoice),
   preview: (cid, invoice) => request('POST', `${inv(cid)}/preview`, invoice),
   issue: (cid, id) => request('POST', `${inv(cid)}/${id}/issue`),
-  pay: (cid, id, date) => request('POST', `${inv(cid)}/${id}/pay`, date ? { date } : undefined),
+  // amount nepovinné: čiastočná úhrada, inak celý zostatok
+  pay: (cid, id, date, amount) =>
+    request('POST', `${inv(cid)}/${id}/pay`, date || amount ? { ...(date ? { date } : {}), ...(amount ? { amount } : {}) } : undefined),
   cancel: (cid, id) => request('POST', `${inv(cid)}/${id}/cancel`),
   creditNote: (cid, id) => request('POST', `${inv(cid)}/${id}/credit-note`),
   settleAdvance: (cid, id) => request('POST', `${inv(cid)}/${id}/settle`),

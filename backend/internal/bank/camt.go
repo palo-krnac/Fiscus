@@ -11,8 +11,8 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/money"
 )
 
-// ErrFormat — súbor nie je výpis camt.053.
-var ErrFormat = errors.New("súbor nie je bankový výpis vo formáte camt.053 (XML ISO 20022)")
+// ErrFormat — súbor nie je bankový výpis v známom formáte.
+var ErrFormat = errors.New("súbor nie je bankový výpis (camt.053 XML, GPC, CSV alebo Excel)")
 
 // Štruktúra camt.053 (verzie 001.02 až 001.08). Menný priestor sa ignoruje,
 // porovnávajú sa iba lokálne názvy prvkov.

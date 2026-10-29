@@ -36,8 +36,15 @@ describe('payModel', () => {
     ['dobropis', { ...invoice, summary: { total: '-50.00' } }, company],
     ['bez IBAN', invoice, { ...company, iban: '' }],
     ['platba v hotovosti', { ...invoice, paymentMethod: 'cash' }, company],
+    ['uhradená čiastočne do nuly', { ...invoice, balance: '0.00' }, company],
   ])('%s → bez QR', (_, inv, comp) => {
     expect(payModel(inv, comp)).toBeNull()
+  })
+})
+
+describe('čiastočná úhrada', () => {
+  it('QR je na zostatok', () => {
+    expect(payModel({ ...invoice, balance: '69.12' }, company).payments[0].amount).toBe(69.12)
   })
 })
 

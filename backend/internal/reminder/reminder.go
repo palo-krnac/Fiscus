@@ -228,7 +228,7 @@ func Build(invs []invoice.Invoice, level int, o Options) (Reminder, error) {
 			return r, notRemindable(fmt.Sprintf("Faktúra %s k %s ešte nie je po splatnosti", inv.Number, o.Date.Display()))
 		}
 		it := Item{InvoiceID: inv.ID, Number: inv.Number, IssueDate: inv.IssueDate, DueDate: inv.DueDate,
-			VS: inv.VariableSymbol, Amount: inv.Summary.Total, Days: inv.DueDate.DaysUntil(o.Date)}
+			VS: inv.VariableSymbol, Amount: inv.Remaining(), Days: inv.DueDate.DaysUntil(o.Date)}
 		firstDay := inv.DueDate.AddDays(1)
 		switch o.Interest {
 		case InterestStatutory:

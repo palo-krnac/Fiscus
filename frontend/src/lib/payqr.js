@@ -11,7 +11,8 @@ export function payModel(invoice, company) {
   if (!invoice || !company?.iban) return null
   if (invoice.status !== 'issued') return null
   if (invoice.paymentMethod && invoice.paymentMethod !== 'transfer') return null
-  const total = invoice.summary?.total
+  // zostatok po čiastočných úhradách (zo servera); starší záznam bez neho = celá suma
+  const total = invoice.balance ?? invoice.summary?.total
   if (!total || !(Number(total) > 0)) return null
 
   const iban = company.iban.replace(/\s/g, '').toUpperCase()
