@@ -88,6 +88,11 @@ func normalizeCompany(c *store.Company) {
 		}
 		formats[string(k)] = f
 	}
+	if f := strings.TrimSpace(c.NumberFormats[PurchaseFormatKey]); f != "" {
+		formats[PurchaseFormatKey] = f
+	} else {
+		formats[PurchaseFormatKey] = DefaultPurchaseFormat
+	}
 	c.NumberFormats = formats
 }
 
@@ -129,9 +134,9 @@ func validateCompany(c store.Company) error {
 	if c.DefaultDueDays < 0 || c.DefaultDueDays > 365 {
 		add("defaultDueDays", "Splatnosť musí byť 0 až 365 dní")
 	}
-	for _, k := range []invoice.Kind{invoice.KindInvoice, invoice.KindCreditNote, invoice.KindProforma} {
-		if err := invoice.ValidateFormat(c.NumberFormats[string(k)]); err != nil {
-			add("numberFormats."+string(k), err.Error())
+	for _, k := range []string{string(invoice.KindInvoice), string(invoice.KindCreditNote), string(invoice.KindProforma), PurchaseFormatKey} {
+		if err := invoice.ValidateFormat(c.NumberFormats[k]); err != nil {
+			add("numberFormats."+k, err.Error())
 		}
 	}
 	for _, u := range c.Units {

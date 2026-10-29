@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 
+	"github.com/palo-krnac/fiscus/backend/internal/app"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 	"github.com/palo-krnac/fiscus/backend/internal/vat"
@@ -14,6 +15,14 @@ func (s *Server) codes(w http.ResponseWriter, _ *http.Request) {
 		"vatPeriods":     vat.Periods,
 		"paymentMethods": invoice.PaymentMethods,
 		"defaultUnits":   store.DefaultUnits,
-		"defaultFormats": invoice.DefaultFormats,
+		"defaultFormats": defaultFormats(),
 	})
+}
+
+func defaultFormats() map[string]string {
+	out := map[string]string{app.PurchaseFormatKey: app.DefaultPurchaseFormat}
+	for k, v := range invoice.DefaultFormats {
+		out[string(k)] = v
+	}
+	return out
 }

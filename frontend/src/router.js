@@ -5,6 +5,8 @@ import Placeholder from './views/Placeholder.vue'
 import Contacts from './views/Contacts.vue'
 import Settings from './views/Settings.vue'
 import InvoicePrint from './views/InvoicePrint.vue'
+import PurchaseList from './views/PurchaseList.vue'
+import PurchaseEdit from './views/PurchaseEdit.vue'
 
 // Moduly z etapového plánu — zatiaľ prázdne stránky s popisom.
 export const modules = [
@@ -18,7 +20,7 @@ export const modules = [
   },
   {
     group: 'Nákup',
-    items: [{ path: '/prijate', label: 'Prijaté faktúry', icon: 'pi-file-import', stage: 1 }],
+    items: [{ path: '/prijate', label: 'Prijaté faktúry', icon: 'pi-file-import', ready: true }],
   },
   {
     group: 'Peniaze',
@@ -66,6 +68,9 @@ export const router = createRouter({
     { path: '/faktury/nova', component: InvoiceEdit, meta: { title: 'Nová faktúra' } },
     { path: '/faktury/:id(\\d+)', component: InvoiceEdit, props: true, meta: { title: 'Faktúra' } },
     { path: '/faktury/:id(\\d+)/tlac', component: InvoicePrint, props: true, meta: { title: 'Faktúra', bare: true } },
+    { path: '/prijate', component: PurchaseList, meta: { title: 'Prijaté faktúry' } },
+    { path: '/prijate/nova', component: PurchaseEdit, meta: { title: 'Nová prijatá faktúra' } },
+    { path: '/prijate/:id(\\d+)', component: PurchaseEdit, props: true, meta: { title: 'Prijatá faktúra' } },
     { path: '/adresar', component: Contacts, meta: { title: 'Adresár' } },
     { path: '/adresar/:id(\\d+|novy)', component: Contacts, props: true, meta: { title: 'Adresár' } },
     { path: '/nastavenia', component: Settings, meta: { title: 'Nastavenia' } },

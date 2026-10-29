@@ -103,7 +103,7 @@ func CheckCreditLimit(orig Invoice, issued []Invoice, cn Invoice) error {
 	left := orig.Summary.Total.Sub(used)
 	if cn.Summary.Total.Neg().Cmp(left) > 0 {
 		return &ValidationError{[]FieldError{{"lines", fmt.Sprintf(
-			"Dobropisy by presiahli sumu faktúry %s — zostáva %s €", orig.Number, left)}}}
+			"Dobropisy by presiahli sumu faktúry %s — zostáva %s €", orig.Number, left.Display())}}}
 	}
 	return nil
 }

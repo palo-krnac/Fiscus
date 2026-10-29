@@ -24,6 +24,7 @@ const seriesFields = [
   { kind: 'invoice', label: 'Faktúry' },
   { kind: 'credit_note', label: 'Dobropisy' },
   { kind: 'proforma', label: 'Zálohové faktúry' },
+  { kind: 'purchase', label: 'Prijaté faktúry (interné číslo)' },
 ]
 const unitSuggestions = ref([])
 function suggestUnits(e) {

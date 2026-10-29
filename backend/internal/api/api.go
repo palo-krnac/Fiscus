@@ -35,6 +35,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/companies/{cid}", s.updateCompany)
 	mux.HandleFunc("GET /api/registry/{ico}", s.lookupICO)
 	mux.HandleFunc("POST /api/companies/{cid}/invoices/preview", s.preview)
+	mux.HandleFunc("GET /api/companies/{cid}/purchases", s.listPurchases)
+	mux.HandleFunc("POST /api/companies/{cid}/purchases", s.savePurchase)
+	mux.HandleFunc("POST /api/companies/{cid}/purchases/preview", s.previewPurchase)
+	mux.HandleFunc("GET /api/companies/{cid}/purchases/{id}", s.getPurchase)
+	mux.HandleFunc("PUT /api/companies/{cid}/purchases/{id}", s.savePurchase)
+	mux.HandleFunc("DELETE /api/companies/{cid}/purchases/{id}", s.deletePurchase)
+	mux.HandleFunc("POST /api/companies/{cid}/purchases/{id}/pay", s.payPurchase)
+	mux.HandleFunc("POST /api/companies/{cid}/purchases/{id}/unpay", s.unpayPurchase)
 	mux.HandleFunc("GET /api/companies/{cid}/contacts", s.listContacts)
 	mux.HandleFunc("POST /api/companies/{cid}/contacts", s.saveContact)
 	mux.HandleFunc("GET /api/companies/{cid}/contacts/{id}", s.getContact)
@@ -241,7 +249,12 @@ func (s *Server) saveInvoice(w http.ResponseWriter, r *http.Request) {
 // decodeInvoice je tolerantnejší ako decode: frontend posiela celý objekt
 // faktúry vrátane vypočítaných polí (summary, overdue...), ktoré sa ignorujú.
 func decodeInvoice(w http.ResponseWriter, r *http.Request, inv *invoice.Invoice) bool {
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(inv); err != nil {
+	return decodeLoose(w, r, inv)
+}
+
+// decodeLoose načíta JSON a ignoruje neznáme (vypočítané) polia.
+func decodeLoose(w http.ResponseWriter, r *http.Request, v any) bool {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(v); err != nil {
 		writeErr(w, http.StatusBadRequest, "Neplatné JSON dáta: "+err.Error(), nil)
 		return false
 	}

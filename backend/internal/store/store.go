@@ -11,6 +11,7 @@ import (
 	"errors"
 
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
+	"github.com/palo-krnac/fiscus/backend/internal/purchase"
 )
 
 // ErrNotFound — záznam neexistuje (alebo patrí inej firme).
@@ -69,6 +70,12 @@ type InvoiceFilter struct {
 	Search string         // číslo, odberateľ, IČO
 }
 
+// PurchaseFilter obmedzuje zoznam prijatých faktúr.
+type PurchaseFilter struct {
+	Year   int    // podľa dátumu doručenia; 0 = všetky
+	Search string // interné číslo, číslo dodávateľa, dodávateľ, IČO
+}
+
 // Store je úložisko.
 type Store interface {
 	ListCompanies(ctx context.Context) ([]Company, error)
@@ -89,6 +96,13 @@ type Store interface {
 	GetInvoice(ctx context.Context, companyID, id int64) (invoice.Invoice, error)
 	// SaveInvoice vloží (ID == 0) alebo prepíše faktúru. Nastaví ID.
 	SaveInvoice(ctx context.Context, companyID int64, inv *invoice.Invoice) error
+	// ListPurchases vráti prijaté faktúry, najnovšie (podľa doručenia) prvé.
+	ListPurchases(ctx context.Context, companyID int64, f PurchaseFilter) ([]purchase.Purchase, error)
+	GetPurchase(ctx context.Context, companyID, id int64) (purchase.Purchase, error)
+	// SavePurchase vloží (ID == 0) alebo prepíše prijatú faktúru. Nastaví ID.
+	SavePurchase(ctx context.Context, companyID int64, p *purchase.Purchase) error
+	DeletePurchase(ctx context.Context, companyID, id int64) error
+
 	// NextSequence atomicky zvýši a vráti poradové číslo radu za rok.
 	NextSequence(ctx context.Context, companyID int64, series string, year int) (int, error)
 

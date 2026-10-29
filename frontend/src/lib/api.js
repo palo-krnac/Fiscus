@@ -76,4 +76,21 @@ export const api = {
   pay: (cid, id, date) => request('POST', `${inv(cid)}/${id}/pay`, date ? { date } : undefined),
   cancel: (cid, id) => request('POST', `${inv(cid)}/${id}/cancel`),
   creditNote: (cid, id) => request('POST', `${inv(cid)}/${id}/credit-note`),
+
+  purchases(cid, { year, q } = {}) {
+    const p = new URLSearchParams()
+    if (year) p.set('year', year)
+    if (q) p.set('q', q)
+    const qs = p.toString()
+    return request('GET', `/api/companies/${cid}/purchases` + (qs ? `?${qs}` : ''))
+  },
+  purchase: (cid, id) => request('GET', `/api/companies/${cid}/purchases/${id}`),
+  savePurchase: (cid, p) =>
+    p.id
+      ? request('PUT', `/api/companies/${cid}/purchases/${p.id}`, p)
+      : request('POST', `/api/companies/${cid}/purchases`, p),
+  previewPurchase: (cid, p) => request('POST', `/api/companies/${cid}/purchases/preview`, p),
+  payPurchase: (cid, id) => request('POST', `/api/companies/${cid}/purchases/${id}/pay`),
+  unpayPurchase: (cid, id) => request('POST', `/api/companies/${cid}/purchases/${id}/unpay`),
+  deletePurchase: (cid, id) => request('DELETE', `/api/companies/${cid}/purchases/${id}`),
 }

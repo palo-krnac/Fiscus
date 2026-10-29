@@ -12,6 +12,7 @@ import (
 
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	m "github.com/palo-krnac/fiscus/backend/internal/money"
+	"github.com/palo-krnac/fiscus/backend/internal/purchase"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 	"github.com/palo-krnac/fiscus/backend/internal/vat"
 )
@@ -281,6 +282,66 @@ func Run(t *testing.T, newStore Factory) {
 		}
 		if got.ContactID != 42 || !got.NonVATPayer || got.PaymentMethod != invoice.PayCash {
 			t.Fatalf("načítané: contact=%d nonVat=%v", got.ContactID, got.NonVATPayer)
+		}
+	})
+
+	t.Run("prijaté faktúry", func(t *testing.T) {
+		s := newStore(t)
+		a, _ := s.CreateCompany(ctx, store.Company{Name: "Alfa"})
+		b, _ := s.CreateCompany(ctx, store.Company{Name: "Beta"})
+		mk := func(num, supplier, received string) *purchase.Purchase {
+			p := &purchase.Purchase{
+				Number: num, SupplierNumber: "D-" + num, Supplier: invoice.Party{Name: supplier, ICO: "31322832", ICDPH: "SK2020372640"},
+				IssueDate: invoice.MustDate(received), ReceivedDate: invoice.MustDate(received), DueDate: invoice.MustDate(received).AddDays(14),
+				SupplierIBAN: "SK31 1200 0000 1987 4263 7541", ContactID: 3, NoDeduction: true, ReverseCharge: true,
+				Description: "Pohonné hmoty", Rates: []purchase.RateRow{{Rate: vat.Rate23, Base: m.MustParse("100")}, {Rate: vat.Rate5, Base: m.MustParse("10"), VAT: m.MustParse("0.50")}},
+			}
+			p.Normalize()
+			return p
+		}
+		p1 := mk("PF20260001", "Slovnaft, a.s.", "2026-10-07")
+		if err := s.SavePurchase(ctx, a.ID, p1); err != nil || p1.ID == 0 {
+			t.Fatalf("SavePurchase: %v", err)
+		}
+		_ = s.SavePurchase(ctx, a.ID, mk("PF20250099", "Orange Slovensko", "2025-12-30"))
+		got, err := s.GetPurchase(ctx, a.ID, p1.ID)
+		if err != nil || !reflect.DeepEqual(got, *p1) {
+			t.Fatalf("načítaná sa líši:\n got %+v\nwant %+v", got, *p1)
+		}
+		list, _ := s.ListPurchases(ctx, a.ID, store.PurchaseFilter{})
+		if len(list) != 2 || list[0].Number != "PF20260001" {
+			t.Fatalf("zoznam: %d", len(list))
+		}
+		for f, want := range map[store.PurchaseFilter]int{{Year: 2026}: 1, {Search: "orange"}: 1, {Search: "D-PF2026"}: 1, {Year: 2024}: 0} {
+			if l, _ := s.ListPurchases(ctx, a.ID, f); len(l) != want {
+				t.Errorf("filter %+v: %d, chcem %d", f, len(l), want)
+			}
+		}
+		// oddelenie firiem
+		if l, _ := s.ListPurchases(ctx, b.ID, store.PurchaseFilter{}); len(l) != 0 {
+			t.Fatal("firma B vidí nákup firmy A")
+		}
+		if _, err := s.GetPurchase(ctx, b.ID, p1.ID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("firma B načítala nákup firmy A")
+		}
+		stolen := *p1
+		if err := s.SavePurchase(ctx, b.ID, &stolen); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("firma B prepísala nákup firmy A")
+		}
+		if err := s.DeletePurchase(ctx, b.ID, p1.ID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("firma B zmazala nákup firmy A")
+		}
+		// úprava a zmazanie
+		p1.Status, p1.PaidDate = purchase.StatusPaid, invoice.MustDate("2026-10-10")
+		_ = s.SavePurchase(ctx, a.ID, p1)
+		if g, _ := s.GetPurchase(ctx, a.ID, p1.ID); g.Status != purchase.StatusPaid || g.PaidDate.String() != "2026-10-10" {
+			t.Fatal("úhrada sa neuložila")
+		}
+		if err := s.DeletePurchase(ctx, a.ID, p1.ID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.GetPurchase(ctx, a.ID, p1.ID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("nezmazaná")
 		}
 	})
 }

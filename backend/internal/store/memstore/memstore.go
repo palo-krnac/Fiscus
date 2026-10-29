@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
+	"github.com/palo-krnac/fiscus/backend/internal/purchase"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 )
 
@@ -24,13 +25,14 @@ type Store struct {
 	companies []store.Company
 	invoices  map[int64]invoice.Invoice
 	contacts  map[int64]store.Contact
+	purchases map[int64]purchase.Purchase
 	seq       map[seqKey]int
 	nextID    int64
 }
 
 // New vytvorí prázdne úložisko.
 func New() *Store {
-	return &Store{invoices: map[int64]invoice.Invoice{}, contacts: map[int64]store.Contact{}, seq: map[seqKey]int{}}
+	return &Store{invoices: map[int64]invoice.Invoice{}, contacts: map[int64]store.Contact{}, purchases: map[int64]purchase.Purchase{}, seq: map[seqKey]int{}}
 }
 
 func (s *Store) id() int64 { s.nextID++; return s.nextID }
@@ -154,6 +156,69 @@ func (s *Store) DeleteContact(_ context.Context, companyID, id int64) error {
 		return store.ErrNotFound
 	}
 	delete(s.contacts, id)
+	return nil
+}
+
+func clonePurchase(in purchase.Purchase) purchase.Purchase {
+	b, _ := json.Marshal(in)
+	var out purchase.Purchase
+	_ = json.Unmarshal(b, &out)
+	return out
+}
+
+func (s *Store) ListPurchases(_ context.Context, companyID int64, f store.PurchaseFilter) ([]purchase.Purchase, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := []purchase.Purchase{}
+	for _, p := range s.purchases {
+		if p.CompanyID != companyID || (f.Year != 0 && p.ReceivedDate.Year() != f.Year) {
+			continue
+		}
+		if store.Matches(f.Search, p.Number, p.SupplierNumber, p.Supplier.Name, p.Supplier.ICO) {
+			out = append(out, clonePurchase(p))
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		a, b := out[i], out[j]
+		if a.ReceivedDate != b.ReceivedDate {
+			return a.ReceivedDate.After(b.ReceivedDate)
+		}
+		return a.ID > b.ID
+	})
+	return out, nil
+}
+
+func (s *Store) GetPurchase(_ context.Context, companyID, id int64) (purchase.Purchase, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, ok := s.purchases[id]
+	if !ok || p.CompanyID != companyID {
+		return purchase.Purchase{}, store.ErrNotFound
+	}
+	return clonePurchase(p), nil
+}
+
+func (s *Store) SavePurchase(_ context.Context, companyID int64, p *purchase.Purchase) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if p.ID == 0 {
+		p.ID = s.id()
+	} else if old, ok := s.purchases[p.ID]; !ok || old.CompanyID != companyID {
+		return store.ErrNotFound
+	}
+	p.CompanyID = companyID
+	s.purchases[p.ID] = clonePurchase(*p)
+	return nil
+}
+
+func (s *Store) DeletePurchase(_ context.Context, companyID, id int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, ok := s.purchases[id]
+	if !ok || p.CompanyID != companyID {
+		return store.ErrNotFound
+	}
+	delete(s.purchases, id)
 	return nil
 }
 

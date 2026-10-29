@@ -100,3 +100,12 @@ func TestJSONRoundTrip(t *testing.T) {
 		t.Fatalf("got %s", back.Sum)
 	}
 }
+
+func TestDisplay(t *testing.T) {
+	cases := map[string]string{"0": "0,00", "231": "231,00", "1234.5": "1\u00a0234,50", "-1234567.891": "-1\u00a0234\u00a0567,89"}
+	for in, want := range cases {
+		if got := MustParse(in).Display(); got != want {
+			t.Errorf("%s → %q, chcem %q", in, got, want)
+		}
+	}
+}
