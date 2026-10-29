@@ -10,19 +10,20 @@ import (
 func TestRecurringAPI(t *testing.T) {
 	e := setup(t, edition.Desktop)
 	base := fmt.Sprintf("/api/companies/%d/recurring", e.cid)
-	body := `{"name":"Paušál","active":true,"interval":"monthly","nextDate":"2026-11-03","autoIssue":true,"dueDays":10,` +
+	body := `{"name":"Paušál","active":true,"interval":"monthly","nextDate":"2026-11-03","autoIssue":true,"dueDays":10,"subject":"Paušál {mesiac}",` +
 		`"customer":{"name":"Zákazník s.r.o.","country":"SK"},` +
 		`"lines":[{"description":"Paušál {obdobie}","quantity":"1","unit":"mes","unitPrice":"200","vatRate":23}]}`
 	var pv struct {
 		Summary struct{ Total string }
 		Sample  struct {
-			Period string
-			Lines  []string
+			Period  string
+			Subject string
+			Lines   []string
 		}
 		Errors []struct{ Field string }
 	}
 	e.do("POST", base+"/preview", body, 200, &pv)
-	if pv.Summary.Total != "246.00" || pv.Sample.Lines[0] != "Paušál november 2026" || len(pv.Errors) != 0 {
+	if pv.Summary.Total != "246.00" || pv.Sample.Lines[0] != "Paušál november 2026" || pv.Sample.Subject != "Paušál november" || len(pv.Errors) != 0 {
 		t.Fatalf("ukážka: %+v", pv)
 	}
 	e.do("POST", base, `{"interval":"monthly"}`, 422, nil)

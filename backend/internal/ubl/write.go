@@ -189,8 +189,9 @@ func Write(inv invoice.Invoice, s Seller) ([]byte, error) {
 	} else {
 		w.el("cbc:InvoiceTypeCode", "380")
 	}
-	for _, n := range notes(inv) {
-		w.el("cbc:Note", n)
+	// Peppol pripúšťa iba jednu poznámku dokladu (PEPPOL-EN16931-R002).
+	if ns := notes(inv); len(ns) > 0 {
+		w.el("cbc:Note", strings.Join(ns, "\n"))
 	}
 	w.el("cbc:DocumentCurrencyCode", cur)
 	if cur != "EUR" {
@@ -301,9 +302,15 @@ func vatID(payer bool, id string) string {
 	return id
 }
 
-// notes sú povinné texty (oslobodenie, prenesenie) a poznámka faktúry.
+// notes sú predmet, text nad položkami, povinné texty (oslobodenie,
+// prenesenie) a text pod položkami.
 func notes(inv invoice.Invoice) []string {
 	var out []string
+	for _, t := range []string{inv.Subject, inv.Intro} {
+		if t = strings.TrimSpace(t); t != "" {
+			out = append(out, t)
+		}
+	}
 	if t := invoice.ExemptionNote(inv.ReverseCharge, inv.Customer, inv.SupplyKind); t != "" && !inv.NonVATPayer {
 		out = append(out, t)
 	}

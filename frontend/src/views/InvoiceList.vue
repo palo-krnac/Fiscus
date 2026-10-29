@@ -13,6 +13,7 @@ import { session, can } from '../lib/session.js'
 import { formatAmount, formatDate, formatMoney, statusOf } from '../lib/format.js'
 import { fiskusGridTheme, skGridLocale, gridRows } from '../lib/grid.js'
 import { matches, searchTerms } from '../lib/search.js'
+import { partyCell, rowHeight, subjectColumn, wideQuery } from '../lib/subject.js'
 import { invoiceColumns } from '../lib/columns.js'
 import { kindBadge } from '../lib/advance.js'
 import { eurBalance, eurSummary, isForeignCurrency } from '../lib/fx.js'
@@ -67,7 +68,7 @@ const visibleRows = computed(() => {
   return rows.value.filter((r) => {
     if (!matchesView(r)) return false
     const c = r.customer ?? {}
-    return matches(terms, [r.number, r.variableSymbol, c.name, c.ico, c.dic, c.icdph, c.city, r.note, r.summary?.total, r.currency, statusOf(r).label])
+    return matches(terms, [r.number, r.subject, r.variableSymbol, c.name, c.ico, c.dic, c.icdph, c.city, r.note, r.summary?.total, r.currency, statusOf(r).label])
   })
 })
 
@@ -129,7 +130,15 @@ const columnDefs = [
     width: 178,
     cellClass: (p) => (p.data._totals ? '' : p.value ? 'cell-number' : 'cell-draft'),
   },
-  { colId: 'customer', headerName: 'Odberateľ', valueGetter: (p) => p.data.customer.name, flex: 1, minWidth: 130 },
+  {
+    colId: 'customer',
+    headerName: 'Odberateľ',
+    valueGetter: (p) => p.data.customer.name,
+    cellRenderer: (p) => (p.data._totals ? p.value : partyCell(p.value, p.data.subject)),
+    flex: 1,
+    minWidth: 130,
+  },
+  subjectColumn,
   { colId: 'ico', headerName: 'IČO', valueGetter: (p) => p.data.customer?.ico, width: 96 },
   { field: 'issueDate', headerName: 'Vystavená', valueFormatter: (p) => formatDate(p.value), width: 100 },
   { field: 'dueDate', headerName: 'Splatná', valueFormatter: (p) => formatDate(p.value), width: 100 },
@@ -158,8 +167,14 @@ const rowClassRules = {
 
 const gridApi = shallowRef(null)
 const narrow = window.matchMedia('(max-width: 760px)')
+const wide = window.matchMedia(wideQuery)
+const getRowHeight = rowHeight(narrow)
 function applyResponsive() {
   gridApi.value?.setColumnsVisible(['ico', 'issueDate', 'dueDate', 'base', 'vat', 'status'], !narrow.matches)
+  // užšie: predmet je za menom odberateľa a IČO ustúpi (dá sa podľa neho hľadať)
+  gridApi.value?.setColumnsVisible(['subject'], wide.matches)
+  if (!narrow.matches) gridApi.value?.setColumnsVisible(['ico'], wide.matches)
+  gridApi.value?.resetRowHeights()
   gridApi.value?.sizeColumnsToFit()
 }
 function onGridReady(e) {
@@ -167,6 +182,7 @@ function onGridReady(e) {
   applyResponsive()
 }
 narrow.addEventListener('change', applyResponsive)
+wide.addEventListener('change', applyResponsive)
 
 function open(e) {
   if (e.data?._totals || !e.data?.id) return
@@ -189,6 +205,7 @@ onMounted(() => window.addEventListener('keydown', onKey))
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKey)
   narrow.removeEventListener('change', applyResponsive)
+  wide.removeEventListener('change', applyResponsive)
 })
 </script>
 
@@ -231,7 +248,7 @@ onBeforeUnmount(() => {
       <SelectButton v-model="view" :options="views" option-label="label" option-value="value" :allow-empty="false" size="small" aria-label="Zobraziť" />
       <IconField class="search">
         <InputIcon class="pi pi-search" />
-        <InputText ref="searchEl" v-model="search" placeholder="Hľadať číslo, odberateľa, IČO, VS, sumu" size="small" aria-label="Hľadať" />
+        <InputText ref="searchEl" v-model="search" placeholder="Hľadať číslo, odberateľa, predmet, IČO, VS, sumu" size="small" aria-label="Hľadať" />
       </IconField>
       <ExportButton :name="`Vydané faktúry ${year}`" :columns="invoiceColumns" :rows="() => gridRows(gridApi, visibleRows)" />
     </div>
@@ -240,11 +257,12 @@ onBeforeUnmount(() => {
 
     <div class="grid-wrap">
       <AgGridVue
-        class="grid"
+        class="grid stack-rows"
         :theme="fiskusGridTheme"
         :row-data="visibleRows"
         :pinned-bottom-row-data="totalsRow"
         :column-defs="columnDefs"
+        :get-row-height="getRowHeight"
         :default-col-def="defaultColDef"
         :row-class-rules="rowClassRules"
         :locale-text="skGridLocale"

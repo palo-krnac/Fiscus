@@ -219,3 +219,44 @@ func TestForeignCurrencyPrint(t *testing.T) {
 		t.Error("kurz pri eurách")
 	}
 }
+
+func TestSubjectAndIntro(t *testing.T) {
+	base := sample(nil)
+	withTexts := sample(nil)
+	withTexts.Subject = "Servis klimatizácie, október"
+	withTexts.Intro = "Fakturujeme vám servis podľa zmluvy.\nĎakujeme za spoluprácu."
+	withTexts.Note = "Text pod položkami"
+	q := quote.Quote{Status: quote.StatusIssued, Number: "CP2026002", Customer: base.Customer, IssueDate: base.IssueDate,
+		Subject: "Ponuka na servis", Intro: "Ponúkame vám:", Lines: base.Lines, Summary: base.Summary}
+	cases := []struct {
+		name  string
+		sheet func() (*sheet, error)
+		order []string // texty v poradí, v akom majú byť na doklade
+		none  []string
+	}{
+		{"faktúra s textami", func() (*sheet, error) { return invoiceSheet(withTexts, supplier) },
+			[]string{"Servis klimatizácie, október", "Fakturujeme vám servis podľa zmluvy.", "Ďakujeme za spoluprácu.", base.Lines[0].Description, "Text pod položkami", "K úhrade"}, nil},
+		{"faktúra bez textov", func() (*sheet, error) { return invoiceSheet(base, supplier) },
+			[]string{base.Lines[0].Description}, []string{"Servis klimatizácie"}},
+		{"ponuka", func() (*sheet, error) { return quoteSheet(q, supplier) },
+			[]string{"Ponuka na servis", "Ponúkame vám:", base.Lines[0].Description}, nil},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, _ := text(t)(c.sheet())
+			at := 0
+			for _, w := range c.order {
+				i := strings.Index(got[at:], w)
+				if i < 0 {
+					t.Fatalf("chýba %q (alebo je v zlom poradí)", w)
+				}
+				at += i + len(w)
+			}
+			for _, n := range c.none {
+				if strings.Contains(got, n) {
+					t.Errorf("nemá byť %q", n)
+				}
+			}
+		})
+	}
+}

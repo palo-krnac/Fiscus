@@ -77,6 +77,7 @@ func NewCreditNote(orig Invoice, issueDate Date) (Invoice, error) {
 		SupplyKind:    orig.SupplyKind,
 		NonVATPayer:   orig.NonVATPayer,
 		PaymentMethod: orig.PaymentMethod,
+		Subject:       orig.Subject,
 		Correction: &Correction{
 			OriginalID:           orig.ID,
 			OriginalNumber:       orig.Number,

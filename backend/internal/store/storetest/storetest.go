@@ -293,6 +293,8 @@ func Run(t *testing.T, newStore Factory) {
 		inv.NonVATPayer = true
 		inv.PaymentMethod = invoice.PayCash
 		inv.SupplyKind = invoice.SupplyServices
+		inv.Subject = "Oprava servera"
+		inv.Intro = "Fakturujeme vám opravu."
 		inv.Kind = invoice.KindCreditNote
 		inv.Correction = &invoice.Correction{OriginalID: 5, OriginalNumber: "FA20260005",
 			OriginalIssueDate: invoice.MustDate("2026-09-01"), OriginalDeliveryDate: invoice.MustDate("2026-08-31"), Reason: "Vrátenie"}
@@ -308,6 +310,12 @@ func Run(t *testing.T, newStore Factory) {
 		}
 		if got.Advance != nil {
 			t.Fatal("dobropis nemá zálohu")
+		}
+		if got.Subject != "Oprava servera" || got.Intro != "Fakturujeme vám opravu." {
+			t.Fatalf("predmet a úvodný text: %q %q", got.Subject, got.Intro)
+		}
+		if l, _ := s.ListInvoices(ctx, c.ID, store.InvoiceFilter{Search: "oprava serv"}); len(l) != 1 || l[0].ID != inv.ID {
+			t.Fatalf("hľadanie podľa predmetu: %d", len(l))
 		}
 		if got.ContactID != 42 || !got.NonVATPayer || got.PaymentMethod != invoice.PayCash || got.SupplyKind != invoice.SupplyServices {
 			t.Fatalf("načítané: contact=%d nonVat=%v", got.ContactID, got.NonVATPayer)

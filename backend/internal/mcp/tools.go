@@ -120,6 +120,7 @@ type invoiceRow struct {
 	Status      invoice.Status `json:"status"`
 	Customer    string         `json:"customer"`
 	ICO         string         `json:"ico,omitempty"`
+	Subject     string         `json:"subject,omitempty"`
 	IssueDate   invoice.Date   `json:"issueDate"`
 	DueDate     invoice.Date   `json:"dueDate"`
 	PaidDate    invoice.Date   `json:"paidDate,omitempty"`
@@ -259,7 +260,7 @@ func (s *Server) allTools() []Tool {
 						continue
 					}
 					r := invoiceRow{ID: inv.ID, Number: inv.Number, Kind: inv.Kind, Status: inv.Status, Customer: inv.Customer.Name,
-						ICO: inv.Customer.ICO, IssueDate: inv.IssueDate, DueDate: inv.DueDate, PaidDate: inv.PaidDate,
+						ICO: inv.Customer.ICO, Subject: inv.Subject, IssueDate: inv.IssueDate, DueDate: inv.DueDate, PaidDate: inv.PaidDate,
 						Total: inv.Summary.Total, VAT: inv.Summary.VAT, Overdue: od, VS: inv.VariableSymbol}
 					if od {
 						r.DaysOverdue = inv.DueDate.DaysUntil(today)
@@ -320,6 +321,7 @@ func (s *Server) allTools() []Tool {
 					Number        string       `json:"number"`
 					Status        quote.Status `json:"status"`
 					Customer      string       `json:"customer"`
+					Subject       string       `json:"subject,omitempty"`
 					IssueDate     invoice.Date `json:"issue_date"`
 					ValidUntil    invoice.Date `json:"valid_until"`
 					Expired       bool         `json:"expired"`
@@ -334,10 +336,10 @@ func (s *Server) allTools() []Tool {
 					if (p.Status == "expired" && !exp) || (p.Status != "" && p.Status != "expired" && string(q.Status) != p.Status) {
 						continue
 					}
-					if !store.Matches(p.Query, q.Number, q.Customer.Name, q.Customer.ICO, q.Note) {
+					if !store.Matches(p.Query, q.Number, q.Customer.Name, q.Customer.ICO, q.Subject, q.Note) {
 						continue
 					}
-					out = append(out, row{q.ID, q.Number, q.Status, q.Customer.Name, q.IssueDate, q.ValidUntil, exp,
+					out = append(out, row{q.ID, q.Number, q.Status, q.Customer.Name, q.Subject, q.IssueDate, q.ValidUntil, exp,
 						q.Summary.Base, q.Summary.Total, q.InvoiceNumber})
 					if len(out) >= limit(p.Limit) {
 						break
@@ -607,7 +609,9 @@ func (s *Server) allTools() []Tool {
 					},
 					"required": []string{"description", "quantity", "unit_price", "vat_rate"},
 				}},
-				"note": map[string]any{"type": "string"},
+				"subject": map[string]any{"type": "string", "description": "Krátky predmet faktúry (najviac 120 znakov), zobrazí sa v zozname"},
+				"intro":   map[string]any{"type": "string", "description": "Text nad položkami"},
+				"note":    map[string]any{"type": "string", "description": "Text pod položkami"},
 			},
 			Required: []string{"lines"},
 			Run: func(c *callCtx, args json.RawMessage) (any, error) {
@@ -618,6 +622,8 @@ func (s *Server) allTools() []Tool {
 					IssueDate    invoice.Date   `json:"issue_date"`
 					DeliveryDate invoice.Date   `json:"delivery_date"`
 					DueDays      int            `json:"due_days"`
+					Subject      string         `json:"subject"`
+					Intro        string         `json:"intro"`
 					Note         string         `json:"note"`
 					Lines        []struct {
 						Description string    `json:"description"`
@@ -634,7 +640,7 @@ func (s *Server) allTools() []Tool {
 				if err != nil {
 					return nil, err
 				}
-				inv := invoice.Invoice{IssueDate: p.IssueDate, DeliveryDate: p.DeliveryDate, Note: p.Note}
+				inv := invoice.Invoice{IssueDate: p.IssueDate, DeliveryDate: p.DeliveryDate, Subject: p.Subject, Intro: p.Intro, Note: p.Note}
 				switch {
 				case p.ContactID != 0:
 					ct, err := a.Store.GetContact(c.ctx, cid, p.ContactID)

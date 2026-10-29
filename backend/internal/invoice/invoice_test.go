@@ -2,6 +2,7 @@ package invoice
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	m "github.com/palo-krnac/fiscus/backend/internal/money"
@@ -71,6 +72,8 @@ func TestValidate(t *testing.T) {
 		{"zlá sadzba", func(i *Invoice) { i.Lines[0].Rate = 20 }, "lines[0].vatRate"},
 		{"bez dátumu dodania", func(i *Invoice) { i.DeliveryDate = Date{} }, "deliveryDate"},
 		{"splatnosť pred vystavením", func(i *Invoice) { i.DueDate = MustDate("2026-09-30") }, "dueDate"},
+		{"predmet do 120 znakov", func(i *Invoice) { i.Subject = strings.Repeat("ž", SubjectMax) }, ""},
+		{"príliš dlhý predmet", func(i *Invoice) { i.Subject = strings.Repeat("ž", SubjectMax+1) }, "subject"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

@@ -2,6 +2,7 @@ package printout
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/money"
@@ -42,7 +43,7 @@ func quoteSheet(q quote.Quote, sup Supplier) (*sheet, error) {
 	v := view{quote: true, validUntil: q.ValidUntil, inv: invoice.Invoice{
 		Kind: invoice.KindInvoice, Status: invoice.StatusIssued, Number: q.Number, Customer: q.Customer,
 		IssueDate: q.IssueDate, Currency: q.Currency, PriceMode: q.PriceMode, ReverseCharge: q.ReverseCharge,
-		SupplyKind: q.SupplyKind, NonVATPayer: q.NonVATPayer, Note: q.Note, Lines: q.Lines, Summary: q.Summary,
+		SupplyKind: q.SupplyKind, NonVATPayer: q.NonVATPayer, Note: q.Note, Subject: q.Subject, Intro: q.Intro, Lines: q.Lines, Summary: q.Summary,
 	}}
 	if q.Status == quote.StatusDraft {
 		v.stamp = "Koncept"
@@ -120,7 +121,9 @@ func render(v view, sup Supplier) (*sheet, error) {
 	if !v.quote && !receipt {
 		s.payment(inv, sup)
 	}
+	s.intro(inv)
 	s.lines(inv)
+	s.below(inv)
 	if len(deductions) > 0 {
 		s.y += pdf.MM(4)
 		s.deductions(inv, deductions)
@@ -515,6 +518,44 @@ func (s *sheet) localTotals(inv invoice.Invoice, x, w float64) {
 }
 
 // notes: povinné texty a poznámka používateľa.
+// intro: predmet dokladu tučne a text nad položkami.
+func (s *sheet) intro(inv invoice.Invoice) {
+	subject, intro := strings.TrimSpace(inv.Subject), strings.TrimSpace(inv.Intro)
+	if subject == "" && intro == "" {
+		return
+	}
+	if subject != "" {
+		for _, l := range s.wrap(s.f.Bold, 10.5, width, subject) {
+			s.ensure(lh(10.5))
+			s.text(left, s.y, s.f.Bold, 10.5, ink, l)
+			s.y += lh(10.5)
+		}
+		s.y += pdf.MM(1)
+	}
+	if intro != "" {
+		for _, l := range s.wrap(s.f.Regular, 9.5, width, intro) {
+			s.ensure(lh(9.5))
+			s.text(left, s.y, s.f.Regular, 9.5, ink, l)
+			s.y += lh(9.5)
+		}
+	}
+	s.y += pdf.MM(4)
+}
+
+// below: text pod položkami hneď pod tabuľkou položiek, pred rekapituláciou.
+func (s *sheet) below(inv invoice.Invoice) {
+	t := strings.TrimSpace(inv.Note)
+	if t == "" {
+		return
+	}
+	s.y += pdf.MM(3)
+	for _, l := range s.wrap(s.f.Regular, 9.5, width, t) {
+		s.ensure(lh(9.5))
+		s.text(left, s.y, s.f.Regular, 9.5, ink, l)
+		s.y += lh(9.5)
+	}
+}
+
 func (s *sheet) notes(v view) {
 	inv := v.inv
 	type note struct {
@@ -529,9 +570,6 @@ func (s *sheet) notes(v view) {
 	}
 	if t := invoice.DomesticReverseNote(inv.Lines); t != "" && !inv.NonVATPayer {
 		ns = append(ns, note{t, muted})
-	}
-	if inv.Note != "" {
-		ns = append(ns, note{inv.Note, ink})
 	}
 	if v.quote {
 		ns = append(ns, note{"Cenová ponuka nie je daňový doklad.", muted})

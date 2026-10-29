@@ -14,6 +14,7 @@ import { session, can } from '../lib/session.js'
 import { formatAmount, formatDate, formatMoney } from '../lib/format.js'
 import { fiskusGridTheme, skGridLocale, gridRows } from '../lib/grid.js'
 import { matches, searchTerms } from '../lib/search.js'
+import { partyCell, rowHeight, subjectColumn, wideQuery } from '../lib/subject.js'
 import { quoteColumns } from '../lib/columns.js'
 import { matchesQuoteView, quoteStatusOf, quoteViews } from '../lib/quotes.js'
 import ExportButton from '../components/ExportButton.vue'
@@ -50,7 +51,7 @@ const visibleRows = computed(() => {
   return rows.value.filter((r) => {
     if (!matchesQuoteView(r, view.value)) return false
     const c = r.customer ?? {}
-    return matches(terms, [r.number, c.name, c.ico, c.icdph, c.city, r.note, r.summary?.total, r.invoiceNumber, quoteStatusOf(r).label,
+    return matches(terms, [r.number, r.subject, c.name, c.ico, c.icdph, c.city, r.note, r.summary?.total, r.invoiceNumber, quoteStatusOf(r).label,
       ...(r.lines ?? []).map((l) => l.description)])
   })
 })
@@ -103,7 +104,15 @@ const columnDefs = [
     valueFormatter: (p) => (p.data._totals ? p.value : p.value || 'koncept'),
     cellClass: (p) => (p.data._totals ? '' : p.value ? 'cell-number' : 'cell-draft'),
   },
-  { colId: 'customer', headerName: 'Odberateľ', valueGetter: (p) => p.data.customer.name, flex: 1, minWidth: 130 },
+  {
+    colId: 'customer',
+    headerName: 'Odberateľ',
+    valueGetter: (p) => p.data.customer.name,
+    cellRenderer: (p) => (p.data._totals ? p.value : partyCell(p.value, p.data.subject)),
+    flex: 1,
+    minWidth: 130,
+  },
+  subjectColumn,
   { field: 'issueDate', headerName: 'Dátum', valueFormatter: (p) => formatDate(p.value), width: 100 },
   { field: 'validUntil', headerName: 'Platná do', valueFormatter: (p) => formatDate(p.value), width: 100 },
   amountCol('base', 'Základ'),
@@ -130,8 +139,12 @@ const rowClassRules = {
 
 const gridApi = shallowRef(null)
 const narrow = window.matchMedia('(max-width: 760px)')
+const wide = window.matchMedia(wideQuery)
+const getRowHeight = rowHeight(narrow)
 function applyResponsive() {
   gridApi.value?.setColumnsVisible(['issueDate', 'validUntil', 'base', 'status'], !narrow.matches)
+  gridApi.value?.setColumnsVisible(['subject'], wide.matches)
+  gridApi.value?.resetRowHeights()
   gridApi.value?.sizeColumnsToFit()
 }
 function onGridReady(e) {
@@ -139,6 +152,7 @@ function onGridReady(e) {
   applyResponsive()
 }
 narrow.addEventListener('change', applyResponsive)
+wide.addEventListener('change', applyResponsive)
 
 function open(e) {
   if (e.data?._totals || !e.data?.id) return
@@ -161,6 +175,7 @@ onMounted(() => window.addEventListener('keydown', onKey))
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKey)
   narrow.removeEventListener('change', applyResponsive)
+  wide.removeEventListener('change', applyResponsive)
 })
 </script>
 
@@ -197,7 +212,7 @@ onBeforeUnmount(() => {
       <SelectButton v-model="view" :options="quoteViews" option-label="label" option-value="value" :allow-empty="false" size="small" aria-label="Zobraziť" />
       <IconField class="search">
         <InputIcon class="pi pi-search" />
-        <InputText ref="searchEl" v-model="search" placeholder="Hľadať číslo, odberateľa, IČO, položku" size="small" aria-label="Hľadať" />
+        <InputText ref="searchEl" v-model="search" placeholder="Hľadať číslo, odberateľa, predmet, IČO, položku" size="small" aria-label="Hľadať" />
       </IconField>
       <ExportButton :name="`Cenové ponuky ${year}`" :columns="quoteColumns" :rows="() => gridRows(gridApi, visibleRows)" />
     </div>
@@ -206,11 +221,12 @@ onBeforeUnmount(() => {
 
     <div class="grid-wrap">
       <AgGridVue
-        class="grid"
+        class="grid stack-rows"
         :theme="fiskusGridTheme"
         :row-data="visibleRows"
         :pinned-bottom-row-data="totalsRow"
         :column-defs="columnDefs"
+        :get-row-height="getRowHeight"
         :default-col-def="defaultColDef"
         :row-class-rules="rowClassRules"
         :locale-text="skGridLocale"

@@ -139,6 +139,11 @@ const ids = (p) =>
         <div><span>Variabilný symbol</span><strong>{{ inv.variableSymbol || '—' }}</strong></div>
       </section>
 
+      <section v-if="inv.subject || inv.intro" class="intro">
+        <p v-if="inv.subject" class="subject">{{ inv.subject }}</p>
+        <p v-if="inv.intro" class="intro-text">{{ inv.intro }}</p>
+      </section>
+
       <table class="lines">
         <thead>
           <tr>
@@ -161,6 +166,7 @@ const ids = (p) =>
           </tr>
         </tbody>
       </table>
+      <p v-if="inv.note" class="user-note below">{{ inv.note }}</p>
 
       <table v-if="deductions.length" class="lines deduct">
         <thead>
@@ -257,7 +263,6 @@ const ids = (p) =>
         <p v-if="nonVat">Dodávateľ nie je platiteľ DPH.</p>
         <p v-if="inv.reverseCharge && !nonVat">{{ vatExemptionNote(inv) }}</p>
         <p v-if="!nonVat && domesticReverseNote(inv.lines)">{{ domesticReverseNote(inv.lines) }}</p>
-        <p v-if="inv.note" class="user-note">{{ inv.note }}</p>
         <p v-if="quote">Cenová ponuka nie je daňový doklad.</p>
       </footer>
     </article>
@@ -573,6 +578,24 @@ td:last-child {
 }
 .user-note {
   color: #1d2633;
+  white-space: pre-line;
+}
+.user-note.below {
+  margin: 3mm 0 0;
+}
+.intro {
+  margin: 0 0 4mm;
+  color: #1d2633;
+}
+.intro p {
+  margin: 0;
+}
+.intro .subject {
+  font-weight: 600;
+  font-size: 10.5pt;
+  margin-bottom: 1mm;
+}
+.intro-text {
   white-space: pre-line;
 }
 

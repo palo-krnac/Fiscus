@@ -68,9 +68,11 @@ func (a *App) prepareRecurring(ctx context.Context, companyID int64, t *recurrin
 
 // RecurringSample je ukážka faktúry za ďalšie obdobie (texty po nahradení).
 type RecurringSample struct {
-	Period string   `json:"period"`
-	Lines  []string `json:"lines"`
-	Note   string   `json:"note"`
+	Period  string   `json:"period"`
+	Subject string   `json:"subject"`
+	Intro   string   `json:"intro"`
+	Lines   []string `json:"lines"`
+	Note    string   `json:"note"`
 }
 
 // PreviewRecurring prepočíta šablónu bez uloženia a ukáže texty ďalšej faktúry.
@@ -86,7 +88,7 @@ func (a *App) PreviewRecurring(ctx context.Context, companyID int64, t recurring
 	if !t.NextDate.IsZero() && t.Interval.Months() > 0 {
 		inv := t.Build(t.NextDate, t.NextDate)
 		smp.Period = t.Interval.PeriodLabel(t.NextDate)
-		smp.Note = inv.Note
+		smp.Note, smp.Subject, smp.Intro = inv.Note, inv.Subject, inv.Intro
 		for _, l := range inv.Lines {
 			smp.Lines = append(smp.Lines, l.Description)
 		}

@@ -182,3 +182,54 @@ kbd {
 .ag-body-horizontal-scroll.ag-scrollbar-invisible:not(.ag-scrollbar-scrolling) {
   pointer-events: none;
 }
+
+/* Predmet dokladu v zoznamoch (lib/subject.js): od 1360 px vlastný stĺpec,
+   užšie za menom odberateľa, na mobile v druhom riadku */
+.party-cell {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+.party-name,
+.party-subject {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.party-name {
+  flex: 0 1 auto;
+}
+.party-subject {
+  display: none;
+  flex: 1 1 0;
+  min-width: 3em;
+  color: var(--ink-faint);
+  font-size: var(--fs-sm);
+}
+.cell-subject {
+  color: var(--ink-soft);
+}
+@media (max-width: 1359px) {
+  .party-subject {
+    display: block;
+  }
+}
+@media (max-width: 760px) {
+  .party-cell {
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+    gap: 0;
+    height: 100%;
+    line-height: 1.25;
+  }
+  .party-subject {
+    flex: none;
+  }
+  /* dvojriadkové riadky zoznamu: ostatné bunky na stred (výška z lib/subject.js) */
+  .stack-rows .ag-body .ag-cell {
+    line-height: 42px;
+  }
+}

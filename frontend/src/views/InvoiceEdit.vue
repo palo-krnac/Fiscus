@@ -190,6 +190,8 @@ async function load() {
             paymentMethod: 'transfer',
             nonVatPayer: !session.company?.vatPayer,
             contactId: 0,
+            subject: '',
+            intro: '',
             note: '',
             history: [],
             summary: { rates: [], base: '0', vat: '0', total: '0' },
@@ -205,6 +207,8 @@ async function load() {
             supplyKind: '',
             nonVatPayer: !session.company?.vatPayer,
             contactId: 0,
+            subject: '',
+            intro: '',
             note: '',
             summary: { rates: [], base: '0', vat: '0', total: '0' },
           }
@@ -220,6 +224,8 @@ async function load() {
         supplyKind: '',
         nonVatPayer: !session.company?.vatPayer,
         contactId: 0,
+        subject: '',
+        intro: '',
         note: '',
         summary: { rates: [], base: '0', vat: '0', total: '0' },
           }
@@ -1144,6 +1150,25 @@ const customerFields = reactive([
           </div>
         </fieldset>
 
+        <fieldset v-if="editable || inv.subject || inv.intro" class="block">
+          <legend>Predmet a text nad položkami</legend>
+          <div class="fields texts">
+            <label class="subject">
+              <span>Predmet <small class="muted">krátko, za čo {{ isQuote ? 'je ponuka' : 'je faktúra' }} — uvidíte ho aj v zozname</small></span>
+              <InputText :model-value="inv.subject" :disabled="!editable" size="small" maxlength="120"
+                :placeholder="!editable ? '' : isQuote ? 'Napr. Rekonštrukcia kúpeľne' : 'Napr. Údržba webu za október'"
+                :invalid="!!fieldError('subject')" @update:model-value="upd(inv, 'subject')($event)" />
+              <small v-if="fieldError('subject')" class="err">{{ fieldError('subject') }}</small>
+            </label>
+            <label>
+              <span>Text nad položkami</span>
+              <Textarea :model-value="inv.intro" :disabled="!editable" rows="2" auto-resize class="note"
+                :placeholder="!editable ? '' : isQuote ? 'Napr. Na základe vášho dopytu vám ponúkame:' : 'Napr. Na základe objednávky č. 12 vám fakturujeme:'"
+                @update:model-value="upd(inv, 'intro')($event)" />
+            </label>
+          </div>
+        </fieldset>
+
         <fieldset class="block lines-block">
           <legend>Položky</legend>
           <div class="lines" :class="{ invalid: !!fieldError('lines') }">
@@ -1191,14 +1216,15 @@ const customerFields = reactive([
             </AutoComplete>
           </div>
           <p v-if="isRecurring && editable" class="tokens">
-            V popise a poznámke môžete použiť
+            V predmete, textoch a popise položiek môžete použiť
             <span v-for="p in placeholders" :key="p.token"><code>{{ p.token }}</code> ({{ p.hint }})</span>
           </p>
         </fieldset>
 
-        <fieldset class="block">
-          <legend>Poznámka na {{ isQuote ? 'ponuke' : 'faktúre' }}</legend>
-          <Textarea :model-value="inv.note" :disabled="!editable" rows="2" auto-resize class="note" @update:model-value="upd(inv, 'note')($event)" />
+        <fieldset v-if="editable || inv.note" class="block">
+          <legend>Text pod položkami</legend>
+          <Textarea :model-value="inv.note" :disabled="!editable" rows="2" auto-resize class="note"
+            :placeholder="editable ? 'Napr. Ďakujeme za spoluprácu.' : ''" @update:model-value="upd(inv, 'note')($event)" />
         </fieldset>
 
         <fieldset v-if="isRecurring && inv.id" class="block">
@@ -1285,8 +1311,10 @@ const customerFields = reactive([
               <dd>{{ sample.period }}</dd>
             </template>
           </dl>
-          <div v-if="sample?.lines?.some((l, i) => l !== lines[i]?.description) || (sample?.note && sample.note !== inv.note)" class="sample">
+          <div v-if="sample?.lines?.some((l, i) => l !== lines[i]?.description) || (sample?.note && sample.note !== inv.note) || (sample?.subject && sample.subject !== inv.subject) || (sample?.intro && sample.intro !== inv.intro)" class="sample">
             <h3>Na faktúre bude</h3>
+            <p v-if="sample.subject"><strong>{{ sample.subject }}</strong></p>
+            <p v-if="sample.intro" class="muted">{{ sample.intro }}</p>
             <p v-for="(l, i) in sample.lines" :key="i">{{ l }}</p>
             <p v-if="sample.note" class="muted">{{ sample.note }}</p>
           </div>
@@ -1713,6 +1741,17 @@ legend {
 
 .note {
   width: 100%;
+  font-size: var(--fs-md);
+}
+.fields.texts {
+  grid-template-columns: minmax(0, 1fr);
+}
+.texts .subject :deep(.p-inputtext) {
+  width: 100%;
+  font-weight: 600;
+}
+.texts small.muted {
+  font-weight: 400;
 }
 
 .err {

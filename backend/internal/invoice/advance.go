@@ -79,6 +79,7 @@ func NewAdvanceReceipt(proforma Invoice, issue Date) (Invoice, error) {
 		IssueDate: issue, DeliveryDate: paid, DueDate: issue, // už uhradené
 		Currency: proforma.Currency, PriceMode: vat.PriceGross, PaymentMethod: proforma.PaymentMethod,
 		VariableSymbol: proforma.VariableSymbol,
+		Subject:        proforma.Subject,
 		Note:           "Daňový doklad k prijatej platbe k zálohovej faktúre " + proforma.Number + ".",
 		Advance:        &Advance{ProformaID: proforma.ID, ProformaNumber: proforma.Number},
 	}
@@ -133,6 +134,7 @@ func NewFinalInvoice(proforma Invoice, receipt *Invoice, issue Date, dueDays int
 		IssueDate: issue, DeliveryDate: issue, DueDate: issue.AddDays(dueDays),
 		Currency: proforma.Currency, PriceMode: proforma.PriceMode, SupplyKind: proforma.SupplyKind,
 		NonVATPayer: proforma.NonVATPayer, PaymentMethod: proforma.PaymentMethod,
+		Subject: proforma.Subject, Intro: proforma.Intro,
 		Note:    "Vyúčtovanie zálohovej faktúry " + proforma.Number + ".",
 		Lines:   append([]Line(nil), proforma.Lines...),
 		Advance: &Advance{ProformaID: proforma.ID, ProformaNumber: proforma.Number, Deductions: []Deduction{d}},

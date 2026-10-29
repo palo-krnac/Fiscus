@@ -40,7 +40,9 @@ type Quote struct {
 	ReverseCharge bool               `json:"reverseCharge"`
 	SupplyKind    invoice.SupplyKind `json:"supplyKind"`
 	NonVATPayer   bool               `json:"nonVatPayer"`
-	Note          string             `json:"note"`
+	Subject       string             `json:"subject"` // krátky predmet ponuky
+	Intro         string             `json:"intro"`   // text nad položkami
+	Note          string             `json:"note"`    // text pod položkami
 	Lines         []invoice.Line     `json:"lines"`
 	Summary       vat.Summary        `json:"summary"`
 	// InvoiceID: faktúra vytvorená z ponuky. InvoiceNumber dopĺňa aplikácia
@@ -63,7 +65,7 @@ func (q *Quote) asInvoice() invoice.Invoice {
 		Kind: invoice.KindInvoice, Customer: q.Customer, ContactID: q.ContactID,
 		IssueDate: q.IssueDate, DeliveryDate: q.IssueDate, DueDate: q.ValidUntil,
 		Currency: q.Currency, PriceMode: q.PriceMode, ReverseCharge: q.ReverseCharge,
-		SupplyKind: q.SupplyKind, NonVATPayer: q.NonVATPayer, Note: q.Note,
+		SupplyKind: q.SupplyKind, NonVATPayer: q.NonVATPayer, Note: q.Note, Subject: q.Subject, Intro: q.Intro,
 		Lines: append([]invoice.Line(nil), q.Lines...),
 	}
 }
