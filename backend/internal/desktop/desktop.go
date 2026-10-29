@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"runtime"
 	"sync"
@@ -36,7 +37,8 @@ func dataDir(goos string, env func(string) string, config, home func() (string, 
 		}
 		return filepath.Join(d, "Fiskus"), nil
 	}
-	if x := env("XDG_DATA_HOME"); x != "" && filepath.IsAbs(x) {
+	// XDG cesty sú unixové: path.IsAbs, aby sa správanie dalo overiť aj na Windows
+	if x := env("XDG_DATA_HOME"); x != "" && path.IsAbs(x) {
 		return filepath.Join(x, "fiskus"), nil
 	}
 	h, err := home()

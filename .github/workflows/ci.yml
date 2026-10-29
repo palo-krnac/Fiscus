@@ -41,7 +41,14 @@ jobs:
           go-version-file: backend/go.mod
       - run: go vet ./internal/tray/ ./internal/desktop/ ./cmd/fiskus-mcp/
       # veľkosti štruktúr Win32 a spúšťač aplikácie na skutočnom Windows
-      - run: go test ./internal/tray/ ./internal/desktop/ ./cmd/fiskus-mcp/
+      # výpis testov sa v logoch nedá vždy pozrieť, chyby idú aj do anotácií
+      - shell: bash
+        run: |
+          set -o pipefail
+          go test ./internal/tray/ ./internal/desktop/ ./cmd/fiskus-mcp/ 2>&1 | tee test.log || {
+            grep -E -- '--- FAIL|_test\.go:[0-9]+|^panic|FAIL\s' test.log | head -20 | sed 's/^/::error::/'
+            exit 1
+          }
 
   frontend:
     name: Frontend – testy a build
