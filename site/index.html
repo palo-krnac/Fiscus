@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="sk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fiškus – účtovný program pre živnostníkov a malé firmy</title>
+  <meta name="description" content="Faktúry, DPH, kontrolný výkaz, banka a pokladňa. Desktopová verzia zadarmo, dáta ostávajú vo vašom počítači.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="./" aria-label="Fiškus – úvod">
+        <svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#f6f7f9"/><path d="M10 8h13v3.4h-9v3.6h8v3.3h-8V24h-4z" fill="#1f3a5c"/><rect x="18" y="20.5" width="5" height="3.5" fill="#d9a441"/></svg>
+        Fiškus
+      </a>
+      <nav aria-label="Hlavná ponuka">
+        <a href="#co-vie" class="secondary">Čo vie</a>
+        <a href="#cennik">Cenník</a>
+        <a href="#stiahnut">Stiahnuť</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="wrap">
+        <div class="hero-text">
+          <h1>Faktúry a DPH bez predplatného</h1>
+          <p>Fiškus je slovenský účtovný program pre živnostníkov a malé firmy. Vystavíte faktúru, spárujete výpis z banky a pripravíte priznanie k DPH s kontrolným výkazom. Desktopová verzia je zadarmo a dáta ostávajú vo vašom počítači.</p>
+          <div class="actions">
+            <a class="btn btn-primary" href="#stiahnut" data-hero-download>Stiahnuť zadarmo</a>
+            <a class="btn btn-ghost" href="#cennik">Verzia pre účtovné kancelárie</a>
+          </div>
+          <small>Windows, macOS a Linux · verzia <span data-version></span></small>
+        </div>
+
+        <figure class="sheet" aria-label="Ukážka faktúry s prenesením daňovej povinnosti">
+          <div class="sheet-head">
+            <b>FA20260041</b>
+            <span>Stavmont Zvolen, a.s. · dodanie 20. 10. 2026</span>
+          </div>
+          <table>
+            <thead><tr><th>Položka</th><th class="num">DPH</th><th class="num">Základ</th></tr></thead>
+            <tbody>
+              <tr><td>Programovanie riadenia vetrania</td><td class="num">23 %</td><td class="num">720,00</td></tr>
+              <tr><td>Montáž rozvádzača v hale</td><td class="num rc">PDP</td><td class="num">3 200,00</td></tr>
+              <tr><td>Oceľová konštrukcia <span class="hide-sm">káblových trás</span></td><td class="num rc">PDP</td><td class="num">5 520,00</td></tr>
+              <tr><td>DPH 23 %</td><td></td><td class="num">165,60</td></tr>
+            </tbody>
+          </table>
+          <div class="payable"><span>K úhrade</span><strong>9 605,60 €</strong></div>
+          <p class="note">Položky s prenesením daňovej povinnosti idú do časti A.2 kontrolného výkazu aj s kódom colného sadzobníka.</p>
+        </figure>
+      </div>
+    </section>
+
+    <section class="block" id="co-vie">
+      <div class="wrap">
+        <h2>Čo Fiškus robí</h2>
+        <p class="lead">Je postavený na slovenských pravidlách. Program počíta DPH, sleduje splatnosti a pripraví výkazy pre finančnú správu, vy kontrolujete výsledok.</p>
+        <dl class="does">
+          <div><dt>Faktúry a dobropisy</dt><dd>Faktúry, zálohové faktúry s daňovým dokladom k platbe, dobropisy, cenové ponuky a pravidelné faktúry. PDF s QR kódom PAY by square a odoslanie e-mailom.</dd></div>
+          <div><dt>DPH a kontrolný výkaz</dt><dd>Priznanie k DPH, kontrolný výkaz a súhrnný výkaz ako XML pre eDane. Prenesenie daňovej povinnosti pri položkách (§ 69 ods. 12) aj samozdanenie zo zahraničia.</dd></div>
+          <div><dt>Banka a pokladňa</dt><dd>Výpis z banky (GPC, CSV, Excel) sa spáruje s faktúrami podľa variabilného symbolu a sumy, aj čiastočné úhrady. Pokladničné doklady s číslovaním.</dd></div>
+          <div><dt>Prijaté faktúry</dt><dd>Evidencia nákladov s odpočtom DPH, aj v cudzej mene s kurzom ECB. Doklad v PDF alebo z fotky vie prečítať AI a vy ho len skontrolujete.</dd></div>
+          <div><dt>Upomienky</dt><dd>Prehľad faktúr po splatnosti, tri stupne upomienok, zákonný úrok z omeškania a paušálna náhrada 40 €.</dd></div>
+          <div><dt>Zálohy a vaše dáta</dt><dd>Šifrované zálohy, export každého zoznamu do Excelu a CSV. Desktopová verzia funguje aj bez internetu.</dd></div>
+        </dl>
+      </div>
+    </section>
+
+    <section class="block" id="cennik">
+      <div class="wrap">
+        <h2>Cenník</h2>
+        <p class="lead">Všetky verzie majú rovnaké funkcie. Platí sa iba vtedy, keď na jednom serveri vediete viac firiem, napríklad v účtovnej kancelárii.</p>
+        <table class="editions">
+          <thead><tr><th scope="col">Verzia</th><th scope="col">Cena</th><th scope="col">Pre koho</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Desktop</th><td class="price">zadarmo</td><td><p>Jedna firma na vlastnom počítači, funguje aj offline.</p></td></tr>
+            <tr><th scope="row">Server – jedna firma</th><td class="price">zadarmo</td><td><p>Prístup z prehliadača pre viac ľudí, používatelia a roly, audit zmien.</p></td></tr>
+            <tr><th scope="row">Server – viac firiem</th><td class="price">99 €<span>ročne</span></td><td><p>Účtovné kancelárie a poskytovatelia služieb: neobmedzený počet firiem, klienti s vlastným prístupom do svojej firmy.</p></td></tr>
+          </tbody>
+        </table>
+
+        <div class="buy" id="kupit">
+          <div>
+            <h3>Ako kúpiť licenciu</h3>
+            <ol>
+              <li>Vyplňte obchodné meno a e-mail. Na e-mail pošleme licenčný kľúč.</li>
+              <li>Zaplaťte kartou alebo inou metódou v platobnom okne Paddle. Paddle je predajca, vystaví faktúru a postará sa o DPH.</li>
+              <li>Kľúč vložte vo Fiškuse v časti <em>Firmy a licencia</em>. Platí 12 mesiacov, obnova nadväzuje na koniec platnosti.</li>
+            </ol>
+          </div>
+          <form id="kupit-form" novalidate>
+            <label>Obchodné meno <input name="company" autocomplete="organization" required></label>
+            <label>E-mail na licenčný kľúč <input name="email" type="email" autocomplete="email" required></label>
+            <div class="total"><span>Server – viac firiem, 1 rok</span><strong>99,00 €</strong></div>
+            <p class="hint">Konečnú cenu s DPH podľa krajiny a IČ DPH ukáže platobné okno.</p>
+            <button class="btn btn-ink" type="submit">Pokračovať na platbu</button>
+            <p class="msg" role="status" aria-live="polite"></p>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="stiahnut">
+      <div class="wrap">
+        <h2>Stiahnuť Fiškus <span data-version></span></h2>
+        <p class="lead">Po inštalácii sa Fiškus otvorí v prehliadači. Dáta sú v priečinku vášho používateľa a odinštalovanie ich nezmaže.</p>
+        <table class="downloads">
+          <tbody>
+            <tr data-os="windows"><th scope="row">Windows</th><td class="file"><span data-name="windows"></span><br>Windows 10 a 11, inštalácia bez práv správcu</td><td class="get"><a class="btn btn-ink" data-file="windows">Stiahnuť</a></td></tr>
+            <tr data-os="macos"><th scope="row">macOS</th><td class="file"><span data-name="macos"></span><br>Apple Silicon aj Intel. Prvé spustenie: pravé tlačidlo na Fiškus → Otvoriť</td><td class="get"><a class="btn btn-ink" data-file="macos">Stiahnuť</a></td></tr>
+            <tr data-os="linux"><th scope="row">Linux</th><td class="file"><span data-name="deb"></span> (Debian, Ubuntu)<br><span data-name="rpm"></span> (Fedora, openSUSE)</td><td class="get"><a class="btn btn-ink" data-file="deb">.deb</a> <a class="btn btn-ink" data-file="rpm">.rpm</a></td></tr>
+          </tbody>
+        </table>
+        <p>Serverovú verziu spustíte rovnakým programom s parametrom <code>-mode server</code>. Návod a samostatné binárky pošleme na požiadanie.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="bottom">
+    <div class="wrap">
+      <span>Fiškus · Pavol Krnáč, Banská Bystrica · <a href="mailto:info@fiskus.sk">info@fiskus.sk</a></span>
+      <nav aria-label="Právne informácie">
+        <a href="obchodne-podmienky.html">Obchodné podmienky</a>
+        <a href="ochrana-osobnych-udajov.html">Ochrana osobných údajov</a>
+        <a href="vratenie-platby.html">Vrátenie platby</a>
+      </nav>
+    </div>
+  </footer>
+
+  <script src="config.js"></script>
+  <script src="site.js"></script>
+</body>
+</html>
