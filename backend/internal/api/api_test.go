@@ -391,3 +391,44 @@ func TestPurchasesAPI(t *testing.T) {
 	e.do("DELETE", fmt.Sprintf("%s/%d", base, saved.ID), nil, 204, nil)
 	e.do("GET", fmt.Sprintf("%s/%d", base, saved.ID), nil, 404, nil)
 }
+
+type fakeLauncher struct{ pings, quits int }
+
+func (f *fakeLauncher) Ping() { f.pings++ }
+func (f *fakeLauncher) Quit() { f.quits++ }
+
+func TestDesktopLauncher(t *testing.T) {
+	caps, _ := edition.For(edition.Desktop)
+	a := app.New(memstore.New(), caps)
+	tests := []struct {
+		name     string
+		launcher *fakeLauncher
+		status   int
+	}{
+		{"z inštalátora", &fakeLauncher{}, 204},
+		{"z príkazového riadka", nil, 404},
+	}
+	for _, tt := range tests {
+		s := &Server{App: a}
+		if tt.launcher != nil {
+			s.Desktop = tt.launcher
+		}
+		srv := httptest.NewServer(s.Handler())
+		e := &env{t: t, srv: srv, client: srv.Client()}
+		var c struct{ Launcher bool }
+		e.do("GET", "/api/capabilities", nil, 200, &c)
+		if c.Launcher != (tt.launcher != nil) {
+			t.Errorf("%s: launcher %v", tt.name, c.Launcher)
+		}
+		e.do("POST", "/api/desktop/ping", nil, tt.status, nil)
+		e.do("POST", "/api/desktop/quit", nil, tt.status, nil)
+		if tt.launcher != nil {
+			if tt.launcher.pings != 1 || tt.launcher.quits != 1 {
+				t.Errorf("%s: %+v", tt.name, tt.launcher)
+			}
+			e.noCSRF = true
+			e.do("POST", "/api/desktop/quit", nil, 403, nil) // bez hlavičky X-Fiskus nie
+		}
+		srv.Close()
+	}
+}

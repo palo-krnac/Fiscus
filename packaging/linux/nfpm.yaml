@@ -1,0 +1,27 @@
+# Balíky .deb a .rpm (nfpm): __VERSION__ a __ARCH__ doplní release.yml (sed).
+name: fiskus
+arch: __ARCH__
+platform: linux
+version: __VERSION__
+section: misc
+priority: optional
+maintainer: Pavol Krnáč <info@fiskus.sk>
+description: |
+  Fiškus — slovenský účtovný program: faktúry, DPH, kontrolný výkaz,
+  banka a pokladňa. Beží v prehliadači, dáta ostávajú v počítači.
+vendor: Pavol Krnáč
+homepage: https://fiskus.sk
+license: Proprietary
+contents:
+  - src: ./dist/fiskus-linux-__ARCH__
+    dst: /usr/bin/fiskus
+    file_info:
+      mode: 0755
+  - src: ./dist/fiskus-mcp-linux-__ARCH__
+    dst: /usr/bin/fiskus-mcp
+    file_info:
+      mode: 0755
+  - src: ./packaging/linux/fiskus.desktop
+    dst: /usr/share/applications/fiskus.desktop
+  - src: ./packaging/icons/fiskus.png
+    dst: /usr/share/icons/hicolor/512x512/apps/fiskus.png

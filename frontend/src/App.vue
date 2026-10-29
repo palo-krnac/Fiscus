@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import Select from 'primevue/select'
 import Toast from 'primevue/toast'
@@ -9,6 +9,8 @@ import { session, loadSession, selectCompany, can, isSuperAdmin } from './lib/se
 import { visibleModules } from './lib/access.js'
 import Login from './views/Login.vue'
 import UserMenu from './components/UserMenu.vue'
+import { api } from './lib/api.js'
+import { startHeartbeat } from './lib/desktop.js'
 
 const route = useRoute()
 const navOpen = ref(false)
@@ -29,11 +31,35 @@ const edition = computed(() => {
   if (session.caps.mode !== 'server') return 'Desktop · zadarmo'
   return session.caps.plan === 'multi' ? 'Server · viac firiem' : 'Server · jedna firma zadarmo'
 })
+// desktop z inštalátora: okno sa ozýva (po zatvorení posledného sa program
+// sám ukončí) a v menu je tlačidlo Ukončiť
+let stopHeartbeat = null
+watch(
+  () => session.caps.launcher,
+  (on) => {
+    if (on && !stopHeartbeat) stopHeartbeat = startHeartbeat(api.desktopPing)
+  },
+)
+onBeforeUnmount(() => stopHeartbeat?.())
+const stopped = ref(false)
+async function quitApp() {
+  stopHeartbeat?.()
+  stopHeartbeat = null
+  try {
+    await api.desktopQuit()
+  } catch {
+    /* program sa už ukončuje */
+  }
+  stopped.value = true
+}
 const isActive = (path) => route.path === path || route.path.startsWith(path + '/')
 </script>
 
 <template>
-  <template v-if="session.needLogin">
+  <div v-if="stopped" class="stopped">
+    <p><strong>Fiškus je ukončený.</strong> Toto okno môžete zavrieť. Program znova otvoríte ikonou Fiškus.</p>
+  </div>
+  <template v-else-if="session.needLogin">
     <Login />
     <Toast position="bottom-right" />
   </template>
@@ -70,7 +96,10 @@ const isActive = (path) => route.path === path || route.path.startsWith(path + '
       </nav>
 
       <footer class="edition">
-        {{ edition }}
+        <span>{{ edition }}</span>
+        <button v-if="session.caps.launcher" type="button" class="quit" title="Ukončiť program Fiškus" @click="quitApp">
+          <i class="pi pi-power-off" aria-hidden="true" /> Ukončiť
+        </button>
       </footer>
     </aside>
 
@@ -199,11 +228,39 @@ nav {
   color: var(--brass);
 }
 
+.stopped {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--ink-soft);
+}
 .edition {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   padding: 10px 16px;
   font-size: var(--fs-xs);
   color: #8ea3bd;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.quit {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 6px;
+  font: inherit;
+  color: #c9d5e3;
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.quit:hover {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.4);
 }
 
 .main {
