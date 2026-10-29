@@ -24,8 +24,9 @@ type PurchasePreview struct {
 }
 
 // PreviewPurchase prepočíta doklad bez uloženia.
-func (a *App) PreviewPurchase(p purchase.Purchase) PurchasePreview {
+func (a *App) PreviewPurchase(ctx context.Context, p purchase.Purchase) PurchasePreview {
 	normalizePurchase(&p)
+	_ = a.applyPurchaseRate(ctx, &p) // bez kurzu ukáže chybu fxRate
 	out := PurchasePreview{Purchase: p, Errors: []invoice.FieldError{}, Warnings: p.Normalize()}
 	if out.Warnings == nil {
 		out.Warnings = []purchase.Warning{}
@@ -67,6 +68,9 @@ func (a *App) SavePurchase(ctx context.Context, companyID int64, p purchase.Purc
 		p.Number, p.Status, p.PaidDate = "", purchase.StatusBooked, invoice.Date{}
 	}
 	normalizePurchase(&p)
+	if err := a.applyPurchaseRate(ctx, &p); err != nil {
+		return p, nil, err
+	}
 	warns := p.Normalize()
 	if err := p.Validate(); err != nil {
 		return p, warns, err

@@ -909,6 +909,17 @@ func Run(t *testing.T, newStore Factory) {
 				t.Errorf("filter %+v: %d, chcem %d", f, len(l), want)
 			}
 		}
+		// cudzia mena: mena, kurz a sumy v eurách sa uložia
+		czk := mk("PF20260002", "Česká firma s.r.o.", "2026-10-08")
+		czk.Currency, czk.FXRate, czk.FXDate, czk.FXManual = "CZK", m.MustParse("24.5"), invoice.MustDate("2026-10-07"), true
+		czk.Normalize()
+		if err := s.SavePurchase(ctx, a.ID, czk); err != nil {
+			t.Fatal(err)
+		}
+		if g, err := s.GetPurchase(ctx, a.ID, czk.ID); err != nil || !reflect.DeepEqual(g, *czk) || g.Local == nil {
+			t.Fatalf("cudzia mena sa líši:\n got %+v\nwant %+v", g, *czk)
+		}
+		_ = s.DeletePurchase(ctx, a.ID, czk.ID)
 		// oddelenie firiem
 		if l, _ := s.ListPurchases(ctx, b.ID, store.PurchaseFilter{}); len(l) != 0 {
 			t.Fatal("firma B vidí nákup firmy A")

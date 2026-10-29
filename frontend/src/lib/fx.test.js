@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { currencyOptions, eurBalance, eurSummary, filterRates, formatRate, isForeignCurrency, rateHint, rateText } from './fx.js'
+import { currencyOptions, eurBalance, eurSummary, filterRates, formatRate, isForeignCurrency, purchaseEUR, rateHint, rateText } from './fx.js'
 
 describe('fx', () => {
   it.each([
@@ -44,6 +44,17 @@ describe('eurSummary', () => {
     [{ currency: 'CZK', summary: czk }, czk],
     [{ summary: eur }, eur],
   ])('%j', (inv, want) => expect(eurSummary(inv)).toBe(want))
+})
+
+describe('purchaseEUR', () => {
+  const eur = { total: '100.00' }
+  const czk = { total: '2500.00' }
+  it.each([
+    [{ summary: eur }, eur],
+    [{ currency: 'EUR', summary: eur }, eur],
+    [{ currency: 'CZK', summary: czk, local: { rates: [], summary: eur } }, eur],
+    [{ currency: 'CZK', summary: czk, local: null }, czk],
+  ])('%j', (p, want) => expect(purchaseEUR(p)).toBe(want))
 })
 
 describe('filterRates', () => {

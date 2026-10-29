@@ -94,11 +94,11 @@ func TestExtractErrors(t *testing.T) {
 }
 
 func TestPurchaseWarnings(t *testing.T) {
-	r := Result{SupplierName: "X", InvoiceNumber: "A", Currency: "CZK", Total: "999",
+	r := Result{SupplierName: "X", InvoiceNumber: "A", Currency: "XYZ", Total: "999",
 		Rates: []Rate{{Rate: 23, Base: "100", VAT: "23"}, {Rate: 21, Base: "10", VAT: "2.10"}, {Rate: 5, Base: "veľa", VAT: "1"}}}
 	_, warn := r.Purchase(invoice.MustDate("2026-10-29"))
 	all := strings.Join(warn, "|")
-	for _, w := range []string{"Dátum vyhotovenia", "CZK", "21 %", "Nečitateľná", "nesedí"} {
+	for _, w := range []string{"Dátum vyhotovenia", "XYZ", "21 %", "Nečitateľná", "nesedí"} {
 		if !strings.Contains(all, w) {
 			t.Errorf("chýba upozornenie %q v %q", w, all)
 		}
@@ -110,5 +110,13 @@ func TestPurchaseWarnings(t *testing.T) {
 		if _, err := MediaType(mt); err != nil {
 			t.Error(err)
 		}
+	}
+}
+
+func TestPurchaseCurrency(t *testing.T) {
+	p, warn := Result{SupplierName: "Česká firma", Currency: "czk", IssueDate: "2026-10-20", Total: "1210",
+		Rates: []Rate{{Rate: 0, Base: "1210", VAT: "0"}}}.Purchase(invoice.MustDate("2026-10-29"))
+	if p.Currency != "CZK" || len(warn) != 0 {
+		t.Fatalf("mena: %q %v", p.Currency, warn)
 	}
 }

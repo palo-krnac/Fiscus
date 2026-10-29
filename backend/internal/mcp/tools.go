@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -204,9 +205,9 @@ func (s *Server) allTools() []Tool {
 					var nPay, nLate int
 					for _, p := range purs {
 						if p.Status == purchase.StatusBooked {
-							toPay, nPay = toPay.Add(p.Summary.Total), nPay+1
+							toPay, nPay = toPay.Add(p.TotalEUR()), nPay+1
 							if p.Overdue(today) {
-								late, nLate = late.Add(p.Summary.Total), nLate+1
+								late, nLate = late.Add(p.TotalEUR()), nLate+1
 							}
 						}
 					}
@@ -468,6 +469,8 @@ func (s *Server) allTools() []Tool {
 					Status         purchase.Status `json:"status"`
 					Total          money.Dec       `json:"total"`
 					VAT            money.Dec       `json:"vat"`
+					Currency       string          `json:"currency"`
+					TotalEUR       money.Dec       `json:"totalEur"`
 					Overdue        bool            `json:"overdue"`
 				}
 				out := []row{}
@@ -476,7 +479,7 @@ func (s *Server) allTools() []Tool {
 					if (p.Status == "overdue" && !od) || (p.Status != "" && p.Status != "overdue" && string(pu.Status) != p.Status) {
 						continue
 					}
-					out = append(out, row{pu.ID, pu.Number, pu.SupplierNumber, pu.Supplier.Name, pu.Description, pu.ReceivedDate, pu.DueDate, pu.Status, pu.Summary.Total, pu.Summary.VAT, od})
+					out = append(out, row{pu.ID, pu.Number, pu.SupplierNumber, pu.Supplier.Name, pu.Description, pu.ReceivedDate, pu.DueDate, pu.Status, pu.Summary.Total, pu.Summary.VAT, cmp.Or(pu.Currency, "EUR"), pu.TotalEUR(), od})
 					if len(out) >= limit(p.Limit) {
 						break
 					}

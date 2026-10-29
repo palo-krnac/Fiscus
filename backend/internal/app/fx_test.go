@@ -3,12 +3,15 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
+	"github.com/palo-krnac/fiscus/backend/internal/cash"
 	"github.com/palo-krnac/fiscus/backend/internal/edition"
 	"github.com/palo-krnac/fiscus/backend/internal/fx"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	m "github.com/palo-krnac/fiscus/backend/internal/money"
+	"github.com/palo-krnac/fiscus/backend/internal/purchase"
 )
 
 func ecbStub(rates ...fx.Rate) func(context.Context, string) ([]fx.Rate, error) {
@@ -113,5 +116,76 @@ func TestForeignInvoice(t *testing.T) {
 	e.FXRate = m.MustParse("2")
 	if dr, _ := a.SaveDraft(ctx, c.ID, e); !dr.FXRate.IsZero() || dr.Local != nil {
 		t.Fatalf("eurová faktúra s kurzom: %+v", dr)
+	}
+}
+
+func TestForeignPurchase(t *testing.T) {
+	a, c := newApp(t, edition.Desktop)
+	if err := a.Store.SaveRates(ctx, []fx.Rate{rate("CZK", "2026-10-23", "25.123"), rate("CZK", "2026-10-22", "25")}); err != nil {
+		t.Fatal(err)
+	}
+	base := validPurchase()
+	base.Currency = "CZK"
+	base.Supplier.Country, base.SupplyKind = "CZ", invoice.SupplyServices
+	base.ReverseCharge = true
+	base.Rates[0].Base = m.MustParse("2500")
+	base.IssueDate, base.DeliveryDate, base.ReceivedDate, base.DueDate = invoice.MustDate("2026-10-23"), invoice.MustDate("2026-10-23"), invoice.MustDate("2026-10-26"), invoice.MustDate("2026-11-06")
+	tests := []struct {
+		name   string
+		mod    func(*purchase.Purchase)
+		rate   string
+		manual bool
+		err    bool
+	}{
+		{"kurz deň pred dodaním", nil, "25", false, false},
+		{"bez dátumu dodania podľa vyhotovenia", func(p *purchase.Purchase) { p.DeliveryDate = invoice.Date{} }, "25", false, false},
+		{"víkend", func(p *purchase.Purchase) { p.DeliveryDate = invoice.MustDate("2026-10-25") }, "25.123", false, false},
+		{"ručný kurz", func(p *purchase.Purchase) { p.FXRate, p.FXManual = m.MustParse("24"), true }, "24", true, false},
+		{"bez kurzu", func(p *purchase.Purchase) { p.DeliveryDate = invoice.MustDate("2026-10-01") }, "0", false, true},
+	}
+	for i, tt := range tests {
+		p := base
+		p.SupplierNumber = fmt.Sprintf("CZ-%d", i)
+		p.Rates = append([]purchase.RateRow(nil), base.Rates...)
+		if tt.mod != nil {
+			tt.mod(&p)
+		}
+		pv := a.PreviewPurchase(ctx, p)
+		if !pv.FXRate.Equal(m.MustParse(tt.rate)) {
+			t.Errorf("%s: náhľad kurz %s", tt.name, pv.FXRate)
+		}
+		got, _, err := a.SavePurchase(ctx, c.ID, p)
+		if (err != nil) != tt.err {
+			t.Fatalf("%s: %v", tt.name, err)
+		}
+		if tt.err {
+			if !fieldErr(err, "fxRate") {
+				t.Errorf("%s: chyba %v", tt.name, err)
+			}
+			continue
+		}
+		if !got.FXRate.Equal(m.MustParse(tt.rate)) || got.FXManual != tt.manual || got.Local == nil {
+			t.Errorf("%s: %s ručne=%v %+v", tt.name, got.FXRate, got.FXManual, got.Local)
+		}
+	}
+
+	// pokladňa a banka sú v eurách
+	p, _, err := a.SavePurchase(ctx, c.ID, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cands, _ := a.candidates(ctx, c.ID)
+	for _, cd := range cands {
+		if cd.Kind == "purchase" {
+			t.Fatalf("doklad v cudzej mene medzi kandidátmi na párovanie: %+v", cd)
+		}
+	}
+	if p.Local.Summary.Base.String() != "100.00" || p.Deductible().String() != "23.00" {
+		t.Fatalf("v eurách: %+v", p.Local)
+	}
+	_, err = a.CreateCash(ctx, c.ID, cash.Document{Kind: cash.Out, Date: invoice.MustDate("2026-10-27"), Amount: m.MustParse("100"),
+		Purpose: "Úhrada", LinkKind: "purchase", LinkID: p.ID})
+	if !fieldErr(err, "linkId") {
+		t.Fatalf("pokladňa: %v", err)
 	}
 }

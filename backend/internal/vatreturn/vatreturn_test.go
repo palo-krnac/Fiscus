@@ -337,3 +337,23 @@ func TestForeignCurrencyInvoice(t *testing.T) {
 		t.Fatalf("upozornenia: %+v", ret.Warnings)
 	}
 }
+
+func TestForeignCurrencyPurchase(t *testing.T) {
+	p, _ := ParsePeriod("2026-10")
+	svc := pur(1, "PF1", "2026-10-10", "CZ12345678", 23, "2500", "0")
+	svc.Supplier.Country, svc.SupplyKind, svc.ReverseCharge = "CZ", invoice.SupplyServices, true
+	svc.Currency, svc.FXRate = "CZK", m("25")
+	svc.Normalize()
+	noRate := pur(2, "PF2", "2026-10-11", "SK2120455106", 23, "100", "0")
+	noRate.Currency = "USD"
+	noRate.Normalize()
+	ret := Compute(Input{Period: p, Purchases: []purchase.Purchase{svc, noRate}})
+	for k, want := range map[string]string{"r09b": "100", "r10b": "23", "r19": "23"} {
+		if !ret.Rows[k].Equal(m(want)) {
+			t.Errorf("%s = %s, chcem %s (v eurách)", k, ret.Rows[k], want)
+		}
+	}
+	if len(ret.Warnings) != 1 || !strings.Contains(ret.Warnings[0].Message, "nemá kurz") {
+		t.Fatalf("upozornenia: %+v", ret.Warnings)
+	}
+}

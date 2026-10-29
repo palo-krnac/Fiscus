@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/palo-krnac/fiscus/backend/internal/fx"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/money"
 	"github.com/palo-krnac/fiscus/backend/internal/party"
@@ -66,6 +67,57 @@ type Purchase struct {
 	Note        string    `json:"note"`
 	Rates       []RateRow `json:"rates"`
 	Summary     Summary   `json:"summary"`
+
+	// Cudzia mena: sumy dokladu sú v mene Currency, do DPH sa prepočítajú
+	// kurzom ECB (FXRate jednotiek meny za 1 EUR, vyhlásený FXDate).
+	Currency string       `json:"currency"`
+	FXRate   money.Dec    `json:"fxRate"`
+	FXDate   invoice.Date `json:"fxDate"`
+	FXManual bool         `json:"fxManual"`
+	Local    *Amounts     `json:"local,omitempty"` // sumy v eurách
+}
+
+// Amounts sú rekapitulácia a súčty (v eurách pri doklade v cudzej mene).
+type Amounts struct {
+	Rates   []RateRow `json:"rates"`
+	Summary Summary   `json:"summary"`
+}
+
+// Foreign vráti true pre doklad v cudzej mene.
+func (p *Purchase) Foreign() bool { return p.Currency != "" && p.Currency != "EUR" }
+
+// Tax vráti rekapituláciu a súčty v eurách pre DPH; false, ak doklad
+// v cudzej mene ešte nemá kurz.
+func (p *Purchase) Tax() (Amounts, bool) {
+	if !p.Foreign() {
+		return Amounts{Rates: p.Rates, Summary: p.Summary}, true
+	}
+	if p.Local == nil {
+		return Amounts{}, false
+	}
+	return *p.Local, true
+}
+
+// TotalEUR je suma na úhradu v eurách (nula pri cudzej mene bez kurzu).
+func (p *Purchase) TotalEUR() money.Dec {
+	t, _ := p.Tax()
+	return t.Summary.Total
+}
+
+// toEUR prepočíta riadky kurzom (každý základ a DPH zaokrúhlené na centy).
+func (p *Purchase) toEUR() Amounts {
+	out := Amounts{Rates: make([]RateRow, len(p.Rates))}
+	for i, r := range p.Rates {
+		e := RateRow{Rate: r.Rate, Base: r.Base.DivCents(p.FXRate), VAT: r.VAT.DivCents(p.FXRate)}
+		out.Rates[i] = e
+		out.Summary.Base = out.Summary.Base.Add(e.Base)
+		out.Summary.VAT = out.Summary.VAT.Add(e.VAT)
+	}
+	out.Summary.Total = out.Summary.Base.Add(out.Summary.VAT)
+	if p.ReverseCharge {
+		out.Summary.Total = out.Summary.Base
+	}
+	return out
 }
 
 // Warning je upozornenie, ktoré nebráni uloženiu (napr. iné zaokrúhlenie DPH u dodávateľa).
@@ -118,15 +170,24 @@ func (p *Purchase) Normalize() []Warning {
 		s.Total = s.Base.Add(s.VAT)
 	}
 	p.Summary = s
+	p.Local = nil
+	switch {
+	case !p.Foreign():
+		p.Currency, p.FXRate, p.FXDate, p.FXManual = "", money.Zero, invoice.Date{}, false
+	case p.FXRate.Sign() > 0:
+		local := p.toEUR()
+		p.Local = &local
+	}
 	return warns
 }
 
-// Deductible je DPH, ktorú si možno odpočítať.
+// Deductible je DPH v eurách, ktorú si možno odpočítať.
 func (p *Purchase) Deductible() money.Dec {
-	if p.NoDeduction {
+	t, ok := p.Tax()
+	if p.NoDeduction || !ok {
 		return money.Zero
 	}
-	return p.Summary.VAT
+	return t.Summary.VAT
 }
 
 // Validate skontroluje doklad.
@@ -168,6 +229,14 @@ func (p *Purchase) Validate() error {
 	}
 	if !p.PaymentMethod.Valid() {
 		add("paymentMethod", "Neznámy spôsob úhrady")
+	}
+	if p.Foreign() {
+		switch {
+		case !fx.Known(p.Currency):
+			add("currency", "Neznáma mena")
+		case p.FXRate.Sign() <= 0:
+			add("fxRate", "Chýba kurz ECB k dátumu dodania — aktualizujte kurzy alebo zadajte kurz ručne")
+		}
 	}
 	if len(p.Rates) == 0 {
 		add("rates", "Zadajte aspoň jeden riadok rekapitulácie DPH")

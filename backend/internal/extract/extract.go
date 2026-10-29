@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/palo-krnac/fiscus/backend/internal/fx"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/money"
 	"github.com/palo-krnac/fiscus/backend/internal/purchase"
@@ -164,7 +165,7 @@ func (c Client) Extract(ctx context.Context, data []byte) (Result, error) {
 			"name": "zapis_fakturu", "description": "Zapíše údaje prijatej faktúry do účtovníctva.", "input_schema": schema,
 		}},
 		"tool_choice": map[string]any{"type": "tool", "name": "zapis_fakturu"},
-		"messages": []map[string]any{{"role": "user", "content": []any{block, map[string]any{"type": "text", "text": prompt}}}},
+		"messages":    []map[string]any{{"role": "user", "content": []any{block, map[string]any{"type": "text", "text": prompt}}}},
 	})
 	base := c.BaseURL
 	if base == "" {
@@ -290,7 +291,11 @@ func (r Result) Purchase(today invoice.Date) (purchase.Purchase, []string) {
 		warn = append(warn, "Dátum vyhotovenia sa nenašiel")
 	}
 	if cur := strings.ToUpper(strings.TrimSpace(r.Currency)); cur != "" && cur != "EUR" {
-		warn = append(warn, "Doklad je v mene "+cur+" — sumy prepočítajte na eurá")
+		if fx.Known(cur) {
+			p.Currency = cur // kurz ECB doplní program
+		} else {
+			warn = append(warn, "Doklad je v mene "+cur+", pre ktorú nie je kurz ECB — sumy prepočítajte na eurá")
+		}
 	}
 	for _, x := range r.Rates {
 		base, ok1 := num(x.Base)

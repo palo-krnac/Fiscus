@@ -17,6 +17,7 @@ import { purchaseColumns } from '../lib/columns.js'
 import ExportButton from '../components/ExportButton.vue'
 import { useToast } from 'primevue/usetoast'
 import { setPurchaseDraft } from '../lib/drafts.js'
+import { isForeignCurrency, purchaseEUR } from '../lib/fx.js'
 
 const router = useRouter()
 const toast = useToast()
@@ -82,11 +83,12 @@ const visibleRows = computed(() => {
     if (view.value === 'overdue' && !r.overdue) return false
     if (view.value === 'paid' && r.status !== 'paid') return false
     const s = r.supplier ?? {}
-    return matches(terms, [r.number, r.supplierNumber, r.variableSymbol, s.name, s.ico, s.icdph, s.city, r.description, r.note, r.summary?.total])
+    return matches(terms, [r.number, r.supplierNumber, r.variableSymbol, s.name, s.ico, s.icdph, s.city, r.description, r.note, r.summary?.total, r.currency])
   })
 })
 
-const sum = (list, k) => list.reduce((a, r) => a + Number(r.summary[k]), 0)
+// súčty sú v eurách (doklad v cudzej mene prepočítaný kurzom zo servera)
+const sum = (list, k) => list.reduce((a, r) => a + Number(purchaseEUR(r)[k]), 0)
 const ledger = computed(() => {
   const unpaid = rows.value.filter((r) => r.status === 'booked')
   const overdue = unpaid.filter((r) => r.overdue)
@@ -109,7 +111,7 @@ const totalsRow = computed(() => {
 const amountCol = (field, header, extra = {}) => ({
   colId: field,
   headerName: header,
-  valueGetter: (p) => Number(p.data.summary[field]),
+  valueGetter: (p) => Number(purchaseEUR(p.data)[field]),
   valueFormatter: (p) => formatAmount(p.value),
   type: 'rightAligned',
   width: 112,
@@ -117,9 +119,20 @@ const amountCol = (field, header, extra = {}) => ({
 })
 
 const columnDefs = [
-  { field: 'number', headerName: 'Číslo', width: 118, cellClass: (p) => (p.data._totals ? '' : 'cell-number') },
+  {
+    field: 'number',
+    headerName: 'Číslo',
+    width: 156,
+    minWidth: 150,
+    cellClass: (p) => (p.data._totals ? '' : 'cell-number'),
+    cellRenderer: (p) =>
+      // cudzia mena: sumy v zozname sú v eurách, mena dokladu je pri čísle
+      !p.data._totals && isForeignCurrency(p.data.currency)
+        ? `${p.value}<span class="cur" title="${formatAmount(p.data.summary.total)} ${p.data.currency}">${p.data.currency}</span>`
+        : p.value,
+  },
   { field: 'supplierNumber', headerName: 'Č. dokladu', width: 130 },
-  { colId: 'supplier', headerName: 'Dodávateľ', valueGetter: (p) => p.data.supplier.name, flex: 1, minWidth: 170 },
+  { colId: 'supplier', headerName: 'Dodávateľ', valueGetter: (p) => p.data.supplier.name, flex: 1, minWidth: 120 },
   { field: 'receivedDate', headerName: 'Doručená', valueFormatter: (p) => formatDate(p.value), width: 100 },
   { field: 'dueDate', headerName: 'Splatná', valueFormatter: (p) => formatDate(p.value), width: 100 },
   amountCol('base', 'Základ'),
@@ -326,6 +339,15 @@ onBeforeUnmount(() => {
 .grid :deep(.cell-number) {
   font-weight: 600;
   color: var(--blue-deep);
+}
+.grid :deep(.cur) {
+  margin-left: 6px;
+  padding: 0 5px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--blue);
+  border: 1px solid currentColor;
+  border-radius: 3px;
 }
 .grid :deep(.cell-total) {
   font-weight: 600;

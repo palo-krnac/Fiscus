@@ -71,7 +71,7 @@ func (s *Server) previewPurchase(w http.ResponseWriter, r *http.Request) {
 	if !decodeLoose(w, r, &p) {
 		return
 	}
-	writeJSON(w, http.StatusOK, s.App.PreviewPurchase(p))
+	writeJSON(w, http.StatusOK, s.App.PreviewPurchase(r.Context(), p))
 }
 
 func (s *Server) savePurchase(w http.ResponseWriter, r *http.Request) {

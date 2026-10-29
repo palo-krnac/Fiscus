@@ -9,6 +9,7 @@ import Textarea from 'primevue/textarea'
 import DatePicker from 'primevue/datepicker'
 import Select from 'primevue/select'
 import Checkbox from 'primevue/checkbox'
+import InputNumber from 'primevue/inputnumber'
 import AutoComplete from 'primevue/autocomplete'
 import FormField from '../components/FormField.vue'
 import IcoInput from '../components/IcoInput.vue'
@@ -20,6 +21,7 @@ import { filterContacts, customerFromContact } from '../lib/contacts.js'
 import { fillFromRegistry } from '../lib/registry.js'
 import { formatAmount, formatDate, formatMoney, fromISODate, parseNumber, purchaseStatusOf, toISODate } from '../lib/format.js'
 import { takePurchaseDraft } from '../lib/drafts.js'
+import { currencyOptions, isForeignCurrency, rateHint, rateText } from '../lib/fx.js'
 
 const props = defineProps({ id: String })
 const router = useRouter()
@@ -107,6 +109,8 @@ async function recalc() {
     const out = await api.previewPurchase(session.companyId, payload())
     if (mine !== seq) return
     summary.value = out.summary
+    // kurz ECB a sumy v eurách určuje server
+    Object.assign(p.value, { fxRate: out.fxRate, fxDate: out.fxDate, fxManual: out.fxManual, local: out.local ?? null })
     computedVat.value = out.rates.map((r) => r.vat)
     warnings.value = out.warnings
     previewErrors.value = Object.fromEntries(out.errors.map((e) => [e.field, e.message]))
@@ -246,6 +250,23 @@ onBeforeUnmount(() => {
   clearTimeout(timer)
 })
 
+// ---- mena a kurz ----
+const currencies = computed(() => currencyOptions(codes.currencies))
+const foreign = computed(() => isForeignCurrency(p.value?.currency))
+const fxNumber = computed(() => Number(p.value?.fxRate) || null)
+function setCurrency(v) {
+  Object.assign(p.value, { currency: v === 'EUR' ? '' : v, fxRate: '0', fxManual: false, local: null })
+  changed()
+}
+function setRate(v) {
+  Object.assign(p.value, { fxRate: v ? String(v) : '0', fxManual: !!v })
+  changed()
+}
+function resetRate() {
+  Object.assign(p.value, { fxRate: '0', fxManual: false })
+  changed()
+}
+
 const set = (obj, key) => (v) => {
   obj[key] = v
   changed()
@@ -355,6 +376,28 @@ const set = (obj, key) => (v) => {
             <FormField label="Predmet" :span="p.paymentMethod === 'transfer' ? 2 : 4">
               <InputText :model-value="p.description" :disabled="locked" placeholder="Napr. pohonné hmoty, nájom, materiál" size="small" @update:model-value="set(p, 'description')($event)" />
             </FormField>
+            <FormField label="Mena" :error="fieldError('currency')">
+              <Select :model-value="p.currency || 'EUR'" :options="currencies" option-label="label" option-value="code" filter :disabled="locked" size="small" aria-label="Mena" @update:model-value="setCurrency" />
+            </FormField>
+            <FormField v-if="foreign" :label="`Kurz: 1 EUR = … ${p.currency}`" :error="fieldError('fxRate')">
+              <InputNumber
+                :model-value="fxNumber"
+                :min-fraction-digits="0"
+                :max-fraction-digits="4"
+                :use-grouping="false"
+                locale="sk-SK"
+                :disabled="locked"
+                :invalid="!!fieldError('fxRate')"
+                size="small"
+                fluid
+                aria-label="Kurz"
+                @update:model-value="setRate"
+              />
+              <small v-if="!fieldError('fxRate')" class="fx-hint">
+                {{ rateHint(p) }}
+                <button v-if="p.fxManual && !locked" type="button" class="link" @click="resetRate">podľa ECB</button>
+              </small>
+            </FormField>
           </div>
         </fieldset>
 
@@ -434,11 +477,22 @@ const set = (obj, key) => (v) => {
         <dl>
           <dt>Základ dane</dt><dd class="num">{{ formatAmount(summary.base) }}</dd>
           <dt>{{ p.reverseCharge ? 'DPH (samozdanenie)' : 'DPH' }}</dt><dd class="num">{{ formatAmount(summary.vat) }}</dd>
-          <dt>Odpočet DPH</dt><dd class="num">{{ p.noDeduction ? 'neuplatňuje sa' : formatAmount(summary.vat) }}</dd>
+          <template v-if="!foreign">
+            <dt>Odpočet DPH</dt><dd class="num">{{ p.noDeduction ? 'neuplatňuje sa' : formatAmount(summary.vat) }}</dd>
+          </template>
         </dl>
         <div class="payable">
           <span>Na úhradu</span>
-          <strong class="num">{{ formatMoney(summary.total) }}</strong>
+          <strong class="num">{{ formatMoney(summary.total, p.currency || 'EUR') }}</strong>
+        </div>
+        <div v-if="foreign" class="local">
+          <p class="rate-line">{{ p.local ? rateText(p) : 'Bez kurzu sa doklad neprepočíta na eurá a nejde do priznania DPH.' }}</p>
+          <dl v-if="p.local">
+            <dt>Základ v EUR</dt><dd>{{ formatMoney(p.local.summary.base) }}</dd>
+            <dt>DPH v EUR</dt><dd>{{ formatMoney(p.local.summary.vat) }}</dd>
+            <dt>Odpočet DPH</dt><dd>{{ p.noDeduction ? 'neuplatňuje sa' : formatMoney(p.local.summary.vat) }}</dd>
+            <dt>Spolu v EUR</dt><dd>{{ formatMoney(p.local.summary.total) }}</dd>
+          </dl>
         </div>
         <dl v-if="p.number" class="meta">
           <dt>Interné číslo</dt><dd>{{ p.number }}</dd>
@@ -650,6 +704,28 @@ const set = (obj, key) => (v) => {
   font-weight: 700;
   border-bottom: 3px double var(--ink);
   line-height: 1.15;
+}
+.local {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--rule);
+  font-size: var(--fs-sm);
+}
+.local .rate-line {
+  margin: 0 0 4px;
+  color: var(--ink-soft);
+}
+.fx-hint {
+  color: var(--ink-faint);
+  font-size: var(--fs-xs);
+}
+.link {
+  font: inherit;
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--blue);
+  cursor: pointer;
 }
 .meta {
   margin-top: 14px !important;

@@ -7,7 +7,7 @@ import { intervalLabel, recurringStatusOf } from './recurring.js'
 import { levelShort } from './reminders.js'
 import { kindLabel } from './advance.js'
 import { docKindLabel, emailStatus } from './emails.js'
-import { eurBalance, eurSummary, isForeignCurrency, sourceLabel } from './fx.js'
+import { eurBalance, eurSummary, isForeignCurrency, purchaseEUR, sourceLabel } from './fx.js'
 
 const t = (header, value, width) => ({ header, value, width })
 const money = (header, value) => ({ header, value, type: 'money', width: 14 })
@@ -57,9 +57,12 @@ export const purchaseColumns = [
   date('Doručená', (r) => r.receivedDate),
   date('Splatná', (r) => r.dueDate),
   date('Uhradená', (r) => r.paidDate),
-  money('Základ', (r) => r.summary?.base),
-  money('DPH', (r) => r.summary?.vat),
-  money('Spolu', (r) => r.summary?.total),
+  t('Mena', (r) => r.currency || 'EUR', 6),
+  { header: 'Kurz', value: (r) => (isForeignCurrency(r.currency) ? r.fxRate : ''), type: 'number', width: 10 },
+  money('Spolu v mene', (r) => r.summary?.total),
+  money('Základ €', (r) => purchaseEUR(r)?.base),
+  money('DPH €', (r) => purchaseEUR(r)?.vat),
+  money('Spolu €', (r) => purchaseEUR(r)?.total),
   t('Prenesenie DPH', (r) => yes(r.reverseCharge), 8),
   t('Bez odpočtu', (r) => yes(r.noDeduction), 8),
   t('Stav', (r) => purchaseStatusOf(r).label, 18),

@@ -42,8 +42,15 @@ func TestSeed(t *testing.T) {
 	if len(quotes) != 6 || states["invoiced"] != 1 || states["rejected"] != 1 || states["draft"] != 1 || states["expired"] != 1 {
 		t.Fatalf("ponuky: %d %v", len(quotes), states)
 	}
-	if p, _ := a.Store.ListPurchases(context.Background(), c.ID, store.PurchaseFilter{}); len(p) != 6 {
-		t.Fatalf("%d prijatých faktúr", len(p))
+	purs, _ := a.Store.ListPurchases(context.Background(), c.ID, store.PurchaseFilter{})
+	usd := 0
+	for _, p := range purs {
+		if p.Currency == "USD" && p.Local != nil && p.FXRate.Sign() > 0 {
+			usd++
+		}
+	}
+	if len(purs) != 7 || usd != 1 {
+		t.Fatalf("%d prijatých faktúr, v USD s kurzom %d", len(purs), usd)
 	}
 	txs, _ := a.Store.ListBankTransactions(context.Background(), c.ID, store.BankFilter{})
 	matched := 0

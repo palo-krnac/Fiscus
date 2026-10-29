@@ -268,7 +268,7 @@ func seedAdvances(ctx context.Context, a *app.App, c store.Company, contactIDs [
 }
 
 // seedForeign pripraví kurzy ECB za posledných 120 dní (demo beží bez
-// internetu) a faktúru v korunách českému odberateľovi.
+// internetu), faktúru v korunách českému odberateľovi a prijatú faktúru v dolároch.
 func seedForeign(ctx context.Context, a *app.App, c store.Company) error {
 	today := a.Today()
 	var rates []fx.Rate
@@ -298,7 +298,18 @@ func seedForeign(ctx context.Context, a *app.App, c store.Company) error {
 	if err != nil {
 		return err
 	}
-	_, err = a.Issue(ctx, c.ID, d.ID)
+	if _, err = a.Issue(ctx, c.ID, d.ID); err != nil {
+		return err
+	}
+	// prijatá faktúra v dolároch: cloudové služby od írskeho dodávateľa (samozdanenie)
+	got := today.AddDays(-6)
+	_, _, err = a.SavePurchase(ctx, c.ID, purchase.Purchase{
+		SupplierNumber: "INV-2026-10-4471", Supplier: invoice.Party{Name: "Northwind Cloud Ltd.", City: "Dublin", Country: "IE", ICDPH: "IE9876543W"},
+		Currency: "USD", SupplyKind: invoice.SupplyServices, ReverseCharge: true,
+		IssueDate: got.AddDays(-1), DeliveryDate: got.AddDays(-1), ReceivedDate: got, DueDate: got.AddDays(20),
+		Description: "Cloudový server a zálohovanie – október",
+		Rates:       []purchase.RateRow{{Rate: vat.Rate23, Base: m.MustParse("149.00")}},
+	})
 	return err
 }
 

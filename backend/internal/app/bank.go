@@ -68,8 +68,8 @@ func (a *App) candidates(ctx context.Context, companyID int64) ([]bank.Candidate
 		return nil, err
 	}
 	for _, p := range purs {
-		if p.Status != purchase.StatusBooked {
-			continue
+		if p.Status != purchase.StatusBooked || p.Foreign() {
+			continue // účty sú v eurách — doklad v cudzej mene sa označí ako uhradený ručne (ako pri faktúrach)
 		}
 		out = append(out, bank.Candidate{Kind: "purchase", ID: p.ID, Number: p.Number, VS: p.VariableSymbol, Partner: p.Supplier.Name,
 			IBAN: p.SupplierIBAN, Amount: p.Summary.Total, Direction: bank.Out, Due: p.DueDate})
