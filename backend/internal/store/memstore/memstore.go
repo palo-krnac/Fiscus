@@ -30,6 +30,7 @@ type Store struct {
 	contacts  map[int64]store.Contact
 	purchases map[int64]purchase.Purchase
 	bankTx    map[int64]bank.Transaction
+	apiKeys   map[int64]auth.APIKey
 	users     map[int64]auth.User
 	members   map[memKey]auth.Role
 	sessions  map[string]auth.Session

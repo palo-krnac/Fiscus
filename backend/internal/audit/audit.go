@@ -29,6 +29,7 @@ const (
 	CatBackups   Category = "backups"   // zálohy a obnovy
 	CatTaxes     Category = "taxes"     // priznanie k DPH, kontrolný výkaz
 	CatBank      Category = "bank"      // import výpisov a párovanie úhrad
+	CatAI        Category = "ai"        // volania AI asistentov cez MCP a API kľúče
 )
 
 // Categories je číselník kategórií pre filter.
@@ -43,6 +44,7 @@ var Categories = []struct {
 	{CatUsers, "Používatelia"},
 	{CatAuth, "Prihlásenia"},
 	{CatBank, "Banka"},
+	{CatAI, "AI asistent (MCP)"},
 	{CatTaxes, "Dane"},
 	{CatBackups, "Zálohy"},
 }

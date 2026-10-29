@@ -5,6 +5,8 @@
 // pri každej požiadavke — rozhranie iba skrýva, čo používateľ nesmie.
 package auth
 
+import "strings"
+
 // Role je rola používateľa vo firme.
 type Role string
 
@@ -106,4 +108,23 @@ type Session struct {
 	TokenHash string
 	UserID    int64
 	ExpiresAt int64 // Unix sekundy
+}
+
+// IsWrite vráti true pre oprávnenie, ktoré mení dáta.
+func (p Perm) IsWrite() bool {
+	return strings.HasSuffix(string(p), ".write") || p == PermUsersManage
+}
+
+// APIKey je kľúč pre AI asistenta (MCP) alebo iný program.
+// Uložený je iba hash; samotný kľúč sa zobrazí raz pri vytvorení.
+type APIKey struct {
+	ID         int64  `json:"id"`
+	UserID     int64  `json:"userId"` // 0 = lokálny používateľ desktopovej verzie
+	Name       string `json:"name"`
+	Prefix     string `json:"prefix"` // začiatok kľúča na rozpoznanie (fk_ab12…)
+	Hash       string `json:"-"`
+	ReadOnly   bool   `json:"readOnly"`
+	CreatedAt  int64  `json:"createdAt"`  // Unix sekundy
+	LastUsedAt int64  `json:"lastUsedAt"` // 0 = ešte nepoužitý
+	Revoked    bool   `json:"revoked"`
 }

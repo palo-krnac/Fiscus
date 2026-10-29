@@ -15,6 +15,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/auth"
 	"github.com/palo-krnac/fiscus/backend/internal/edition"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
+	"github.com/palo-krnac/fiscus/backend/internal/mcp"
 	"github.com/palo-krnac/fiscus/backend/internal/registry"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 )
@@ -25,6 +26,9 @@ type Server struct {
 	Web fs.FS // zostavený frontend (index.html, assets/...); môže byť nil
 	// Registry je vyhľadávanie firiem podľa IČO (RPO); nil = vypnuté.
 	Registry registry.Lookup
+
+	// MCP je server pre AI asistentov (POST /mcp); nil = vypnuté.
+	MCP *mcp.Server
 
 	limit limiter // pokusy o prihlásenie
 }
@@ -44,6 +48,12 @@ func (s *Server) Handler() http.Handler {
 
 	public("GET /api/capabilities", s.capabilities)
 	public("GET /api/codes", s.codes)
+	if s.MCP != nil {
+		mux.HandleFunc("/mcp", s.mcpHandler)
+	}
+	open("GET /api/me/keys", s.listKeys)
+	open("POST /api/me/keys", s.createKey)
+	open("DELETE /api/me/keys/{id}", s.revokeKey)
 	public("POST /api/auth/login", s.login)
 	open("POST /api/auth/logout", s.logout)
 	open("POST /api/auth/password", s.changePassword)
@@ -138,7 +148,7 @@ func fail(w http.ResponseWriter, err error) {
 		writeErr(w, http.StatusNotFound, "Záznam neexistuje", nil)
 	case errors.Is(err, invoice.ErrLocked), errors.Is(err, invoice.ErrBadTransition):
 		writeErr(w, http.StatusConflict, err.Error(), nil)
-	case errors.Is(err, app.ErrCompanyLimit), errors.Is(err, app.ErrForbidden):
+	case errors.Is(err, app.ErrCompanyLimit), errors.Is(err, app.ErrForbidden), errors.Is(err, app.ErrReadOnly):
 		writeErr(w, http.StatusForbidden, err.Error(), nil)
 	case errors.Is(err, app.ErrNotVATPayer), errors.Is(err, app.ErrPeriodTooOld), errors.Is(err, app.ErrPeriodInFuture),
 		errors.Is(err, app.ErrMissingVATData):

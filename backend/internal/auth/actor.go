@@ -19,6 +19,10 @@ type Actor struct {
 	Channel    Channel `json:"channel"`
 	IP         string  `json:"ip,omitempty"`
 	SuperAdmin bool    `json:"superAdmin"`
+	// ReadOnly obmedzí actora na čítanie (API kľúč „len na čítanie“).
+	ReadOnly bool `json:"readOnly,omitempty"`
+	// KeyID je API kľúč, ktorým sa actor prihlásil (0 = nie kľúčom).
+	KeyID int64 `json:"keyId,omitempty"`
 }
 
 // System je actor pre akcie programu.

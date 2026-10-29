@@ -12,6 +12,7 @@ import AuditLog from './views/AuditLog.vue'
 import Companies from './views/Companies.vue'
 import VatReturn from './views/VatReturn.vue'
 import Bank from './views/Bank.vue'
+import AiAccess from './views/AiAccess.vue'
 
 // Moduly z etapového plánu — zatiaľ prázdne stránky s popisom.
 export const modules = [
@@ -57,6 +58,7 @@ export const modules = [
       { path: '/adresar', label: 'Adresár', icon: 'pi-address-book', ready: true, perm: 'contacts.read' },
       { path: '/pouzivatelia', label: 'Používatelia', icon: 'pi-users', ready: true, perm: 'users.manage', serverOnly: true },
       { path: '/audit', label: 'Audit', icon: 'pi-shield', ready: true, perm: 'audit.read' },
+      { path: '/ai', label: 'Prístup pre AI', icon: 'pi-sparkles', ready: true },
       { path: '/zalohy', label: 'Zálohy', icon: 'pi-history', stage: 1, perm: 'settings.write' },
       { path: '/nastavenia', label: 'Nastavenia', icon: 'pi-cog', ready: true, perm: 'settings.write' },
       { path: '/firmy', label: 'Firmy a licencia', icon: 'pi-building', ready: true, superAdmin: true, serverOnly: true },
@@ -89,6 +91,7 @@ export const router = createRouter({
     { path: '/adresar/:id(\\d+|novy)', component: Contacts, props: true, meta: { title: 'Adresár', perm: 'contacts.read' } },
     { path: '/nastavenia', component: Settings, meta: { title: 'Nastavenia', perm: 'settings.write' } },
     { path: '/pouzivatelia', component: Users, meta: { title: 'Používatelia', perm: 'users.manage' } },
+    { path: '/ai', component: AiAccess, meta: { title: 'Prístup pre AI', noCompany: true } },
     { path: '/banka', component: Bank, meta: { title: 'Banka', perm: 'bank.read' } },
     { path: '/dph', component: VatReturn, props: { tab: 'dph' }, meta: { title: 'Priznanie k DPH', perm: 'vat.read' } },
     { path: '/kontrolny-vykaz', component: VatReturn, props: { tab: 'kv' }, meta: { title: 'Kontrolný výkaz', perm: 'vat.read' } },
