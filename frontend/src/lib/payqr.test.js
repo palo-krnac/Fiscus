@@ -34,6 +34,7 @@ describe('payModel', () => {
     ['nulová suma', { ...invoice, summary: { total: '0.00' } }, company],
     ['dobropis', { ...invoice, summary: { total: '-50.00' } }, company],
     ['bez IBAN', invoice, { ...company, iban: '' }],
+    ['platba v hotovosti', { ...invoice, paymentMethod: 'cash' }, company],
   ])('%s → bez QR', (_, inv, comp) => {
     expect(payModel(inv, comp)).toBeNull()
   })

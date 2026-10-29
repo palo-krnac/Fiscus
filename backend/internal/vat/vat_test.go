@@ -96,9 +96,47 @@ func TestRatesSortedDescending(t *testing.T) {
 	}
 }
 
-func TestInvalidRate(t *testing.T) {
-	// 20 % platila do konca 2024, od 2025 už nie
-	if _, err := Calculate([]Line{line("1", "1", Rate(20))}, PriceNet, false); err == nil {
-		t.Fatal("sadzba 20 % mala byť odmietnutá")
+func TestUnknownRate(t *testing.T) {
+	for _, r := range []Rate{21, 15, -5} {
+		if _, err := Calculate([]Line{line("1", "1", r)}, PriceNet, false); err == nil {
+			t.Fatalf("sadzba %d %% mala byť odmietnutá", r)
+		}
+	}
+}
+
+func TestRatesOn(t *testing.T) {
+	cases := []struct {
+		date  string
+		valid []Rate
+		not   []Rate
+	}{
+		{"2024-12-31", []Rate{20, 10, 5, 0}, []Rate{23, 19}},
+		{"2025-01-01", []Rate{23, 19, 5, 0}, []Rate{20, 10}},
+		{"2026-10-29", []Rate{23, 19, 5, 0}, []Rate{20, 10}},
+		{"2020-06-01", []Rate{20, 10}, []Rate{23}}, // pred číselníkom → prvé obdobie
+	}
+	for _, c := range cases {
+		for _, r := range c.valid {
+			if !r.ValidOn(c.date) {
+				t.Errorf("%s: %d %% má platiť", c.date, r)
+			}
+		}
+		for _, r := range c.not {
+			if r.ValidOn(c.date) {
+				t.Errorf("%s: %d %% nemá platiť", c.date, r)
+			}
+		}
+	}
+}
+
+func TestPeriodsAreContinuous(t *testing.T) {
+	for i := 1; i < len(Periods); i++ {
+		prev, cur := Periods[i-1], Periods[i]
+		if prev.To == "" || prev.To >= cur.From {
+			t.Fatalf("obdobia %d a %d sa prekrývajú alebo predchádzajúce nie je ukončené", i-1, i)
+		}
+	}
+	if Periods[len(Periods)-1].To != "" {
+		t.Fatal("posledné obdobie má platiť doteraz")
 	}
 }

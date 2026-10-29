@@ -44,10 +44,27 @@ func clone(in invoice.Invoice) invoice.Invoice {
 	return out
 }
 
+// cloneCompany skopíruje aj číselníky (slice a mapu).
+func cloneCompany(c store.Company) store.Company {
+	c.Units = append([]string(nil), c.Units...)
+	if c.NumberFormats != nil {
+		m := make(map[string]string, len(c.NumberFormats))
+		for k, v := range c.NumberFormats {
+			m[k] = v
+		}
+		c.NumberFormats = m
+	}
+	return c
+}
+
 func (s *Store) ListCompanies(context.Context) ([]store.Company, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return append([]store.Company(nil), s.companies...), nil
+	out := make([]store.Company, len(s.companies))
+	for i, c := range s.companies {
+		out[i] = cloneCompany(c)
+	}
+	return out, nil
 }
 
 func (s *Store) CountCompanies(context.Context) (int, error) {
@@ -60,7 +77,7 @@ func (s *Store) CreateCompany(_ context.Context, c store.Company) (store.Company
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	c.ID = s.id()
-	s.companies = append(s.companies, c)
+	s.companies = append(s.companies, cloneCompany(c))
 	return c, nil
 }
 
@@ -69,7 +86,7 @@ func (s *Store) GetCompany(_ context.Context, id int64) (store.Company, error) {
 	defer s.mu.Unlock()
 	for _, c := range s.companies {
 		if c.ID == id {
-			return c, nil
+			return cloneCompany(c), nil
 		}
 	}
 	return store.Company{}, store.ErrNotFound
@@ -80,7 +97,7 @@ func (s *Store) UpdateCompany(_ context.Context, c store.Company) error {
 	defer s.mu.Unlock()
 	for i := range s.companies {
 		if s.companies[i].ID == c.ID {
-			s.companies[i] = c
+			s.companies[i] = cloneCompany(c)
 			return nil
 		}
 	}

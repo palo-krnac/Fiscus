@@ -29,6 +29,7 @@ type Server struct {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/capabilities", s.capabilities)
+	mux.HandleFunc("GET /api/codes", s.codes)
 	mux.HandleFunc("GET /api/companies", s.listCompanies)
 	mux.HandleFunc("POST /api/companies", s.createCompany)
 	mux.HandleFunc("PUT /api/companies/{cid}", s.updateCompany)

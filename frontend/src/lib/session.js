@@ -1,6 +1,7 @@
 // Spoločný stav aplikácie: edícia, firmy, aktuálna firma.
 import { reactive } from 'vue'
 import { api } from './api.js'
+import { loadCodes } from './codes.js'
 
 const KEY = 'fiskus.companyId'
 
@@ -18,7 +19,7 @@ export const session = reactive({
 
 export async function loadSession() {
   try {
-    const [caps, companies] = await Promise.all([api.capabilities(), api.companies()])
+    const [caps, companies] = await Promise.all([api.capabilities(), api.companies(), loadCodes()])
     session.caps = caps
     session.companies = companies
     let saved = null

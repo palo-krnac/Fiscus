@@ -32,7 +32,15 @@ type Company struct {
 	VATPayer bool   `json:"vatPayer"`
 	// DefaultDueDays je predvolená splatnosť nových faktúr v dňoch.
 	DefaultDueDays int `json:"defaultDueDays"`
+	// Units sú merné jednotky ponúkané pri položkách (číselník firmy).
+	Units []string `json:"units"`
+	// NumberFormats sú formáty číselných radov podľa druhu dokladu
+	// ("invoice", "credit_note", "proforma"); chýbajúci = predvolený.
+	NumberFormats map[string]string `json:"numberFormats"`
 }
+
+// DefaultUnits je predvolený číselník merných jednotiek.
+var DefaultUnits = []string{"ks", "hod", "m", "m²", "m³", "kg", "t", "l", "km", "bal", "súb", "deň", "mes", "paušál"}
 
 // Contact je záznam v adresári (odberateľ alebo dodávateľ).
 type Contact struct {

@@ -44,6 +44,39 @@ type Party struct {
 	Email   string `json:"email"`
 }
 
+// PaymentMethod je spôsob úhrady.
+type PaymentMethod string
+
+const (
+	PayTransfer PaymentMethod = "transfer" // prevodom na účet
+	PayCash     PaymentMethod = "cash"     // v hotovosti
+	PayCard     PaymentMethod = "card"     // platobnou kartou
+	PayCOD      PaymentMethod = "cod"      // dobierkou
+	PayOffset   PaymentMethod = "offset"   // vzájomným zápočtom
+)
+
+// PaymentMethods je číselník spôsobov úhrady (poradie = poradie v ponuke).
+var PaymentMethods = []struct {
+	Code  PaymentMethod `json:"code"`
+	Label string        `json:"label"`
+}{
+	{PayTransfer, "Prevodom na účet"},
+	{PayCash, "V hotovosti"},
+	{PayCard, "Platobnou kartou"},
+	{PayCOD, "Dobierkou"},
+	{PayOffset, "Vzájomným zápočtom"},
+}
+
+// Valid vráti true pre spôsob úhrady z číselníka.
+func (p PaymentMethod) Valid() bool {
+	for _, m := range PaymentMethods {
+		if m.Code == p {
+			return true
+		}
+	}
+	return false
+}
+
 // Line je položka faktúry.
 type Line struct {
 	Description string    `json:"description"`
@@ -71,11 +104,13 @@ type Invoice struct {
 	PriceMode      vat.PriceMode `json:"priceMode"`
 	ReverseCharge  bool          `json:"reverseCharge"`
 	// NonVATPayer: dodávateľ nie je platiteľ DPH — faktúra je bez DPH.
-	NonVATPayer bool        `json:"nonVatPayer"`
-	ContactID   int64       `json:"contactId"` // odkaz do adresára (0 = zadané ručne)
-	Note        string      `json:"note"`
-	Lines       []Line      `json:"lines"`
-	Summary     vat.Summary `json:"summary"`
+	NonVATPayer bool  `json:"nonVatPayer"`
+	ContactID   int64 `json:"contactId"` // odkaz do adresára (0 = zadané ručne)
+	// PaymentMethod je spôsob úhrady (číselník PaymentMethods).
+	PaymentMethod PaymentMethod `json:"paymentMethod"`
+	Note          string        `json:"note"`
+	Lines         []Line        `json:"lines"`
+	Summary       vat.Summary   `json:"summary"`
 }
 
 // Recalculate prepočíta sumy položiek a rekapituláciu DPH.
@@ -85,6 +120,9 @@ func (inv *Invoice) Recalculate() error {
 	}
 	if inv.Currency == "" {
 		inv.Currency = "EUR"
+	}
+	if inv.PaymentMethod == "" {
+		inv.PaymentMethod = PayTransfer
 	}
 	lines := make([]vat.Line, len(inv.Lines))
 	for i := range inv.Lines {
@@ -145,9 +183,13 @@ func (inv *Invoice) Validate() error {
 		if l.Quantity.IsZero() {
 			add(fmt.Sprintf("lines[%d].quantity", i), "Množstvo nesmie byť nula")
 		}
-		if !l.Rate.Valid() {
-			add(fmt.Sprintf("lines[%d].vatRate", i), "Neplatná sadzba DPH")
+		if !inv.ReverseCharge && !inv.NonVATPayer && !inv.DeliveryDate.IsZero() && !l.Rate.ValidOn(inv.DeliveryDate.String()) {
+			add(fmt.Sprintf("lines[%d].vatRate", i),
+				fmt.Sprintf("Sadzba %d %% neplatí k dátumu dodania %s", l.Rate, inv.DeliveryDate.Display()))
 		}
+	}
+	if inv.PaymentMethod != "" && !inv.PaymentMethod.Valid() {
+		add("paymentMethod", "Neznámy spôsob úhrady")
 	}
 	if inv.IssueDate.IsZero() {
 		add("issueDate", "Zadajte dátum vystavenia")
@@ -188,7 +230,7 @@ func (inv *Invoice) Issue(number string) error {
 	}
 	inv.Number = number
 	if inv.VariableSymbol == "" {
-		inv.VariableSymbol = digitsOnly(number)
+		inv.VariableSymbol = VariableSymbol(number)
 	}
 	inv.Status = StatusIssued
 	return nil
@@ -218,8 +260,9 @@ func (inv *Invoice) Overdue(today Date) bool {
 	return inv.Status == StatusIssued && today.After(inv.DueDate)
 }
 
-// Series vráti prefix číselného radu podľa druhu dokladu.
-func Series(k Kind) string {
+// SequenceKey je kľúč číselného radu podľa druhu dokladu. Je nezávislý
+// od formátu, takže zmena formátu počas roka nezačne číslovať od 1.
+func SequenceKey(k Kind) string {
 	switch k {
 	case KindCreditNote:
 		return "DB"
@@ -227,11 +270,6 @@ func Series(k Kind) string {
 		return "ZF"
 	}
 	return "FA"
-}
-
-// FormatNumber zloží číslo dokladu, napr. FA20260007.
-func FormatNumber(series string, year, seq int) string {
-	return fmt.Sprintf("%s%d%04d", series, year, seq)
 }
 
 func digitsOnly(s string) string {

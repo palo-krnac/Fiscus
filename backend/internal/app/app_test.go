@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/palo-krnac/fiscus/backend/internal/edition"
@@ -245,5 +246,63 @@ func TestPartyFromContact(t *testing.T) {
 	p := PartyFromContact(store.Contact{Name: "A", ICO: "1", ICDPH: "SK2", City: "BB", Email: "e@x.sk"})
 	if p.Name != "A" || p.ICO != "1" || p.ICDPH != "SK2" || p.City != "BB" || p.Email != "e@x.sk" {
 		t.Fatalf("%+v", p)
+	}
+}
+
+func TestCustomNumberFormat(t *testing.T) {
+	a, c := newApp(t, edition.Desktop)
+	c.NumberFormats = map[string]string{"invoice": "{RRRR}/{NNN}"}
+	c, err := a.UpdateCompany(ctx, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.NumberFormats["credit_note"] != "DB{RRRR}{NNNN}" {
+		t.Fatalf("chýbajúci formát sa má doplniť predvoleným: %v", c.NumberFormats)
+	}
+	d, _ := a.SaveDraft(ctx, c.ID, validDraft())
+	inv, err := a.Issue(ctx, c.ID, d.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inv.Number != "2026/001" || inv.VariableSymbol != "2026001" {
+		t.Fatalf("číslo %s, VS %s", inv.Number, inv.VariableSymbol)
+	}
+	// zmena formátu počas roka pokračuje v rade, nezačína od 1
+	c.NumberFormats["invoice"] = "FA{RR}{NNNN}"
+	_, _ = a.UpdateCompany(ctx, c)
+	d2, _ := a.SaveDraft(ctx, c.ID, validDraft())
+	inv2, _ := a.Issue(ctx, c.ID, d2.ID)
+	if inv2.Number != "FA260002" {
+		t.Fatalf("po zmene formátu: %s", inv2.Number)
+	}
+}
+
+func TestCompanyCodeLists(t *testing.T) {
+	a, c := newApp(t, edition.Desktop)
+	if len(c.Units) == 0 || c.Units[0] != "ks" {
+		t.Fatalf("predvolené jednotky: %v", c.Units)
+	}
+	c.Units = []string{" ks ", "hod", "KS", "", "m²"}
+	c, _ = a.UpdateCompany(ctx, c)
+	if strings.Join(c.Units, ",") != "ks,hod,m²" {
+		t.Fatalf("jednotky bez duplicít a prázdnych: %v", c.Units)
+	}
+	for f, field := range map[string]string{
+		"FA{NNNN}":           "numberFormats.invoice", // bez roka
+		"FA{RRRR}":           "numberFormats.invoice", // bez poradia
+		"FA č. {RRRR}{NNNN}": "numberFormats.invoice", // diakritika a medzera
+	} {
+		x := c
+		x.NumberFormats = map[string]string{"invoice": f}
+		_, err := a.UpdateCompany(ctx, x)
+		var ve *invoice.ValidationError
+		if !errors.As(err, &ve) || ve.Fields[0].Field != field {
+			t.Errorf("%q: %v", f, err)
+		}
+	}
+	x := c
+	x.Units = []string{"veľmi dlhá jednotka"}
+	if _, err := a.UpdateCompany(ctx, x); err == nil {
+		t.Error("príliš dlhá jednotka mala byť odmietnutá")
 	}
 }

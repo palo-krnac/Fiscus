@@ -7,6 +7,7 @@ import { api } from '../lib/api.js'
 import { session } from '../lib/session.js'
 import { formatAmount, formatDate, formatMoney, formatQuantity } from '../lib/format.js'
 import { payBySquare, qrSvg } from '../lib/payqr.js'
+import { countryName, paymentLabel } from '../lib/codes.js'
 
 const props = defineProps({ id: String })
 const print = () => window.print()
@@ -87,7 +88,7 @@ const ids = (p) =>
           <h2>Odberateľ</h2>
           <p class="name">{{ inv.customer.name }}</p>
           <p v-for="l in addressLines(inv.customer)" :key="l">{{ l }}</p>
-          <p v-if="inv.customer.country && inv.customer.country !== 'SK'">{{ inv.customer.country }}</p>
+          <p v-if="inv.customer.country && inv.customer.country !== 'SK'">{{ countryName(inv.customer.country) }}</p>
           <dl class="ids">
             <template v-for="[k, v] in ids(inv.customer)" :key="k"><dt>{{ k }}</dt><dd>{{ v }}</dd></template>
           </dl>
@@ -95,8 +96,9 @@ const ids = (p) =>
       </section>
 
       <section class="payment">
-        <div><span>Spôsob úhrady</span><strong>Prevodom na účet</strong></div>
-        <div><span>IBAN</span><strong>{{ company.iban || '—' }}</strong></div>
+        <div><span>Spôsob úhrady</span><strong>{{ paymentLabel(inv.paymentMethod) }}</strong></div>
+        <div v-if="(inv.paymentMethod || 'transfer') === 'transfer'"><span>IBAN</span><strong>{{ company.iban || '—' }}</strong></div>
+        <div v-else><span>&nbsp;</span><strong>&nbsp;</strong></div>
         <div><span>Variabilný symbol</span><strong>{{ inv.variableSymbol || '—' }}</strong></div>
       </section>
 

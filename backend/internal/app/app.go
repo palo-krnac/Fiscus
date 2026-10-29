@@ -66,6 +66,40 @@ func normalizeCompany(c *store.Company) {
 	if c.DefaultDueDays == 0 {
 		c.DefaultDueDays = defaultDueDays
 	}
+	// merné jednotky: bez prázdnych a duplicít, v zadanom poradí
+	seen := map[string]bool{}
+	units := []string{}
+	for _, u := range c.Units {
+		u = strings.TrimSpace(u)
+		if u != "" && !seen[strings.ToLower(u)] {
+			seen[strings.ToLower(u)] = true
+			units = append(units, u)
+		}
+	}
+	if len(units) == 0 {
+		units = append(units, store.DefaultUnits...)
+	}
+	c.Units = units
+	formats := map[string]string{}
+	for k, def := range invoice.DefaultFormats {
+		f := strings.TrimSpace(c.NumberFormats[string(k)])
+		if f == "" {
+			f = def
+		}
+		formats[string(k)] = f
+	}
+	c.NumberFormats = formats
+}
+
+// NumberFormat vráti formát číselného radu firmy pre druh dokladu.
+func NumberFormat(c store.Company, k invoice.Kind) string {
+	if f := c.NumberFormats[string(k)]; f != "" {
+		return f
+	}
+	if f, ok := invoice.DefaultFormats[k]; ok {
+		return f
+	}
+	return invoice.DefaultFormats[invoice.KindInvoice]
 }
 
 func validateCompany(c store.Company) error {
@@ -94,6 +128,17 @@ func validateCompany(c store.Company) error {
 	}
 	if c.DefaultDueDays < 0 || c.DefaultDueDays > 365 {
 		add("defaultDueDays", "Splatnosť musí byť 0 až 365 dní")
+	}
+	for _, k := range []invoice.Kind{invoice.KindInvoice, invoice.KindCreditNote, invoice.KindProforma} {
+		if err := invoice.ValidateFormat(c.NumberFormats[string(k)]); err != nil {
+			add("numberFormats."+string(k), err.Error())
+		}
+	}
+	for _, u := range c.Units {
+		if len([]rune(u)) > 10 {
+			add("units", "Merná jednotka môže mať najviac 10 znakov: "+u)
+			break
+		}
 	}
 	if len(fe) > 0 {
 		return &invoice.ValidationError{Fields: fe}
@@ -194,12 +239,17 @@ func (a *App) Issue(ctx context.Context, companyID, id int64) (invoice.Invoice, 
 	if err := inv.Validate(); err != nil {
 		return inv, err
 	}
-	series := invoice.Series(inv.Kind)
-	seq, err := a.Store.NextSequence(ctx, companyID, series, inv.IssueDate.Year())
+	company, err := a.Store.GetCompany(ctx, companyID)
 	if err != nil {
 		return inv, err
 	}
-	if err := inv.Issue(invoice.FormatNumber(series, inv.IssueDate.Year(), seq)); err != nil {
+	year, month := inv.IssueDate.Year(), inv.IssueDate.Month()
+	seq, err := a.Store.NextSequence(ctx, companyID, invoice.SequenceKey(inv.Kind), year)
+	if err != nil {
+		return inv, err
+	}
+	number := invoice.FormatNumberWith(NumberFormat(company, inv.Kind), year, month, seq)
+	if err := inv.Issue(number); err != nil {
 		return inv, fmt.Errorf("vystavenie: %w", err)
 	}
 	return inv, a.Store.SaveInvoice(ctx, companyID, &inv)
