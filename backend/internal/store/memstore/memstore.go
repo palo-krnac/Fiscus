@@ -43,6 +43,7 @@ type Store struct {
 	settings  map[string]string
 	items     map[int64]catalog.Item
 	logos     map[int64]store.Logo
+	emails    []store.Email
 	users     map[int64]auth.User
 	members   map[memKey]auth.Role
 	sessions  map[string]auth.Session

@@ -5,15 +5,17 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import { api } from '../lib/api.js'
-import { session } from '../lib/session.js'
+import { can, session } from '../lib/session.js'
 import { formatAmount, formatDate, formatMoney, formatQuantity } from '../lib/format.js'
 import { payBySquare, qrSvg } from '../lib/payqr.js'
 import { countryName, paymentLabel, vatExemptionNote } from '../lib/codes.js'
 import CompanyLogo from '../components/CompanyLogo.vue'
+import SendMailDialog from '../components/SendMailDialog.vue'
 
 const props = defineProps({ id: String, quote: Boolean })
 const back = computed(() => `${props.quote ? '/ponuky' : '/faktury'}/${props.id}`)
 const print = () => window.print()
+const mailOpen = ref(false)
 // PDF vytvorí server (rovnaký súbor ide aj do prílohy e-mailu)
 const download = () => {
   window.location.href = api.pdfURL(session.companyId, props.quote ? 'quotes' : 'invoices', props.id)
@@ -68,8 +70,9 @@ const ids = (p) =>
     <nav class="toolbar">
       <Button icon="pi pi-arrow-left" label="Späť" text size="small" @click="router.push(back)" />
       <div class="spacer" />
-      <Button icon="pi pi-download" label="Stiahnuť PDF" severity="secondary" outlined size="small" :disabled="!inv" @click="download" />
-      <Button icon="pi pi-print" label="Tlačiť" size="small" :disabled="!inv" @click="print" />
+      <Button v-if="can('invoices.write')" icon="pi pi-envelope" label="E-mailom" aria-label="Poslať e-mailom" severity="secondary" text size="small" :disabled="!inv" @click="mailOpen = true" />
+      <Button icon="pi pi-download" label="Stiahnuť PDF" aria-label="Stiahnuť PDF" severity="secondary" outlined size="small" :disabled="!inv" @click="download" />
+      <Button icon="pi pi-print" label="Tlačiť" aria-label="Tlačiť" size="small" :disabled="!inv" @click="print" />
     </nav>
 
     <p v-if="error" class="error">{{ error }}</p>
@@ -231,6 +234,7 @@ const ids = (p) =>
         <p v-if="quote">Cenová ponuka nie je daňový doklad.</p>
       </footer>
     </article>
+    <SendMailDialog v-if="inv" v-model:visible="mailOpen" :kind="quote ? 'quotes' : 'invoices'" :id="id" />
   </div>
 </template>
 
@@ -540,6 +544,10 @@ td:last-child {
 @media (max-width: 860px) {
   .print-root {
     overflow-x: auto;
+  }
+  /* na mobile iba ikony, nech sa tlačidlá zmestia */
+  .toolbar :deep(.p-button-label) {
+    display: none;
   }
   .sheet {
     margin: 12px;

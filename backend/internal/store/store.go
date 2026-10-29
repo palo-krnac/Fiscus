@@ -111,6 +111,29 @@ type Logo struct {
 	Updated     time.Time
 }
 
+// Email je záznam odoslaného (alebo neúspešne odosielaného) e-mailu.
+type Email struct {
+	ID        int64     `json:"id"`
+	CompanyID int64     `json:"companyId"`
+	DocKind   string    `json:"docKind"` // invoice | quote | reminder | test
+	DocID     int64     `json:"docId"`
+	DocNumber string    `json:"docNumber"`
+	To        string    `json:"to"` // adresy oddelené čiarkou
+	Cc        string    `json:"cc"`
+	Subject   string    `json:"subject"`
+	File      string    `json:"file"` // názov prílohy
+	Sent      time.Time `json:"sent"`
+	User      string    `json:"user"`  // kto poslal; „automaticky“ pri pravidelnej faktúre
+	Error     string    `json:"error"` // prázdne = odoslané
+}
+
+// EmailFilter obmedzuje zoznam e-mailov.
+type EmailFilter struct {
+	Year    int    // 0 = všetky
+	DocKind string // "" = všetky
+	DocID   int64  // 0 = všetky (iba s DocKind)
+}
+
 // Store je úložisko.
 type Store interface {
 	ListCompanies(ctx context.Context) ([]Company, error)
@@ -134,6 +157,11 @@ type Store interface {
 	// v jednej firme → ErrDuplicate.
 	SaveItem(ctx context.Context, companyID int64, it *catalog.Item) error
 	DeleteItem(ctx context.Context, companyID, id int64) error
+
+	// AddEmail zapíše odoslaný e-mail (nastaví ID). ListEmails vráti
+	// najnovšie prvé.
+	AddEmail(ctx context.Context, companyID int64, e *Email) error
+	ListEmails(ctx context.Context, companyID int64, f EmailFilter) ([]Email, error)
 
 	// Logo firmy na dokladoch. GetLogo a DeleteLogo vrátia ErrNotFound, ak logo nie je.
 	GetLogo(ctx context.Context, companyID int64) (Logo, error)

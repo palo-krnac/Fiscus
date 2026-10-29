@@ -52,6 +52,7 @@ type Run struct {
 	Issued    bool         `json:"issued"`
 	Error     string       `json:"error,omitempty"` // prečo sa nevystavila (ostal koncept)
 	Manual    bool         `json:"manual,omitempty"`
+	Emailed   string       `json:"emailed,omitempty"` // komu bola faktúra poslaná e-mailom
 }
 
 // Template je šablóna pravidelnej faktúry.
@@ -72,6 +73,8 @@ type Template struct {
 	Generated int          `json:"generated"` // počet vytvorených faktúr celkovo
 	DueDays   int          `json:"dueDays"`   // 0 = podľa kontaktu alebo firmy
 	AutoIssue bool         `json:"autoIssue"`
+	// SendEmail: vystavenú faktúru hneď poslať odberateľovi e-mailom (iba s AutoIssue).
+	SendEmail bool `json:"sendEmail"`
 
 	Customer      invoice.Party         `json:"customer"`
 	ContactID     int64                 `json:"contactId"`

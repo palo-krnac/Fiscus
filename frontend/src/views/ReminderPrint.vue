@@ -4,11 +4,12 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import { api } from '../lib/api.js'
-import { session } from '../lib/session.js'
+import { can, session } from '../lib/session.js'
 import { formatAmount, formatDate, formatMoney } from '../lib/format.js'
 import { countryName } from '../lib/codes.js'
 import { introText, legalNotes, levelTitle } from '../lib/reminders.js'
 import CompanyLogo from '../components/CompanyLogo.vue'
+import SendMailDialog from '../components/SendMailDialog.vue'
 
 const props = defineProps({ id: String })
 const router = useRouter()
@@ -28,6 +29,7 @@ onMounted(async () => {
 })
 const addressLines = (p) => [p.street, [p.zip, p.city].filter(Boolean).join(' ')].filter(Boolean)
 const print = () => window.print()
+const mailOpen = ref(false)
 const download = () => {
   window.location.href = api.pdfURL(session.companyId, 'reminders', props.id)
 }
@@ -38,8 +40,9 @@ const download = () => {
     <nav class="toolbar">
       <Button icon="pi pi-arrow-left" label="Späť" text size="small" @click="router.push('/upomienky')" />
       <div class="spacer" />
-      <Button icon="pi pi-download" label="Stiahnuť PDF" severity="secondary" outlined size="small" :disabled="!r" @click="download" />
-      <Button icon="pi pi-print" label="Tlačiť" size="small" :disabled="!r" @click="print" />
+      <Button v-if="can('invoices.write')" icon="pi pi-envelope" label="E-mailom" aria-label="Poslať e-mailom" severity="secondary" text size="small" :disabled="!r" @click="mailOpen = true" />
+      <Button icon="pi pi-download" label="Stiahnuť PDF" aria-label="Stiahnuť PDF" severity="secondary" outlined size="small" :disabled="!r" @click="download" />
+      <Button icon="pi pi-print" label="Tlačiť" aria-label="Tlačiť" size="small" :disabled="!r" @click="print" />
     </nav>
     <p v-if="error" class="error">{{ error }}</p>
 
@@ -129,6 +132,7 @@ const download = () => {
         <strong>{{ company.name }}</strong>
       </div>
     </article>
+    <SendMailDialog v-if="r" v-model:visible="mailOpen" :kind="'reminders'" :id="id" />
   </div>
 </template>
 
@@ -342,6 +346,10 @@ td small {
 @media (max-width: 860px) {
   .print-root {
     overflow-x: auto;
+  }
+  /* na mobile iba ikony, nech sa tlačidlá zmestia */
+  .toolbar :deep(.p-button-label) {
+    display: none;
   }
   .sheet {
     margin: 12px;

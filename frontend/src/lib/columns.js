@@ -6,6 +6,7 @@ import { quoteStatusOf } from './quotes.js'
 import { intervalLabel, recurringStatusOf } from './recurring.js'
 import { levelShort } from './reminders.js'
 import { kindLabel } from './advance.js'
+import { docKindLabel, emailStatus } from './emails.js'
 
 const t = (header, value, width) => ({ header, value, width })
 const money = (header, value) => ({ header, value, type: 'money', width: 14 })
@@ -273,4 +274,17 @@ export const itemColumns = [
   t('Zadaná cena', (r) => (r.priceMode === 'gross' ? 's DPH' : 'bez DPH'), 10),
   t('Archivovaná', (r) => yes(r.archived), 10),
   t('Poznámka', (r) => r.note, 30),
+]
+
+export const emailColumns = [
+  t('Odoslaný', (r) => fmtTime.format(new Date(r.sent)), 18),
+  t('Doklad', (r) => docKindLabel(r.docKind), 16),
+  t('Číslo', (r) => r.docNumber, 14),
+  t('Komu', (r) => r.to, 32),
+  t('Kópia', (r) => r.cc, 24),
+  t('Predmet', (r) => r.subject, 40),
+  t('Príloha', (r) => r.file, 26),
+  t('Poslal', (r) => r.user, 18),
+  t('Stav', (r) => emailStatus(r).label, 12),
+  t('Chyba', (r) => r.error, 40),
 ]

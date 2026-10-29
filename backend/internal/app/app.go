@@ -19,6 +19,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/legal"
 	"github.com/palo-krnac/fiscus/backend/internal/license"
+	"github.com/palo-krnac/fiscus/backend/internal/mail"
 	"github.com/palo-krnac/fiscus/backend/internal/party"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 )
@@ -40,9 +41,11 @@ type App struct {
 	// Backups spravuje šifrované zálohy (nil = vypnuté, dôvod v BackupsOff).
 	Backups    *backup.Manager
 	BackupsOff string
-	lic        atomic.Pointer[license.License]
-	recurMu    sync.Mutex // jeden beh pravidelnej fakturácie naraz
-	legal      atomic.Pointer[legal.Params]
+	// Mailer posiela e-maily (nil = SMTP podľa nastavenia firmy).
+	Mailer  mail.Sender
+	lic     atomic.Pointer[license.License]
+	recurMu sync.Mutex // jeden beh pravidelnej fakturácie naraz
+	legal   atomic.Pointer[legal.Params]
 }
 
 // New vytvorí službu.

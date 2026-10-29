@@ -2,6 +2,7 @@
 
 export const actionLabels = {
   create: 'vytvorenie',
+  email: 'e-mail',
   update: 'zmena',
   delete: 'zmazanie',
   issue: 'vystavenie',

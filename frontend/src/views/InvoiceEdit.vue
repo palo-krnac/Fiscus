@@ -28,6 +28,7 @@ import { firstOfNextMonth, intervals, placeholders, recurringStatusOf } from '..
 import InputNumber from 'primevue/inputnumber'
 import { filterItems, lineFromItem } from '../lib/catalog.js'
 import { canCredit, canSettle, editorTitle, hasDeductions } from '../lib/advance.js'
+import SendMailDialog from '../components/SendMailDialog.vue'
 
 // Ten istý editor slúži aj cenovej ponuke (quote) a šablóne pravidelnej faktúry
 // (recurring): rovnaké položky a výpočet DPH, iné dátumy a akcie.
@@ -35,6 +36,13 @@ const props = defineProps({ id: String, quote: Boolean, recurring: Boolean })
 const isQuote = computed(() => props.quote)
 const isRecurring = computed(() => props.recurring)
 const base = computed(() => (isQuote.value ? '/ponuky' : isRecurring.value ? '/pravidelne' : '/faktury'))
+// e-mailom sa posiela iba vystavený doklad
+const mailOpen = ref(false)
+const canMail = computed(() => {
+  const v = inv.value
+  if (!v?.id || isRecurring.value || !can('invoices.write')) return false
+  return isQuote.value ? !!v.status && v.status !== 'draft' : v.status === 'issued' || v.status === 'paid'
+})
 const sample = ref(null) // ukážka textov ďalšej pravidelnej faktúry
 const router = useRouter()
 const route = useRoute()
@@ -114,6 +122,7 @@ async function load() {
             endDate: null,
             dueDays: 0,
             autoIssue: true,
+            sendEmail: false,
             customer: { name: '', street: '', city: '', zip: '', country: 'SK', ico: '', dic: '', icdph: '', email: '' },
             priceMode: 'net',
             reverseCharge: false,
@@ -661,6 +670,7 @@ const customerFields = reactive([
         size="small"
         @click="router.push(`${base}/${inv.id}/tlac`)"
       />
+      <Button v-if="canMail" icon="pi pi-envelope" label="E-mail" severity="secondary" text size="small" @click="mailOpen = true" />
       <template v-if="editable && !isRecurring">
         <Button label="Uložiť koncept" severity="secondary" outlined size="small" :loading="busy" @click="save()" v-tooltip.bottom="'Ctrl+S'" />
         <Button label="Vystaviť" icon="pi pi-check" size="small" :disabled="busy" @click="issue" />
@@ -839,6 +849,10 @@ const customerFields = reactive([
               <Checkbox :model-value="inv.autoIssue" binary :disabled="!editable" input-id="auto" @update:model-value="upd(inv, 'autoIssue')($event)" />
               <span>Vystaviť automaticky <small>(inak ostane koncept na kontrolu)</small></span>
             </label>
+            <label v-if="inv.autoIssue" class="check auto">
+              <Checkbox :model-value="!!inv.sendEmail" binary :disabled="!editable" input-id="send-email" @update:model-value="upd(inv, 'sendEmail')($event)" />
+              <span>Poslať e-mailom <small>(na e-mail odberateľa)</small></span>
+            </label>
           </div>
           <div class="fields pay-row">
             <label>
@@ -1000,7 +1014,7 @@ const customerFields = reactive([
               <tr v-for="h in inv.history" :key="h.invoiceId + h.period">
                 <td>{{ formatDate(h.period) }}{{ h.manual ? ' (ručne)' : '' }}</td>
                 <td><RouterLink v-if="h.invoiceId" :to="`/faktury/${h.invoiceId}`">{{ h.number || 'koncept' }}</RouterLink></td>
-                <td :class="{ warn: !h.issued && h.error }">{{ h.issued ? 'vystavená' : h.error || 'koncept' }}</td>
+                <td :class="{ warn: !!h.error }">{{ h.error || (h.issued ? (h.emailed ? `vystavená, poslaná na ${h.emailed}` : 'vystavená') : 'koncept') }}</td>
               </tr>
             </tbody>
           </table>
@@ -1091,6 +1105,7 @@ const customerFields = reactive([
         </dl>
       </aside>
     </div>
+    <SendMailDialog v-if="canMail" v-model:visible="mailOpen" :kind="isQuote ? 'quotes' : 'invoices'" :id="inv.id" />
   </div>
 </template>
 

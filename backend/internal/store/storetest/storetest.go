@@ -576,6 +576,57 @@ func Run(t *testing.T, newStore Factory) {
 		}
 	})
 
+	t.Run("odoslané e-maily", func(t *testing.T) {
+		s := newStore(t)
+		a, _ := s.CreateCompany(ctx, store.Company{Name: "Alfa"})
+		b, _ := s.CreateCompany(ctx, store.Company{Name: "Beta"})
+		at := time.Date(2026, 10, 29, 14, 0, 0, 0, time.UTC)
+		add := func(cid int64, e store.Email) store.Email {
+			t.Helper()
+			if err := s.AddEmail(ctx, cid, &e); err != nil || e.ID == 0 || e.CompanyID != cid {
+				t.Fatalf("AddEmail: %v %+v", err, e)
+			}
+			return e
+		}
+		first := add(a.ID, store.Email{DocKind: "invoice", DocID: 7, DocNumber: "FA20260007", To: "x@firma.sk, y@firma.sk", Cc: "z@firma.sk",
+			Subject: "Faktúra FA20260007", File: "Faktura-FA20260007.pdf", Sent: at, User: "Palo"})
+		add(a.ID, store.Email{DocKind: "invoice", DocID: 7, To: "x@firma.sk", Subject: "znova", Sent: at.Add(time.Hour), Error: "535 zlé heslo"})
+		add(a.ID, store.Email{DocKind: "quote", DocID: 7, To: "x@firma.sk", Subject: "ponuka", Sent: at.Add(-time.Hour)})
+		add(a.ID, store.Email{DocKind: "invoice", DocID: 1, To: "x@firma.sk", Subject: "minulý rok", Sent: at.AddDate(-1, 0, 0)})
+		add(b.ID, store.Email{DocKind: "invoice", DocID: 7, To: "cudzi@firma.sk", Subject: "iná firma", Sent: at})
+
+		tests := []struct {
+			name string
+			f    store.EmailFilter
+			want []string
+		}{
+			{"všetky, najnovšie prvé", store.EmailFilter{}, []string{"znova", "Faktúra FA20260007", "ponuka", "minulý rok"}},
+			{"rok", store.EmailFilter{Year: 2026}, []string{"znova", "Faktúra FA20260007", "ponuka"}},
+			{"doklad", store.EmailFilter{DocKind: "invoice", DocID: 7}, []string{"znova", "Faktúra FA20260007"}},
+			{"druh", store.EmailFilter{DocKind: "quote"}, []string{"ponuka"}},
+		}
+		for _, tt := range tests {
+			got, err := s.ListEmails(ctx, a.ID, tt.f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			subj := make([]string, len(got))
+			for i, e := range got {
+				subj[i] = e.Subject
+			}
+			if !reflect.DeepEqual(subj, tt.want) {
+				t.Errorf("%s: %v", tt.name, subj)
+			}
+		}
+		got, _ := s.ListEmails(ctx, a.ID, store.EmailFilter{DocKind: "invoice", DocID: 7})
+		if g := got[1]; !g.Sent.Equal(first.Sent) || g.To != first.To || g.Cc != first.Cc || g.File != first.File || g.User != "Palo" || g.DocNumber != "FA20260007" {
+			t.Errorf("záznam: %+v", g)
+		}
+		if got[0].Error != "535 zlé heslo" {
+			t.Errorf("chyba: %+v", got[0])
+		}
+	})
+
 	t.Run("logo firmy", func(t *testing.T) {
 		s := newStore(t)
 		a, _ := s.CreateCompany(ctx, store.Company{Name: "Alfa"})

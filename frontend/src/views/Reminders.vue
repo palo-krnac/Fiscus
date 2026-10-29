@@ -24,8 +24,10 @@ import { overdueColumns, reminderColumns } from '../lib/columns.js'
 import { interestModes, levelShort } from '../lib/reminders.js'
 import ExportButton from '../components/ExportButton.vue'
 import FormField from '../components/FormField.vue'
+import SendMailDialog from '../components/SendMailDialog.vue'
 
 const router = useRouter()
+const mailId = ref(null)
 const toast = useToast()
 const confirm = useConfirm()
 const canWrite = computed(() => can('invoices.write'))
@@ -294,6 +296,7 @@ function remove(r) {
           <td class="num hide-m">{{ formatAmount(r.interestTotal) }}</td>
           <td class="num strong">{{ formatAmount(r.total) }}</td>
           <td class="act">
+            <Button v-if="canWrite" icon="pi pi-envelope" text size="small" aria-label="Poslať e-mailom" v-tooltip.left="'Poslať e-mailom'" @click="mailId = r.id" />
             <Button icon="pi pi-print" text size="small" aria-label="Tlač" v-tooltip.left="'Tlač / PDF'" @click="router.push(`/upomienky/${r.id}/tlac`)" />
             <Button v-if="canWrite" icon="pi pi-trash" text severity="danger" size="small" aria-label="Zmazať" @click="remove(r)" />
           </td>
@@ -372,6 +375,7 @@ function remove(r) {
         <Button label="Vytvoriť a tlačiť" icon="pi pi-print" size="small" :loading="creating" :disabled="!dlg?.preview" @click="create" />
       </template>
     </Dialog>
+    <SendMailDialog :visible="!!mailId" kind="reminders" :id="mailId" @update:visible="(v) => !v && (mailId = null)" />
   </div>
 </template>
 
