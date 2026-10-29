@@ -1,6 +1,6 @@
 <script setup>
 // Prihlásenie do serverovej verzie.
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import InputText from 'primevue/inputtext'
 import Password from 'primevue/password'
 import Button from 'primevue/button'
@@ -11,23 +11,67 @@ const email = ref('')
 const password = ref('')
 const error = ref('')
 const busy = ref(false)
+// druhý krok: kód z aplikácie alebo záložný kód
+const ticket = ref('')
+const code = ref('')
+const useRecovery = ref(false)
+const codeEl = ref(null)
 
 async function submit() {
   error.value = ''
+  if (ticket.value) return submitCode()
   if (!email.value.trim() || !password.value) {
     error.value = 'Zadajte e-mail a heslo'
     return
   }
   busy.value = true
   try {
-    await api.login(email.value.trim(), password.value)
+    const res = await api.login(email.value.trim(), password.value)
     password.value = ''
+    if (res?.mfa) {
+      ticket.value = res.ticket
+      await nextTick()
+      codeEl.value?.$el?.focus()
+      return
+    }
     await loadSession()
   } catch (e) {
     error.value = e.message
   } finally {
     busy.value = false
   }
+}
+
+async function submitCode() {
+  if (!code.value.trim()) {
+    error.value = useRecovery.value ? 'Zadajte záložný kód' : 'Zadajte 6-miestny kód z aplikácie'
+    return
+  }
+  busy.value = true
+  try {
+    await api.loginMFA(ticket.value, code.value.trim())
+    await loadSession()
+  } catch (e) {
+    error.value = e.message
+    code.value = ''
+    if (e.status === 401 && /vypršalo/.test(e.message)) back()
+  } finally {
+    busy.value = false
+  }
+}
+
+function back() {
+  ticket.value = ''
+  code.value = ''
+  useRecovery.value = false
+}
+
+async function toggleRecovery() {
+  useRecovery.value = !useRecovery.value
+  code.value = ''
+  error.value = ''
+  await nextTick()
+  codeEl.value?.$el?.focus()
 }
 </script>
 
@@ -42,22 +86,50 @@ async function submit() {
         </svg>
         <div>
           <h1>Fiškus</h1>
-          <p>Prihlásenie</p>
+          <p>{{ ticket ? 'Dvojfázové overenie' : 'Prihlásenie' }}</p>
         </div>
       </div>
 
-      <label class="field">
-        <span>E-mail</span>
-        <InputText v-model="email" type="email" autocomplete="username" autofocus fluid />
-      </label>
-      <label class="field">
-        <span>Heslo</span>
-        <Password v-model="password" :feedback="false" toggle-mask autocomplete="current-password" fluid input-id="login-password" />
-      </label>
+      <template v-if="!ticket">
+        <label class="field">
+          <span>E-mail</span>
+          <InputText v-model="email" type="email" autocomplete="username" autofocus fluid />
+        </label>
+        <label class="field">
+          <span>Heslo</span>
+          <Password v-model="password" :feedback="false" toggle-mask autocomplete="current-password" fluid input-id="login-password" />
+        </label>
+      </template>
+      <template v-else>
+        <p class="hint">
+          {{ useRecovery
+            ? 'Zadajte jeden zo záložných kódov. Každý platí iba raz.'
+            : 'Otvorte v telefóne aplikáciu na overovanie a zadajte kód pre Fiškus.' }}
+        </p>
+        <label class="field">
+          <span>{{ useRecovery ? 'Záložný kód' : 'Kód z aplikácie' }}</span>
+          <InputText
+            ref="codeEl"
+            v-model="code"
+            :inputmode="useRecovery ? 'text' : 'numeric'"
+            autocomplete="one-time-code"
+            :maxlength="useRecovery ? 14 : 7"
+            :placeholder="useRecovery ? 'abcde-fghjk' : '123 456'"
+            class="code"
+            fluid
+          />
+        </label>
+      </template>
 
       <p v-if="error" class="error" role="alert"><i class="pi pi-exclamation-circle" /> {{ error }}</p>
 
-      <Button type="submit" label="Prihlásiť sa" icon="pi pi-sign-in" :loading="busy" fluid />
+      <Button type="submit" :label="ticket ? 'Overiť' : 'Prihlásiť sa'" :icon="ticket ? 'pi pi-check' : 'pi pi-sign-in'" :loading="busy" fluid />
+      <div v-if="ticket" class="alt">
+        <button type="button" class="link" @click="toggleRecovery">
+          {{ useRecovery ? 'Použiť kód z aplikácie' : 'Nemám telefón — použiť záložný kód' }}
+        </button>
+        <button type="button" class="link" @click="back">Späť</button>
+      </div>
     </form>
   </div>
 </template>
@@ -107,6 +179,34 @@ async function submit() {
 .field > span {
   font-size: var(--fs-sm);
   color: var(--ink-soft);
+}
+.hint {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--ink-soft);
+}
+.code {
+  font-size: var(--fs-lg);
+  letter-spacing: 0.08em;
+  font-variant-numeric: tabular-nums;
+}
+.alt {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.link {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: var(--fs-sm);
+  color: var(--blue);
+  cursor: pointer;
+  text-align: left;
+}
+.link:hover {
+  text-decoration: underline;
 }
 .error {
   margin: 0;

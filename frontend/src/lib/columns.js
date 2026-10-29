@@ -92,6 +92,7 @@ export const memberColumns = [
   t('E-mail', (r) => r.user.email, 28),
   t('Rola', (r) => roleLabel(r.role), 14),
   t('Aktívny', (r) => (r.user.active ? 'áno' : 'nie'), 8),
+  t('2FA', (r) => (r.user.twoFactor ? 'áno' : 'nie'), 6),
 ]
 
 export const companyColumns = [

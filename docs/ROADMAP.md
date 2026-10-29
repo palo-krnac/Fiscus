@@ -62,7 +62,8 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 
 ## Používatelia, práva a audit (pre účtovné kancelárie a poskytovateľov služieb)
 - [x] Používatelia a prihlasovanie v serverovom režime (heslo PBKDF2, relácia v HttpOnly cookie, limit pokusov, ochrana CSRF)
-- [ ] 2FA; desktop voliteľne PIN
+- [x] Dvojfázové overenie (TOTP z aplikácie v telefóne, 10 záložných kódov, ochrana proti zopakovaniu kódu; zrušenie správcom inštalácie pri strate telefónu)
+- [ ] Desktop voliteľne PIN; vynútenie 2FA pre všetkých používateľov kancelárie
 - [x] Roly pre každú firmu zvlášť: správca, účtovník, fakturant, zákazník (klient kancelárie), len čítanie
 - [x] Práva kontroluje backend pri každej požiadavke; rozhranie skrýva nepovolené akcie
 - [x] Audit všetkých zmien (kto, kedy, kanál, čo, pred/po), nemenný reťazec s odtlačkami; filter podľa firmy a kategórie

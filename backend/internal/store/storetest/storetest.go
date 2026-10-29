@@ -1031,6 +1031,17 @@ func Run(t *testing.T, newStore Factory) {
 		if g, _ := s.GetUser(ctx, peter.ID); g.Active || !g.SuperAdmin {
 			t.Fatal("úprava používateľa")
 		}
+		// dvojfázové overenie sa uloží celé a dá sa aj vypnúť
+		peter.MFA = auth.MFA{Enabled: true, Secret: "JBSWY3DPEHPK3PXP", LastStep: 42, Recovery: []string{"a", "b"}}
+		_ = s.UpdateUser(ctx, peter)
+		if g, _ := s.GetUserByEmail(ctx, "peter@x.sk"); !g.MFA.Enabled || g.MFA.Secret != "JBSWY3DPEHPK3PXP" || g.MFA.LastStep != 42 || len(g.MFA.Recovery) != 2 {
+			t.Fatalf("2FA: %+v", g.MFA)
+		}
+		peter.MFA = auth.MFA{}
+		_ = s.UpdateUser(ctx, peter)
+		if g, _ := s.GetUser(ctx, peter.ID); g.MFA.Enabled || g.MFA.Secret != "" || len(g.MFA.Recovery) != 0 {
+			t.Fatalf("vypnuté 2FA: %+v", g.MFA)
+		}
 		if l, _ := s.ListUsers(ctx); len(l) != 2 {
 			t.Fatal("zoznam používateľov")
 		}

@@ -1,5 +1,5 @@
 <script setup>
-// Prihlásený používateľ v hornej lište: rola vo firme, zmena hesla, odhlásenie.
+// Prihlásený používateľ v hornej lište: rola vo firme, zmena hesla, dvojfázové overenie, odhlásenie.
 import { computed, ref } from 'vue'
 import Menu from 'primevue/menu'
 import Dialog from 'primevue/dialog'
@@ -7,12 +7,14 @@ import Password from 'primevue/password'
 import Button from 'primevue/button'
 import { useToast } from 'primevue/usetoast'
 import { api } from '../lib/api.js'
+import MFADialog from './MFADialog.vue'
 import { codes } from '../lib/codes.js'
 import { session, currentRole, logout } from '../lib/session.js'
 
 const toast = useToast()
 const menu = ref()
 const pwOpen = ref(false)
+const mfaOpen = ref(false)
 const pw = ref({ current: '', next: '', again: '' })
 const pwError = ref('')
 const busy = ref(false)
@@ -34,6 +36,7 @@ const initials = computed(() =>
 
 const items = [
   { label: 'Zmeniť heslo', icon: 'pi pi-key', command: () => openPassword() },
+  { label: 'Dvojfázové overenie', icon: 'pi pi-shield', command: () => (mfaOpen.value = true) },
   { separator: true },
   { label: 'Odhlásiť sa', icon: 'pi pi-sign-out', command: () => logout() },
 ]
@@ -88,6 +91,7 @@ async function savePassword() {
         </div>
       </form>
     </Dialog>
+    <MFADialog v-model:visible="mfaOpen" />
   </div>
 </template>
 

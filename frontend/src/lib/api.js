@@ -101,6 +101,14 @@ export const api = {
   login: (email, password) => request('POST', '/api/auth/login', { email, password }),
   logout: () => request('POST', '/api/auth/logout'),
   changePassword: (current, password) => request('POST', '/api/auth/password', { current, password }),
+  // dvojfázové overenie: po hesle príde { mfa: true, ticket }, reláciu vytvorí až kód
+  loginMFA: (ticket, code) => request('POST', '/api/auth/mfa', { ticket, code }),
+  mfa: () => request('GET', '/api/me/mfa'),
+  mfaSetup: (password) => request('POST', '/api/me/mfa/setup', { password }),
+  mfaEnable: (code) => request('POST', '/api/me/mfa/enable', { code }),
+  mfaDisable: (password, code) => request('POST', '/api/me/mfa/disable', { password, code }),
+  mfaRecovery: (password) => request('POST', '/api/me/mfa/recovery', { password }),
+  mfaReset: (uid) => request('POST', `/api/users/${uid}/mfa-reset`),
 
   members: (cid) => request('GET', `/api/companies/${cid}/users`),
   addMember: (cid, m) => request('POST', `/api/companies/${cid}/users`, m),

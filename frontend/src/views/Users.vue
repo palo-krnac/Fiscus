@@ -29,11 +29,12 @@ const busy = ref(false)
 
 const cid = computed(() => session.companyId)
 const meId = computed(() => session.me?.user?.id)
+const isInstallAdmin = computed(() => !!session.me?.user?.superAdmin)
 const server = computed(() => session.caps.mode === 'server')
 const search = ref('')
 const visible = computed(() => {
   const terms = searchTerms(search.value)
-  return members.value.filter((m) => matches(terms, [m.user.name, m.user.email, roleInfo(m.role)?.label]))
+  return members.value.filter((m) => matches(terms, [m.user.name, m.user.email, roleInfo(m.role)?.label, m.user.twoFactor ? '2fa' : '']))
 })
 const roleInfo = (code) => codes.roles?.find((r) => r.code === code)
 
@@ -81,6 +82,26 @@ async function changeRole(m, role) {
     m.role = old
     toast.add({ severity: 'error', summary: 'Rolu nemožno zmeniť', detail: e.message, life: 5000 })
   }
+}
+
+function resetMFA(m) {
+  confirm.require({
+    header: 'Zrušiť dvojfázové overenie',
+    message: `${m.user.name} sa potom prihlási iba heslom a overenie si môže zapnúť znova. Použite to, keď stratil telefón aj záložné kódy. Overte si najprv, že o to žiada naozaj on.`,
+    acceptLabel: 'Zrušiť overenie',
+    rejectLabel: 'Späť',
+    acceptProps: { severity: 'danger', size: 'small' },
+    rejectProps: { severity: 'secondary', text: true, size: 'small' },
+    accept: async () => {
+      try {
+        await api.mfaReset(m.user.id)
+        toast.add({ severity: 'success', summary: 'Dvojfázové overenie zrušené', detail: m.user.name, life: 3000 })
+        await load()
+      } catch (e) {
+        toast.add({ severity: 'error', summary: 'Nedá sa zrušiť', detail: e.message, life: 5000 })
+      }
+    },
+  })
 }
 
 function remove(m) {
@@ -143,6 +164,7 @@ function remove(m) {
             <span v-if="m.user.id === meId" class="badge">vy</span>
             <span v-if="m.user.superAdmin" class="badge">správca inštalácie</span>
             <span v-if="!m.user.active" class="badge off">zablokovaný</span>
+            <span v-if="m.user.twoFactor" class="badge mfa" v-tooltip.top="'Prihlasuje sa heslom a kódom z telefónu'"><i class="pi pi-shield" /> 2FA</span>
           </td>
           <td class="email" data-label="E-mail">{{ m.user.email }}</td>
           <td class="role-col" data-label="Rola">
@@ -165,6 +187,17 @@ function remove(m) {
             </Select>
           </td>
           <td class="act">
+            <Button
+              v-if="isInstallAdmin && m.user.twoFactor && m.user.id !== meId"
+              icon="pi pi-shield"
+              severity="secondary"
+              text
+              rounded
+              size="small"
+              :aria-label="`Zrušiť dvojfázové overenie – ${m.user.name}`"
+              v-tooltip.left="'Zrušiť dvojfázové overenie (stratený telefón)'"
+              @click="resetMFA(m)"
+            />
             <Button
               v-if="m.user.id !== meId"
               icon="pi pi-times"
@@ -297,6 +330,13 @@ function remove(m) {
   border-radius: 8px;
   background: var(--blue-wash);
   color: var(--blue-deep);
+}
+.badge.mfa {
+  color: var(--tone-paid);
+  background: var(--tone-paid-bg);
+}
+.badge.mfa .pi {
+  font-size: 0.7em;
 }
 .badge.off {
   background: var(--tone-overdue-bg);
