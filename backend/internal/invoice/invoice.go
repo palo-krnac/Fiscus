@@ -109,8 +109,10 @@ type Invoice struct {
 	// PaymentMethod je spôsob úhrady (číselník PaymentMethods).
 	PaymentMethod PaymentMethod `json:"paymentMethod"`
 	Note          string        `json:"note"`
-	Lines         []Line        `json:"lines"`
-	Summary       vat.Summary   `json:"summary"`
+	// Correction sú údaje dobropisu (opravnej faktúry); nil pri bežnej faktúre.
+	Correction *Correction `json:"correction,omitempty"`
+	Lines      []Line      `json:"lines"`
+	Summary    vat.Summary `json:"summary"`
 }
 
 // Recalculate prepočíta sumy položiek a rekapituláciu DPH.
@@ -183,9 +185,9 @@ func (inv *Invoice) Validate() error {
 		if l.Quantity.IsZero() {
 			add(fmt.Sprintf("lines[%d].quantity", i), "Množstvo nesmie byť nula")
 		}
-		if !inv.ReverseCharge && !inv.NonVATPayer && !inv.DeliveryDate.IsZero() && !l.Rate.ValidOn(inv.DeliveryDate.String()) {
+		if rateDate := inv.RateDate(); !inv.ReverseCharge && !inv.NonVATPayer && !rateDate.IsZero() && !l.Rate.ValidOn(rateDate.String()) {
 			add(fmt.Sprintf("lines[%d].vatRate", i),
-				fmt.Sprintf("Sadzba %d %% neplatí k dátumu dodania %s", l.Rate, inv.DeliveryDate.Display()))
+				fmt.Sprintf("Sadzba %d %% neplatí k dátumu dodania %s", l.Rate, rateDate.Display()))
 		}
 	}
 	if inv.PaymentMethod != "" && !inv.PaymentMethod.Valid() {
@@ -197,6 +199,7 @@ func (inv *Invoice) Validate() error {
 	if inv.DeliveryDate.IsZero() {
 		add("deliveryDate", "Zadajte dátum dodania")
 	}
+	errs = append(errs, inv.validateCorrection()...)
 	if inv.DueDate.IsZero() {
 		add("dueDate", "Zadajte dátum splatnosti")
 	} else if !inv.IssueDate.IsZero() && inv.DueDate.Before(inv.IssueDate) {
@@ -257,7 +260,8 @@ func (inv *Invoice) Cancel() error {
 
 // Overdue vráti true, ak je faktúra po splatnosti k danému dňu.
 func (inv *Invoice) Overdue(today Date) bool {
-	return inv.Status == StatusIssued && today.After(inv.DueDate)
+	// dobropis je záväzok voči odberateľovi, nie pohľadávka po splatnosti
+	return inv.Status == StatusIssued && inv.Kind != KindCreditNote && today.After(inv.DueDate)
 }
 
 // SequenceKey je kľúč číselného radu podľa druhu dokladu. Je nezávislý

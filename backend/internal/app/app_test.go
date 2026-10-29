@@ -306,3 +306,61 @@ func TestCompanyCodeLists(t *testing.T) {
 		t.Error("príliš dlhá jednotka mala byť odmietnutá")
 	}
 }
+
+func TestCreditNoteFlow(t *testing.T) {
+	a, c := newApp(t, edition.Desktop)
+	d, _ := a.SaveDraft(ctx, c.ID, validDraft()) // 10 × 40 € + 23 % = 492 €
+	orig, _ := a.Issue(ctx, c.ID, d.ID)
+
+	// ku konceptu sa dobropis nedá
+	d2, _ := a.SaveDraft(ctx, c.ID, validDraft())
+	if _, err := a.CreateCreditNote(ctx, c.ID, d2.ID); err == nil {
+		t.Fatal("dobropis ku konceptu")
+	}
+	// dobropis sa nedá založiť cez bežné uloženie
+	fake := validDraft()
+	fake.Kind = invoice.KindCreditNote
+	if _, err := a.SaveDraft(ctx, c.ID, fake); err == nil {
+		t.Fatal("dobropis bez pôvodnej faktúry")
+	}
+
+	cn, err := a.CreateCreditNote(ctx, c.ID, orig.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cn.Kind != invoice.KindCreditNote || cn.Summary.Total.String() != "-492.00" {
+		t.Fatalf("%+v", cn.Summary)
+	}
+	// čiastočný dobropis: 4 hodiny, dôvod; klient nemôže zmeniť pôvodnú faktúru
+	cn.Lines[0].Quantity = m.MustParse("-4")
+	cn.Correction.Reason = "Zľava za oneskorenie"
+	cn.Correction.OriginalID = 999
+	cn.Kind = invoice.KindInvoice
+	cn, err = a.SaveDraft(ctx, c.ID, cn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cn.Kind != invoice.KindCreditNote || cn.Correction.OriginalID != orig.ID || cn.Correction.Reason != "Zľava za oneskorenie" {
+		t.Fatalf("druh alebo odkaz sa zmenil: %s %+v", cn.Kind, cn.Correction)
+	}
+	issued, err := a.Issue(ctx, c.ID, cn.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if issued.Number != "DB20260001" || issued.Summary.Total.String() != "-196.80" {
+		t.Fatalf("%s %s", issued.Number, issued.Summary.Total)
+	}
+
+	// druhý dobropis nad zostatok neprejde
+	cn2, _ := a.CreateCreditNote(ctx, c.ID, orig.ID) // celých -492, zostáva 295.20
+	cn2.Correction.Reason = "Vrátenie"
+	cn2, _ = a.SaveDraft(ctx, c.ID, cn2)
+	if _, err := a.Issue(ctx, c.ID, cn2.ID); err == nil {
+		t.Fatal("dobropisy presiahli sumu faktúry")
+	}
+	cn2.Lines[0].Quantity = m.MustParse("-6") // 6 × 40 × 1.23 = 295.20 presne zostatok
+	cn2, _ = a.SaveDraft(ctx, c.ID, cn2)
+	if _, err := a.Issue(ctx, c.ID, cn2.ID); err != nil {
+		t.Fatalf("dobropis na zostatok: %v", err)
+	}
+}

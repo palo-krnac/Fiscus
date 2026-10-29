@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
@@ -47,11 +47,32 @@ const editable = computed(() => !inv.value?.status || inv.value.status === 'draf
 // neplatiteľ DPH: faktúra bez DPH (o režime rozhoduje backend podľa nastavení firmy)
 const nonVat = computed(() => !!inv.value?.nonVatPayer)
 const status = computed(() => (inv.value ? statusOf(inv.value) : null))
+const isCredit = computed(() => inv.value?.kind === 'credit_note')
 const title = computed(() => {
   if (!inv.value) return ''
-  if (inv.value.number) return `Faktúra ${inv.value.number}`
+  const doc = isCredit.value ? 'Dobropis' : 'Faktúra'
+  if (inv.value.number) return `${doc} ${inv.value.number}`
+  if (isCredit.value) return 'Koncept dobropisu'
   return inv.value.id ? 'Koncept faktúry' : 'Nová faktúra'
 })
+
+function setReason(v) {
+  inv.value.correction = { ...inv.value.correction, reason: v }
+  changed()
+}
+
+async function createCreditNote() {
+  busy.value = true
+  try {
+    const cn = await api.creditNote(session.companyId, inv.value.id)
+    toast.add({ severity: 'info', summary: 'Koncept dobropisu', detail: 'Upravte množstvá (záporné) a zadajte dôvod opravy.', life: 5000 })
+    router.push(`/faktury/${cn.id}`)
+  } catch (e) {
+    applyError(e)
+  } finally {
+    busy.value = false
+  }
+}
 
 async function load() {
   try {
@@ -88,6 +109,19 @@ async function load() {
   }
 }
 onMounted(load)
+// prechod medzi dokladmi v tom istom editore (napr. faktúra → nový dobropis)
+watch(
+  () => props.id,
+  (id, prev) => {
+    if (id === prev || (!prev && id && inv.value && String(inv.value.id) === id)) return
+    loadError.value = null
+    dirty.value = false
+    showErrors.value = false
+    errors.value = {}
+    previewErrors.value = {}
+    load()
+  },
+)
 
 // ---- živý prepočet cez API (jediný zdroj pravdy pre výpočet DPH) ----
 function payload() {
@@ -399,14 +433,49 @@ const customerFields = reactive([
         <Button label="Uložiť koncept" severity="secondary" outlined size="small" :loading="busy" @click="save()" v-tooltip.bottom="'Ctrl+S'" />
         <Button label="Vystaviť" icon="pi pi-check" size="small" :disabled="busy" @click="issue" />
       </template>
-      <template v-else-if="inv.status === 'issued'">
-        <Button label="Stornovať" severity="secondary" text size="small" @click="cancelInvoice" />
-        <Button label="Označiť ako uhradenú" icon="pi pi-wallet" size="small" :loading="busy" @click="markPaid" />
+      <template v-else-if="inv.status === 'issued' || inv.status === 'paid'">
+        <Button
+          v-if="!isCredit"
+          label="Dobropis"
+          icon="pi pi-undo"
+          severity="secondary"
+          outlined
+          size="small"
+          :disabled="busy"
+          v-tooltip.bottom="'Opraviť alebo zrušiť faktúru dobropisom'"
+          @click="createCreditNote"
+        />
+        <template v-if="inv.status === 'issued'">
+          <Button label="Stornovať" severity="secondary" text size="small" @click="cancelInvoice" />
+          <Button :label="isCredit ? 'Označiť ako vrátené' : 'Označiť ako uhradenú'" icon="pi pi-wallet" size="small" :loading="busy" @click="markPaid" />
+        </template>
       </template>
     </header>
 
     <div class="body">
       <div class="form">
+        <fieldset v-if="isCredit && inv.correction" class="block correction">
+          <legend>Oprava faktúry</legend>
+          <p class="corrects">
+            Opravuje faktúru
+            <RouterLink :to="`/faktury/${inv.correction.originalId}`">{{ inv.correction.originalNumber }}</RouterLink>
+            zo dňa {{ formatDate(inv.correction.originalIssueDate) }}.
+            Sadzby DPH sa použijú k pôvodnému dátumu dodania {{ formatDate(inv.correction.originalDeliveryDate) }}.
+          </p>
+          <label class="reason">
+            <span>Dôvod opravy</span>
+            <InputText
+              :model-value="inv.correction.reason"
+              :disabled="!editable"
+              :invalid="!!fieldError('correction.reason')"
+              placeholder="Napr. vrátenie tovaru, zľava, chybná cena"
+              size="small"
+              @update:model-value="setReason"
+            />
+            <small v-if="fieldError('correction.reason')" class="err">{{ fieldError('correction.reason') }}</small>
+          </label>
+          <p v-if="editable" class="hint-neg">Pri čiastočnom dobropise upravte záporné množstvá alebo odstráňte položky, ktoré sa neopravujú.</p>
+        </fieldset>
         <fieldset class="block">
           <legend>
             Odberateľ
@@ -584,7 +653,7 @@ const customerFields = reactive([
           </tfoot>
         </table>
         <div class="payable">
-          <span>K úhrade</span>
+          <span>{{ isCredit ? 'Suma dobropisu' : 'K úhrade' }}</span>
           <strong class="num">{{ formatMoney(inv.summary.total, inv.currency) }}</strong>
         </div>
         <p v-if="nonVat" class="note-rc">Nie som platiteľ DPH. Faktúra je bez DPH.</p>
@@ -800,6 +869,25 @@ legend {
 }
 .add {
   margin-top: 4px;
+}
+.correction .corrects {
+  margin: 0 0 8px;
+  color: var(--ink-soft);
+}
+.reason {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-width: 560px;
+}
+.reason span {
+  font-size: var(--fs-sm);
+  color: var(--ink-soft);
+}
+.hint-neg {
+  margin: 8px 0 0;
+  font-size: var(--fs-sm);
+  color: var(--ink-faint);
 }
 .line-errors {
   margin: 6px 0 0;

@@ -193,7 +193,55 @@ func (a *App) SaveDraft(ctx context.Context, companyID int64, inv invoice.Invoic
 		if !old.Editable() {
 			return inv, invoice.ErrLocked
 		}
+		// druh dokladu a odkaz na pôvodnú faktúru sa nedajú zmeniť z klienta,
+		// meniť sa dá iba dôvod opravy
+		inv.Kind = old.Kind
+		if old.Correction != nil {
+			c := *old.Correction
+			if inv.Correction != nil {
+				c.Reason = strings.TrimSpace(inv.Correction.Reason)
+			}
+			inv.Correction = &c
+		} else {
+			inv.Correction = nil
+		}
+	} else if inv.Kind == invoice.KindCreditNote || inv.Correction != nil {
+		return inv, &invoice.ValidationError{Fields: []invoice.FieldError{{Field: "kind",
+			Message: "Dobropis sa vytvára z vystavenej faktúry tlačidlom Dobropis"}}}
 	}
+	return a.saveDraft(ctx, companyID, inv)
+}
+
+// CreateCreditNote vytvorí koncept dobropisu k vystavenej faktúre.
+func (a *App) CreateCreditNote(ctx context.Context, companyID, originalID int64) (invoice.Invoice, error) {
+	orig, err := a.Store.GetInvoice(ctx, companyID, originalID)
+	if err != nil {
+		return orig, err
+	}
+	cn, err := invoice.NewCreditNote(orig, a.Today())
+	if err != nil {
+		return cn, &invoice.ValidationError{Fields: []invoice.FieldError{{Field: "kind", Message: err.Error()}}}
+	}
+	return a.saveDraft(ctx, companyID, cn)
+}
+
+// creditNotesOf vráti dobropisy k danej faktúre.
+func (a *App) creditNotesOf(ctx context.Context, companyID, originalID int64) ([]invoice.Invoice, error) {
+	all, err := a.Store.ListInvoices(ctx, companyID, store.InvoiceFilter{})
+	if err != nil {
+		return nil, err
+	}
+	var out []invoice.Invoice
+	for _, x := range all {
+		if x.Kind == invoice.KindCreditNote && x.Correction != nil && x.Correction.OriginalID == originalID &&
+			x.Status != invoice.StatusDraft {
+			out = append(out, x)
+		}
+	}
+	return out, nil
+}
+
+func (a *App) saveDraft(ctx context.Context, companyID int64, inv invoice.Invoice) (invoice.Invoice, error) {
 	if err := a.applyCompany(ctx, companyID, &inv); err != nil {
 		return inv, err
 	}
@@ -238,6 +286,19 @@ func (a *App) Issue(ctx context.Context, companyID, id int64) (invoice.Invoice, 
 	}
 	if err := inv.Validate(); err != nil {
 		return inv, err
+	}
+	if inv.Kind == invoice.KindCreditNote {
+		orig, err := a.Store.GetInvoice(ctx, companyID, inv.Correction.OriginalID)
+		if err != nil {
+			return inv, err
+		}
+		issued, err := a.creditNotesOf(ctx, companyID, orig.ID)
+		if err != nil {
+			return inv, err
+		}
+		if err := invoice.CheckCreditLimit(orig, issued, inv); err != nil {
+			return inv, err
+		}
 	}
 	company, err := a.Store.GetCompany(ctx, companyID)
 	if err != nil {
