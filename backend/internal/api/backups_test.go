@@ -2,11 +2,14 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/palo-krnac/fiscus/backend/internal/app"
 	"github.com/palo-krnac/fiscus/backend/internal/backup"
 	"github.com/palo-krnac/fiscus/backend/internal/edition"
 )
@@ -49,6 +52,17 @@ func TestBackupsAPI(t *testing.T) {
 	e.do("GET", "/api/backups/neexistuje.fbk", nil, 404, nil)
 	e.do("POST", "/api/backups/"+it.Name+"/restore", nil, 204, nil)
 	e.do("DELETE", "/api/backups/restore", nil, 204, nil)
+
+	// nastavenie v programe: heslo sa uloží do súboru, do odpovede nie
+	e.do("PUT", "/api/backups/settings", map[string]string{"password": "x"}, 409, nil) // bez BackupSetup
+	dir := t.TempDir()
+	e.app.BackupSetup = &app.BackupSetup{ConfigPath: filepath.Join(dir, "fiskus-zalohy.json"), DefaultDir: filepath.Join(dir, "zalohy")}
+	e.do("PUT", "/api/backups/settings", map[string]string{"password": "kratke"}, 422, nil)
+	var raw map[string]any
+	e.do("PUT", "/api/backups/settings", map[string]string{"password": "tajné dlhé heslo"}, 200, &raw)
+	if b, _ := json.Marshal(raw); strings.Contains(string(b), "tajné") || raw["settings"].(map[string]any)["passwordSet"] != true {
+		t.Fatalf("odpoveď: %s", b)
+	}
 
 	// bežný používateľ zálohy nevidí
 	e.do("POST", "/api/companies/"+itoa(e.cid)+"/users", map[string]string{"email": "u@firma.sk", "name": "U", "password": "heslo-12345", "role": "accountant"}, 201, nil)

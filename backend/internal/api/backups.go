@@ -68,3 +68,17 @@ func (s *Server) cancelRestore(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// setBackupSettings: PUT /api/backups/settings — priečinok a heslo záloh.
+func (s *Server) setBackupSettings(w http.ResponseWriter, r *http.Request) {
+	var req app.BackupSettingsRequest
+	if !decode(w, r, &req) {
+		return
+	}
+	st, err := s.App.SetBackupSettings(r.Context(), req)
+	if err != nil {
+		failBackup(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, st)
+}

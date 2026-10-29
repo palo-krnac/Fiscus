@@ -84,6 +84,7 @@ func (s *Server) Handler() http.Handler {
 	open("GET /api/backups", s.backupStatus)
 	open("POST /api/backups", s.createBackup)
 	open("DELETE /api/backups/restore", s.cancelRestore)
+	open("PUT /api/backups/settings", s.setBackupSettings)
 	open("GET /api/backups/{name}", s.downloadBackup)
 	open("POST /api/backups/{name}/restore", s.restoreBackup)
 	open("GET /api/me/keys", s.listKeys)

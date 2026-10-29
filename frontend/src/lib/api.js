@@ -93,6 +93,7 @@ export const api = {
   createBackup: () => request('POST', '/api/backups'),
   restoreBackup: (name) => request('POST', `/api/backups/${encodeURIComponent(name)}/restore`),
   cancelRestore: () => request('DELETE', '/api/backups/restore'),
+  setBackupSettings: (s) => request('PUT', '/api/backups/settings', s),
   backupURL: (name) => `/api/backups/${encodeURIComponent(name)}`,
   createKey: (name, readOnly) => request('POST', '/api/me/keys', { name, readOnly }),
   revokeKey: (id) => request('DELETE', `/api/me/keys/${id}`),

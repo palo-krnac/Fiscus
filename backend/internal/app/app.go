@@ -44,6 +44,8 @@ type App struct {
 	// Backups spravuje šifrované zálohy (nil = vypnuté, dôvod v BackupsOff).
 	Backups    *backup.Manager
 	BackupsOff string
+	// BackupSetup umožní nastaviť priečinok a heslo záloh v programe (nil = iba parametrami).
+	BackupSetup *BackupSetup
 	// ECBURL je adresa kurzov ECB ("" = nesťahovať); FetchRates ju v testoch nahradí.
 	ECBURL     string
 	FetchRates func(ctx context.Context, url string) ([]fx.Rate, error)

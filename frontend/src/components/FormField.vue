@@ -34,6 +34,12 @@ defineProps({
 .ff :deep(.p-textarea) {
   width: 100%;
 }
+/* na mobile (mriežka s 2 stĺpcami) je široké pole cez celý riadok */
+@media (max-width: 760px) {
+  .ff.wide {
+    grid-column: 1 / -1;
+  }
+}
 .ff-error {
   color: var(--tone-overdue);
   font-size: var(--fs-sm);
