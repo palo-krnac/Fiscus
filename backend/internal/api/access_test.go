@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/palo-krnac/fiscus/backend/internal/edition"
+	"github.com/palo-krnac/fiscus/backend/internal/license/licensetest"
 )
 
 func TestCSRFHeaderRequired(t *testing.T) {
@@ -149,4 +150,44 @@ func TestRolesInAPI(t *testing.T) {
 		}
 	}
 	f.do("POST", inv, draftJSON, 403, nil)
+}
+
+func TestFreeServerAndLicense(t *testing.T) {
+	e := setupLicensed(t, edition.Server, false)
+	var caps struct {
+		Plan         string `json:"plan"`
+		MultiCompany bool   `json:"multiCompany"`
+		License      any    `json:"license"`
+	}
+	e.do("GET", "/api/capabilities", nil, 200, &caps)
+	if caps.Plan != "free" || caps.MultiCompany {
+		t.Fatalf("bez licencie: %+v", caps)
+	}
+	e.do("POST", "/api/companies", `{"name":"Druhá"}`, 403, nil)
+	e.do("POST", "/api/license", `{"key":"FISKUS1.nieco.zle"}`, 422, nil)
+
+	// licencia od iného vydavateľa sa neprijme
+	_, foreign := licensetest.Unlimited()
+	e.do("POST", "/api/license", map[string]string{"key": foreign}, 422, nil)
+
+	// pravá licencia (kľúč, ktorému program verí)
+	keys, key := licensetest.Unlimited()
+	e.app.LicenseKeys = keys
+	e.do("POST", "/api/license", map[string]string{"key": key}, 200, &caps)
+	if caps.Plan != "multi" || !caps.MultiCompany {
+		t.Fatalf("s licenciou: %+v", caps)
+	}
+	e.do("POST", "/api/companies", `{"name":"Druhá"}`, 201, nil)
+
+	// verejné capabilities neprezradia držiteľa licencie
+	caps.License = nil
+	e.anonymous().do("GET", "/api/capabilities", nil, 200, &caps)
+	if caps.License != nil {
+		t.Fatal("verejné capabilities obsahujú licenciu")
+	}
+	e.anonymous().do("GET", "/api/license", nil, 401, nil)
+	e.do("GET", "/api/license", nil, 200, &caps)
+	if caps.License == nil {
+		t.Fatal("správca nevidí licenciu")
+	}
 }

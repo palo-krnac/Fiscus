@@ -48,6 +48,8 @@ func (s *Server) Handler() http.Handler {
 	open("POST /api/auth/logout", s.logout)
 	open("POST /api/auth/password", s.changePassword)
 	open("GET /api/me", s.me)
+	open("GET /api/license", s.getLicense)
+	open("POST /api/license", s.setLicense)
 	open("GET /api/registry/{ico}", s.lookupICO)
 
 	open("GET /api/companies", s.listCompanies)
@@ -177,8 +179,11 @@ func (s *Server) company(w http.ResponseWriter, r *http.Request) (int64, bool) {
 
 // ---- handlery ----
 
+// capabilities je verejné (aj pred prihlásením), preto bez údajov o držiteľovi licencie.
 func (s *Server) capabilities(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, s.App.Caps)
+	c := s.App.Capabilities()
+	c.License = nil
+	writeJSON(w, http.StatusOK, c)
 }
 
 func (s *Server) listCompanies(w http.ResponseWriter, r *http.Request) {
