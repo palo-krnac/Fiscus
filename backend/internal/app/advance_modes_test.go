@@ -250,3 +250,36 @@ func TestAdvanceForeignCurrency(t *testing.T) {
 		t.Fatalf("DPH: %+v", ret.Rows)
 	}
 }
+
+func TestAdvanceReverseGoods(t *testing.T) {
+	a, c := newApp(t, edition.Desktop)
+	d := proformaDraft()
+	d.Customer = invoice.Party{Name: "Mobil s.r.o.", Country: "SK", ICO: "31322832", ICDPH: "SK2020372640"}
+	d.Lines = []invoice.Line{{Description: "Mobilné telefóny", Quantity: m.MustParse("50"), Unit: "ks", UnitPrice: m.MustParse("120"),
+		Rate: vat.Rate23, Reverse: invoice.RCPhones}} // 6 000 € s prenesením
+	p := issuePaidProforma(t, a, c.ID, d, "1500") // čiastočná záloha
+	r, err := a.Store.GetInvoice(ctx, c.ID, p.Advance.ReceiptID)
+	if err != nil || len(r.Lines) != 1 || r.Lines[0].A2 == nil || r.Lines[0].A2.Quantity.String() != "50.00" || r.Lines[0].A2.Unit != "ks" {
+		t.Fatalf("doklad k platbe: %+v %v", r.Lines, err)
+	}
+	f, err := a.SettleAdvance(ctx, c.ID, p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f, err = a.Issue(ctx, c.ID, f.ID); err != nil {
+		t.Fatal(err)
+	}
+	ret, _, _ := a.VATReturn(ctx, c.ID, "2026-10", m.Zero)
+	type row struct{ base, qty string }
+	got := map[string]row{}
+	for _, l := range ret.KV.A2 {
+		q := ""
+		if l.Quantity != nil {
+			q = l.Quantity.String() + " " + l.Unit
+		}
+		got[l.Number] = row{l.Base.String(), q}
+	}
+	if len(got) != 2 || got[r.Number] != (row{"1500.00", "50.00 ks"}) || got[f.Number] != (row{"4500.00", ""}) {
+		t.Fatalf("A.2: %+v", got)
+	}
+}

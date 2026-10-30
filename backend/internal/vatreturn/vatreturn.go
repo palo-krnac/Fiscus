@@ -476,14 +476,23 @@ func (ret *Return) addSV(c invoice.Party, code int, value money.Dec) {
 // addA2 pridá položky faktúry s tuzemským prenesením do A.2: plodiny a kovy
 // po 4-miestnych kódoch, telefóny a obvody po druhu, stavebné práce spolu.
 // Písm. a) až e) sa v kontrolnom výkaze dodávateľa neuvádzajú.
+//
+// Záloha: doklad k platbe uvádza dátum platby a pri tovare celé množstvo
+// dodávky (iba prvý doklad); vyúčtovanie uvádza iba zostatok základu a
+// množstvo vynechá, ak ho uviedol doklad k platbe; pri 100 % zálohe sa
+// riadok neuvádza vôbec.
 func (ret *Return) addA2(inv invoice.Invoice, when invoice.Date, warn func(doc, kind string, id int64, msg string)) {
 	type group struct {
-		line  KVA2
-		goods bool
-		qty   money.Dec
+		line    KVA2
+		goods   bool
+		qty     money.Dec
+		hasQty  bool
+		unit    string
+		skipQty bool
 	}
 	var order []string
 	groups := map[string]*group{}
+	receipt := inv.Kind == invoice.KindAdvanceReceipt
 	for _, l := range inv.Lines {
 		k := l.Reverse
 		if !k.Reported() {
@@ -493,32 +502,52 @@ func (ret *Return) addA2(inv invoice.Invoice, when invoice.Date, warn func(doc, 
 		if k.NeedsCode() {
 			code = invoice.CommodityCode(l.Commodity)
 		}
-		key := string(k) + "/" + code
+		key := invoice.A2Key(k, l.Commodity)
 		g, ok := groups[key]
 		if !ok {
 			g = &group{goods: k.Goods(), line: KVA2{Partner: noSpaces(strings.ToUpper(inv.Customer.ICDPH)), Name: inv.Customer.Name,
 				Number: noSpaces(inv.Number), Date: when, Code: code, Goods: k.KVKind(), Label: k.Label(), ID: inv.ID}}
-			if g.goods {
-				g.line.Unit = invoice.KVUnit(l.Unit)
-			}
 			groups[key] = g
 			order = append(order, key)
 		}
 		g.line.Base = g.line.Base.Add(l.Amount)
-		if g.goods {
-			if u := invoice.KVUnit(l.Unit); u != g.line.Unit {
-				warn(inv.Number, "invoice", inv.ID, fmt.Sprintf("%s: rôzne merné jednotky (%s, %s) — v A.2 prepočítajte množstvo na jednu", k.Label(), g.line.Unit, u))
-				continue
-			}
-			g.qty = g.qty.Add(l.Quantity)
+		if !g.goods {
+			continue
 		}
+		qty, unit := l.Quantity, invoice.KVUnit(l.Unit)
+		switch {
+		case l.A2 != nil:
+			qty, unit = l.A2.Quantity, l.A2.Unit
+		case receipt:
+			continue // ďalší doklad k platbe: množstvo už bolo uvedené
+		}
+		if g.hasQty && unit != g.unit {
+			warn(inv.Number, "invoice", inv.ID, fmt.Sprintf("%s: rôzne merné jednotky (%s, %s) — v A.2 prepočítajte množstvo na jednu", k.Label(), g.unit, unit))
+			continue
+		}
+		g.qty, g.unit, g.hasQty = g.qty.Add(qty), unit, true
 	}
 	// vyúčtovanie zálohy: odpočíta sa základ z dokladov k platbám (v A.2 sú
-	// samostatne); záloha s prenesením je iba pri službách (jeden druh)
+	// samostatne) po rovnakých riadkoch; staršie údaje bez rozpisu odpočítajú
+	// prenesenie zo sadzieb (iba služby — jeden druh)
 	var deducted money.Dec
-	if inv.Advance != nil {
+	if inv.Advance != nil && !receipt {
 		for _, d := range inv.Advance.Deductions {
 			if d.Untaxed != "" {
+				continue
+			}
+			if len(d.A2) > 0 {
+				for _, part := range d.A2 {
+					g, ok := groups[invoice.A2Key(part.Reverse, part.Commodity)]
+					if !ok {
+						warn(inv.Number, "invoice", inv.ID, "Záloha s prenesením ("+part.Reverse.Label()+") nemá vo vyúčtovaní rovnakú položku — A.2 skontrolujte")
+						continue
+					}
+					g.line.Base = g.line.Base.Sub(part.Base)
+					if part.Quantity {
+						g.skipQty = true
+					}
+				}
 				continue
 			}
 			for _, r := range d.Rates {
@@ -532,17 +561,17 @@ func (ret *Return) addA2(inv invoice.Invoice, when invoice.Date, warn func(doc, 
 		g := groups[key]
 		if !g.goods && !deducted.IsZero() {
 			g.line.Base, deducted = g.line.Base.Sub(deducted), money.Zero
-			if g.line.Base.IsZero() {
-				continue // celé plnenie pokryla záloha
-			}
+		}
+		if inv.Advance != nil && !receipt && len(inv.Advance.Deductions) > 0 && g.line.Base.Sign() <= 0 {
+			continue // celé plnenie pokryla záloha
 		}
 		if inv.Foreign() {
 			g.line.Base = g.line.Base.DivCents(inv.FXRate)
 		}
 		g.line.Base = g.line.Base.RoundCents()
-		if g.goods {
+		if g.goods && g.hasQty && !g.skipQty {
 			q := g.qty.RoundCents()
-			g.line.Quantity = &q
+			g.line.Quantity, g.line.Unit = &q, g.unit
 		}
 		ret.KV.A2 = append(ret.KV.A2, g.line)
 	}

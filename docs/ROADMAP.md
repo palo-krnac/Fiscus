@@ -35,7 +35,7 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] Zálohy s tuzemským prenesením pri službách (stavebné práce): doklad k platbe bez DPH v KV A.2, vyúčtovanie iba so zostatkom
 - [x] Zálohy: dodanie do 15 dní od platby bez dokladu k platbe — kontrola lehoty a obdobia DPH pri vyúčtovaní, dodatočný doklad k platbe jedným klikom
 - [x] Zálohy v cudzej mene: doklad k platbe v mene zálohy kurzom ECB ku dňu prijatia platby, vyúčtovanie v eurách = celá dodávka kurzom vyúčtovania mínus zálohy v eurách presne podľa dokladov k platbám
-- [ ] Zálohy s prenesením pri tovare (množstvo v A.2)
+- [x] Zálohy s tuzemským prenesením pri tovare (telefóny, obvody, plodiny, kovy): doklad k prvej platbe uvedie v A.2 celé množstvo dodávky, ďalšie doklady a vyúčtovanie iba základ; viac druhov prenesenia na jednej zálohe
 - [x] Cenová ponuka: prijatie alebo odmietnutie zákazníkom cez tajný odkaz (server s verejnou adresou), číslo objednávky zákazníka do faktúry, upozornenie e-mailom
 - [x] Prijaté faktúry: evidencia z rekapitulácie DPH dodávateľa, odpočet / bez odpočtu, prenesenie, kontrola duplicít, úhrady
 - [x] AI vyťaženie prijatých faktúr z PDF a fotky (Claude API; AI iba navrhuje, používateľ skontroluje)

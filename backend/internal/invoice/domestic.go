@@ -190,7 +190,7 @@ func (inv *Invoice) validateDomesticRC() []FieldError {
 				add(f("commodity"), "Zadajte kód colného sadzobníka (kapitola 72 alebo 7301, 7308, 7314)")
 			}
 		}
-		if l.Reverse.Goods() && KVUnit(l.Unit) == "" {
+		if l.Reverse.Goods() && KVUnit(l.Unit) == "" && inv.Kind != KindAdvanceReceipt {
 			add(f("unit"), "Pre kontrolný výkaz použite jednotku t, kg, m alebo ks")
 		}
 		if _, ok := first[l.Reverse]; !ok {
@@ -198,8 +198,10 @@ func (inv *Invoice) validateDomesticRC() []FieldError {
 		}
 		base[l.Reverse] = base[l.Reverse].Add(l.Quantity.Mul(l.UnitPrice).RoundCents())
 	}
-	if inv.Kind == KindCreditNote {
-		return errs // dobropis opravuje pôvodnú faktúru — hranica sa neposudzuje
+	if inv.Kind == KindCreditNote || inv.Kind == KindAdvanceReceipt {
+		// dobropis opravuje pôvodnú faktúru, doklad k platbe je časť celej
+		// dodávky — hranica 5 000 € sa posudzuje na celom plnení (záloha)
+		return errs
 	}
 	for _, info := range DomesticRCs {
 		k := info.Code

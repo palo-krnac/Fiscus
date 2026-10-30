@@ -87,7 +87,7 @@ func Run(t *testing.T, newStore Factory) {
 		}
 		// položka s tuzemským prenesením a kódom colného sadzobníka
 		got.Lines = append(got.Lines, invoice.Line{Description: "Oceľ", Quantity: m.MustParse("2"), Unit: "t", UnitPrice: m.MustParse("2600"),
-			Rate: vat.Rate23, Reverse: invoice.RCMetals, Commodity: "7308"})
+			Rate: vat.Rate23, Reverse: invoice.RCMetals, Commodity: "7308", A2: &invoice.A2Qty{Quantity: m.MustParse("12.5"), Unit: "t"}})
 		if err := got.Recalculate(); err != nil {
 			t.Fatal(err)
 		}
@@ -95,7 +95,8 @@ func Run(t *testing.T, newStore Factory) {
 			t.Fatal(err)
 		}
 		rc, _ := s.GetInvoice(ctx, c.ID, inv.ID)
-		if l := rc.Lines[len(rc.Lines)-1]; l.Reverse != invoice.RCMetals || l.Commodity != "7308" || !rc.Summary.Rates[len(rc.Summary.Rates)-1].Reverse {
+		if l := rc.Lines[len(rc.Lines)-1]; l.Reverse != invoice.RCMetals || l.Commodity != "7308" || !rc.Summary.Rates[len(rc.Summary.Rates)-1].Reverse ||
+			l.A2 == nil || l.A2.Quantity.String() != "12.50" || l.A2.Unit != "t" || rc.Lines[0].A2 != nil {
 			t.Fatalf("prenesenie pri položke sa neuložilo: %+v %+v", l, rc.Summary.Rates)
 		}
 		got = rc

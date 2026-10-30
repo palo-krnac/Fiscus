@@ -438,3 +438,102 @@ func TestDomesticReverseA2(t *testing.T) {
 		t.Error("A2 má byť za A1")
 	}
 }
+
+// TestA2AdvanceGoods: záloha s prenesením pri tovare (§ 69 ods. 12 písm. g, h).
+// Doklad k prvej platbe uvedie dátum platby a celé množstvo dodávky, ďalší
+// doklad iba základ, vyúčtovanie zostatok bez množstva; pri 100 % zálohe sa
+// vyúčtovanie do A.2 neuvádza.
+func TestA2AdvanceGoods(t *testing.T) {
+	cust := invoice.Party{Name: "Telefóny s.r.o.", ICDPH: "SK2020372640", Country: "SK"}
+	proforma := invoice.Invoice{ID: 1, Kind: invoice.KindProforma, Number: "ZF1", Status: invoice.StatusIssued, Customer: cust,
+		IssueDate: d("2026-10-01"), DeliveryDate: d("2026-10-01"), DueDate: d("2026-10-10"),
+		Lines: []invoice.Line{
+			{Description: "Mobilné telefóny", Quantity: m("100"), Unit: "ks", UnitPrice: m("80"), Rate: 23, Reverse: invoice.RCPhones},
+			{Description: "Betonárska oceľ", Quantity: m("10"), Unit: "t", UnitPrice: m("600"), Rate: 23, Reverse: invoice.RCMetals, Commodity: "7214 20"},
+		}}
+	if err := proforma.Recalculate(); err != nil || proforma.Summary.Total.String() != "14000.00" {
+		t.Fatalf("záloha: %+v %v", proforma.Summary, err)
+	}
+	if mode, why := proforma.AdvanceMode(); mode != invoice.AdvanceReceipt {
+		t.Fatalf("spôsob: %s %s", mode, why)
+	}
+	receipt := func(id int64, num, paid, amount string) invoice.Invoice {
+		r, err := invoice.NewAdvanceReceipt(proforma, m(amount), d(paid), d(paid))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := r.Validate(); err != nil {
+			t.Fatalf("doklad k platbe %s nie je platný: %v", num, err)
+		}
+		r.ID, r.Number, r.Status = id, num, invoice.StatusIssued
+		proforma.Payments = append(proforma.Payments, invoice.Payment{Date: d(paid), Amount: m(amount)})
+		proforma.AddReceipt(invoice.ReceiptRef{ID: id, Number: num, Date: d(paid), Amount: m(amount)})
+		return r
+	}
+	r1 := receipt(2, "ZD1", "2026-10-05", "7000")
+	r2 := receipt(3, "ZD2", "2026-10-20", "3500")
+
+	type row struct{ number, date, code, goods, base, qty, unit string }
+	rows := func(ret Return) []row {
+		var out []row
+		for _, a := range ret.KV.A2 {
+			q := ""
+			if a.Quantity != nil {
+				q = a.Quantity.String()
+			}
+			out = append(out, row{a.Number, a.Date.String(), a.Code, a.Goods, a.Base.String(), q, a.Unit})
+		}
+		return out
+	}
+	check := func(name string, got, want []row) {
+		t.Helper()
+		if len(got) != len(want) {
+			t.Fatalf("%s: %+v", name, got)
+		}
+		for i := range want {
+			if got[i] != want[i] {
+				t.Errorf("%s[%d] = %+v, chcem %+v", name, i, got[i], want[i])
+			}
+		}
+	}
+	oct, _ := ParsePeriod("2026-10")
+	ret := Compute(Input{Period: oct, Invoices: []invoice.Invoice{proforma, r1, r2}})
+	check("október", rows(ret), []row{
+		{"ZD1", "2026-10-05", "", "MT", "4000.00", "100.00", "ks"}, // 8 000 / 14 000 z 7 000
+		{"ZD1", "2026-10-05", "7214", "", "3000.00", "10.00", "t"},
+		{"ZD2", "2026-10-20", "", "MT", "2000.00", "", ""}, // množstvo už uviedol prvý doklad
+		{"ZD2", "2026-10-20", "7214", "", "1500.00", "", ""},
+	})
+	if !ret.Rows["r01"].IsZero() || !ret.Rows["r03"].IsZero() || len(ret.Warnings) != 0 {
+		t.Fatalf("doklady s prenesením nejdú do daňových riadkov: %v %+v", ret.Rows, ret.Warnings)
+	}
+
+	// vyúčtovanie v novembri: zostatok 3 500 € bez množstva
+	proforma.Status = invoice.StatusIssued
+	final, err := invoice.NewFinalInvoice(proforma, []invoice.Invoice{r1, r2}, d("2026-11-03"), 14)
+	if err != nil {
+		t.Fatal(err)
+	}
+	final.ID, final.Number, final.Status = 4, "FA4", invoice.StatusIssued
+	if final.AmountDue().String() != "3500.00" {
+		t.Fatalf("doplatok: %s", final.AmountDue())
+	}
+	nov, _ := ParsePeriod("2026-11")
+	ret = Compute(Input{Period: nov, Invoices: []invoice.Invoice{final}})
+	check("vyúčtovanie", rows(ret), []row{
+		{"FA4", "2026-11-03", "", "MT", "2000.00", "", ""},
+		{"FA4", "2026-11-03", "7214", "", "1500.00", "", ""},
+	})
+
+	// 100 % záloha: vyúčtovanie sa do A.2 neuvádza
+	r3 := receipt(5, "ZD3", "2026-10-25", "3500")
+	final, err = invoice.NewFinalInvoice(proforma, []invoice.Invoice{r1, r2, r3}, d("2026-11-03"), 14)
+	if err != nil {
+		t.Fatal(err)
+	}
+	final.ID, final.Number, final.Status = 6, "FA6", invoice.StatusIssued
+	ret = Compute(Input{Period: nov, Invoices: []invoice.Invoice{final}})
+	if len(ret.KV.A2) != 0 {
+		t.Fatalf("100 %% záloha: %+v", ret.KV.A2)
+	}
+}
