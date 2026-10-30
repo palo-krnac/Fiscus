@@ -59,3 +59,30 @@ export function dueDate(value) {
   }
   return `${year}-${String(month).padStart(2, '0')}-25`
 }
+
+/** Druhy priznania (zhodné s backendom). */
+export const returnKinds = [
+  { label: 'Riadne', value: 'riadne' },
+  { label: 'Opravné', value: 'opravne' },
+  { label: 'Dodatočné', value: 'dodatocne' },
+]
+
+/**
+ * Navrhnutý druh priznania: bez podania riadne; po podaní pred lehotou
+ * opravné, po lehote dodatočné (lehota z backendu, ISO dátumy).
+ */
+export function suggestKind(filings, deadlineISO, todayISO) {
+  if (!filings?.length) return 'riadne'
+  return todayISO > deadlineISO ? 'dodatocne' : 'opravne'
+}
+
+/** Posledná známa povinnosť (+) / nadmerný odpočet (−) z posledného podania ('' bez podania). */
+export const lastKnownOf = (filings) => (filings?.length ? String(filings[filings.length - 1].result) : '')
+
+/** Parametre dotazu pre druh priznania (prázdne hodnoty vynechá query()). */
+export function kindParams(s) {
+  if (!s || s.druh === 'riadne') return {}
+  const num = (v) => String(v ?? '').replace(/\s/g, '').replace(',', '.')
+  if (s.druh === 'opravne') return { druh: 'opravne' }
+  return { druh: 'dodatocne', zistene: s.zistene || '', posledne: num(s.posledne), r37: num(s.r37) }
+}

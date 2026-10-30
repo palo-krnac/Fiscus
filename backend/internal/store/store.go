@@ -9,16 +9,17 @@ package store
 import (
 	"context"
 	"errors"
+	"time"
+
+	"github.com/palo-krnac/fiscus/backend/internal/asset"
+	"github.com/palo-krnac/fiscus/backend/internal/audit"
+	"github.com/palo-krnac/fiscus/backend/internal/auth"
 	"github.com/palo-krnac/fiscus/backend/internal/bank"
 	"github.com/palo-krnac/fiscus/backend/internal/cash"
 	"github.com/palo-krnac/fiscus/backend/internal/catalog"
 	"github.com/palo-krnac/fiscus/backend/internal/fx"
-	"github.com/palo-krnac/fiscus/backend/internal/journal"
-	"time"
-
-	"github.com/palo-krnac/fiscus/backend/internal/audit"
-	"github.com/palo-krnac/fiscus/backend/internal/auth"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
+	"github.com/palo-krnac/fiscus/backend/internal/journal"
 	"github.com/palo-krnac/fiscus/backend/internal/purchase"
 	"github.com/palo-krnac/fiscus/backend/internal/quote"
 	"github.com/palo-krnac/fiscus/backend/internal/recurring"
@@ -249,6 +250,13 @@ type Store interface {
 	GetQuote(ctx context.Context, companyID, id int64) (quote.Quote, error)
 	// SaveQuote vloží (ID == 0) alebo prepíše ponuku. Nastaví ID.
 	SaveQuote(ctx context.Context, companyID int64, q *quote.Quote) error
+
+	// ListAssets vráti dlhodobý majetok firmy podľa dátumu zaradenia.
+	ListAssets(ctx context.Context, companyID int64) ([]asset.Asset, error)
+	GetAsset(ctx context.Context, companyID, id int64) (asset.Asset, error)
+	// SaveAsset vloží (ID == 0) alebo prepíše položku majetku. Nastaví ID.
+	SaveAsset(ctx context.Context, companyID int64, a *asset.Asset) error
+	DeleteAsset(ctx context.Context, companyID, id int64) error
 
 	// ListRecurring vráti šablóny pravidelnej fakturácie firmy zoradené podľa ID.
 	ListRecurring(ctx context.Context, companyID int64) ([]recurring.Template, error)

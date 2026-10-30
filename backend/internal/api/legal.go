@@ -1,8 +1,10 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 
+	"github.com/palo-krnac/fiscus/backend/internal/app"
 	"github.com/palo-krnac/fiscus/backend/internal/legal"
 )
 
@@ -33,4 +35,19 @@ func (s *Server) resetLegal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// updateECBRates: POST /api/legal/ecb — doplní sadzby ECB zo servera ECB.
+func (s *Server) updateECBRates(w http.ResponseWriter, r *http.Request) {
+	out, err := s.App.UpdateECBRates(r.Context())
+	switch {
+	case errors.Is(err, app.ErrECBRatesOff):
+		writeErr(w, http.StatusConflict, err.Error(), nil)
+	case errors.Is(err, app.ErrForbidden), errors.Is(err, app.ErrReadOnly):
+		fail(w, err)
+	case err != nil:
+		writeErr(w, http.StatusBadGateway, err.Error(), nil)
+	default:
+		writeJSON(w, http.StatusOK, out)
+	}
 }

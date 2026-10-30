@@ -10,6 +10,7 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/palo-krnac/fiscus/backend/internal/asset"
 	"github.com/palo-krnac/fiscus/backend/internal/audit"
 	"github.com/palo-krnac/fiscus/backend/internal/auth"
 	"github.com/palo-krnac/fiscus/backend/internal/bank"
@@ -40,6 +41,7 @@ type Store struct {
 	journal   map[int64]map[string]store.JournalOverride // firma → zdroj → rozpis
 	cashDocs  map[int64]cash.Document
 	quotes    map[int64]quote.Quote
+	assets    map[int64]asset.Asset
 	recurring map[int64]recurring.Template
 	reminders map[int64]reminder.Reminder
 	settings  map[string]string

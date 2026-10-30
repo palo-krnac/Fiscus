@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { auditColumns, contactColumns, invoiceColumns, purchaseColumns, quoteColumns, recurringColumns, reminderColumns, overdueColumns, ecbColumns, vatPeriodColumns, itemColumns, rateColumns } from './columns.js'
+import { auditColumns, contactColumns, invoiceColumns, purchaseColumns, quoteColumns, recurringColumns, reminderColumns, overdueColumns, ecbColumns, vatPeriodColumns, itemColumns, rateColumns, assetColumns } from './columns.js'
 import { toCSV } from './export.js'
 
 const inv = {
@@ -48,5 +48,15 @@ describe('stĺpce exportov', () => {
         expect(() => c.value({ summary: {}, customer: {}, supplier: {}, user: {}, time: '2026-10-29T10:00:00Z' })).not.toThrow()
       }
     }
+  })
+  it('register majetku', () => {
+    const a = { number: 'M004', name: 'Počítač', kind: 'tangible', group: 1, period: 4, acquired: '2023-11-20', cost: '1890.00', share: 100,
+      opening: '1208.33', residual: '0', disposed: '2026-03-31', disposal: 'liquidation',
+      thisYear: { year: 2026, claimed: '0', disposal: '1208.33' } }
+    const csv = toCSV(assetColumns, [a]).slice(1).split('\r\n')
+    const head = csv[0].split(';')
+    const col = (h) => csv[1].split(';')[head.indexOf(h)]
+    expect([col('Skupina / doba'), col('ZC vyradeného (výdavok)'), col('Dôvod vyradenia'), col('Stav'), col('Vyradený')])
+      .toEqual(['sk. 1 – 4 r.', '1208,33', 'Likvidácia', 'vyradený', '31.3.2026'])
   })
 })

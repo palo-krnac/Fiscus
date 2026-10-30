@@ -27,7 +27,7 @@ import {
 } from '../lib/format.js'
 import { fiskusGridTheme, skGridLocale } from '../lib/grid.js'
 import { contactFromCustomer, customerFromContact, dueDaysFor, filterContacts } from '../lib/contacts.js'
-import { quoteActions, quoteStatusOf, validDays as quoteValidDays } from '../lib/quotes.js'
+import { quoteActions, quoteStatusOf, shareInfo, validDays as quoteValidDays } from '../lib/quotes.js'
 import { firstOfNextMonth, intervals, placeholders, recurringStatusOf } from '../lib/recurring.js'
 import InputNumber from 'primevue/inputnumber'
 import { filterItems, itemFromLine, lineFromItem, sameNameItem } from '../lib/catalog.js'
@@ -748,6 +748,26 @@ async function quoteStep(action, summary) {
   }
 }
 
+async function copyShare() {
+  try {
+    await navigator.clipboard.writeText(inv.value.share.url)
+    toast.add({ severity: 'success', summary: 'Odkaz skopírovaný', life: 2000 })
+  } catch {
+    toast.add({ severity: 'warn', summary: 'Odkaz označte a skopírujte ručne', life: 3000 })
+  }
+}
+async function unshare() {
+  busy.value = true
+  try {
+    inv.value = await api.unshareQuote(session.companyId, inv.value.id)
+    toast.add({ severity: 'success', summary: 'Odkaz zrušený — zákazník ho už neotvorí', life: 3000 })
+  } catch (e) {
+    applyError(e)
+  } finally {
+    busy.value = false
+  }
+}
+
 async function copyQuote() {
   busy.value = true
   try {
@@ -1444,6 +1464,25 @@ const customerFields = reactive([
             <dd><RouterLink :to="`/faktury/${inv.invoiceId}`">{{ inv.invoiceNumber || 'koncept' }}</RouterLink></dd>
           </template>
         </dl>
+        <section v-if="isQuote && inv.number" class="share" aria-label="Odkaz pre zákazníka">
+          <h3>Odkaz pre zákazníka</h3>
+          <template v-if="inv.share?.url">
+            <div class="share-url">
+              <InputText :model-value="inv.share.url" readonly size="small" aria-label="Odkaz na ponuku" @focus="$event.target.select()" />
+              <Button icon="pi pi-copy" severity="secondary" outlined size="small" aria-label="Kopírovať odkaz" v-tooltip.bottom="'Kopírovať odkaz'" @click="copyShare" />
+            </div>
+            <p class="muted">{{ shareInfo(inv.share).viewed }}</p>
+            <p v-if="inv.share.response" class="share-resp" :class="{ ok: inv.share.response.accepted }">
+              {{ shareInfo(inv.share).response }}<template v-if="inv.share.response.order"><br />{{ shareInfo(inv.share).order }}</template>
+              <template v-if="inv.share.response.note"><br /><em>„{{ inv.share.response.note }}“</em></template>
+            </p>
+            <Button v-if="canWrite" label="Zrušiť odkaz" severity="secondary" text size="small" @click="unshare" />
+          </template>
+          <template v-else-if="canWrite && ['issued', 'accepted', 'rejected'].includes(inv.status)">
+            <p class="muted">Zákazník si ponuku otvorí bez prihlásenia a prijme ju (aj s číslom objednávky) alebo odmietne.</p>
+            <Button label="Vytvoriť odkaz" icon="pi pi-link" severity="secondary" outlined size="small" :loading="busy" @click="quoteStep('share', 'Odkaz vytvorený')" />
+          </template>
+        </section>
         <p v-if="isQuote" class="note-rc">Ponuka nie je daňový doklad, nezapočíta sa do DPH.</p>
         <dl v-else-if="inv.number" class="pay-info">
           <dt>Variabilný symbol</dt>
@@ -2059,6 +2098,35 @@ legend {
   border-left: 3px solid var(--blue);
   font-size: var(--fs-sm);
   color: var(--ink-soft);
+}
+.share {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--rule);
+}
+.share h3 {
+  font-size: var(--fs-md);
+  margin: 0 0 6px;
+}
+.share p {
+  margin: 4px 0;
+  font-size: var(--fs-sm);
+}
+.share-url {
+  display: flex;
+  gap: 4px;
+}
+.share-url :deep(input) {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-sm);
+}
+.share-resp {
+  color: var(--ink);
+}
+.share-resp.ok {
+  color: var(--tone-paid);
+  font-weight: 600;
 }
 .advances p {
   margin: 0;

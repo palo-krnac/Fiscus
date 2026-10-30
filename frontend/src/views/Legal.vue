@@ -47,6 +47,25 @@ const toAPI = (f) => ({
   flatFee: String(f.flatFee ?? 0),
 })
 
+// sadzba ECB zo servera ECB (program ju sťahuje aj sám, keď má internet)
+const fetchingECB = ref(false)
+async function fetchECB() {
+  fetchingECB.value = true
+  try {
+    const res = await api.updateECBRates()
+    await load()
+    toast.add(
+      res.added.length
+        ? { severity: 'success', summary: `Doplnené zmeny sadzby: ${res.added.length}`, detail: `Platí ${String(res.latest.rate).replace('.', ',')} % od ${formatDate(res.latest.from)}.`, life: 5000 }
+        : { severity: 'info', summary: 'Sadzby ECB sú aktuálne', life: 3000 },
+    )
+  } catch (e) {
+    toast.add({ severity: 'error', summary: 'Sadzbu ECB sa nepodarilo načítať', detail: e.message, life: 7000 })
+  } finally {
+    fetchingECB.value = false
+  }
+}
+
 async function load() {
   form.value = toForm(await api.legal())
   dirty.value = false
@@ -188,9 +207,12 @@ function reset() {
             <InputText v-model="search" placeholder="Hľadať dátum alebo sadzbu" size="small" aria-label="Hľadať sadzbu ECB" />
           </IconField>
           <ExportButton name="Sadzby ECB" :columns="ecbColumns" :rows="ecbExport" />
+          <Button label="Načítať z ECB" icon="pi pi-cloud-download" severity="secondary" outlined size="small" :loading="fetchingECB" :disabled="dirty"
+            v-tooltip.bottom="dirty ? 'Najprv uložte alebo zahoďte zmeny' : 'Doplní nové zmeny sadzby zo servera ECB (ručne zadané dni ostanú)'" @click="fetchECB" />
         </div>
         <p class="hint">
           Sadzba hlavných refinančných operácií ECB od daného dňa. Pre úrok z omeškania sa použije sadzba platná k prvému dňu omeškania.
+          Keď má program internet, nové zmeny doplní sám zo servera ECB.
           <template v-if="latestECB">Posledná zmena: {{ formatDate(latestECB.from) }} — {{ String(latestECB.rate).replace('.', ',') }} %.</template>
         </p>
         <small v-if="errors.ecb" class="err">{{ errors.ecb }}</small>

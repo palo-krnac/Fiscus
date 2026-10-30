@@ -6,6 +6,7 @@ import { quoteStatusOf } from './quotes.js'
 import { intervalLabel, recurringStatusOf } from './recurring.js'
 import { levelShort } from './reminders.js'
 import { kindLabel } from './advance.js'
+import { assetStatus, disposalOptions, periodLabel } from './assets.js'
 import { docKindLabel, emailStatus } from './emails.js'
 import { eurBalance, eurSummary, isForeignCurrency, purchaseEUR, sourceLabel } from './fx.js'
 
@@ -146,7 +147,7 @@ export const kvColumns = [
   money('Základ', (r) => r.base ?? r.baseDiff),
   money('Daň', (r) => r.vat ?? r.vatDiff),
   { header: 'Sadzba %', value: (r) => r.rate, type: 'number', width: 8 },
-  money('Odpočítaná daň', (r) => r.deducted),
+  money('Odpočítaná daň', (r) => (r.section === 'C.2' ? r.deductedDiff : r.deducted)),
   t('Prenesenie – plnenie', (r) => r.label, 22),
   t('Kód SCS', (r) => r.code, 8),
   t('Druh tovaru', (r) => r.goods, 8),
@@ -343,6 +344,26 @@ export const itemColumns = [
   money('Cena s DPH', (r) => r.priceGross),
   t('Zadaná cena', (r) => (r.priceMode === 'gross' ? 's DPH' : 'bez DPH'), 10),
   t('Archivovaná', (r) => yes(r.archived), 10),
+  t('Poznámka', (r) => r.note, 30),
+]
+
+// Register majetku za rok (riadky z /assets?year=); stav sa ráta k roku riadku.
+export const assetColumns = [
+  t('Inventárne číslo', (r) => r.number, 12),
+  t('Názov', (r) => r.name, 32),
+  t('Druh', (r) => (r.kind === 'intangible' ? 'nehmotný' : 'hmotný'), 10),
+  t('Skupina / doba', (r) => periodLabel(r), 16),
+  date('Zaradený', (r) => r.acquired),
+  money('Vstupná cena', (r) => r.cost),
+  { header: 'Podiel na podnikaní (%)', value: (r) => r.share, type: 'number', width: 10 },
+  money('ZC na začiatku roka', (r) => r.opening),
+  money('Odpis v roku', (r) => r.thisYear?.claimed),
+  money('ZC vyradeného (výdavok)', (r) => r.thisYear?.disposal),
+  money('ZC na konci roka', (r) => r.residual),
+  date('Vyradený', (r) => r.disposed),
+  t('Dôvod vyradenia', (r) => disposalOptions.find((o) => o.value === r.disposal)?.label ?? '', 14),
+  t('Stav', (r) => assetStatus(r, r.thisYear?.year).label, 12),
+  t('Prijatá faktúra', (r) => r.purchaseNumber, 14),
   t('Poznámka', (r) => r.note, 30),
 ]
 

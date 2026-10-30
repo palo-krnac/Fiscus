@@ -45,6 +45,8 @@ type Server struct {
 	Desktop Launcher
 
 	limit limiter // pokusy o prihlásenie
+	// shareLimit: neplatné odkazy na ponuky z jednej IP (hádanie tokenov)
+	shareLimit limiter
 }
 
 // Launcher ukončí program po zatvorení okna alebo na pokyn používateľa.
@@ -115,6 +117,7 @@ func (s *Server) Handler() http.Handler {
 	open("GET /api/legal", s.getLegal)
 	open("PUT /api/legal", s.setLegal)
 	open("POST /api/legal/reset", s.resetLegal)
+	open("POST /api/legal/ecb", s.updateECBRates)
 	open("GET /api/rates", s.listRates)
 	open("PUT /api/rates", s.setRate)
 	open("POST /api/rates/update", s.updateRates)
@@ -159,6 +162,12 @@ func (s *Server) Handler() http.Handler {
 	need("POST /api/companies/{cid}/quotes/{id}/reject", auth.PermInvoicesWrite, s.quoteAction((*Server).rejectQuote))
 	need("POST /api/companies/{cid}/quotes/{id}/copy", auth.PermInvoicesWrite, s.quoteAction((*Server).copyQuote))
 	need("POST /api/companies/{cid}/quotes/{id}/invoice", auth.PermInvoicesWrite, s.invoiceQuote)
+	need("POST /api/companies/{cid}/quotes/{id}/share", auth.PermInvoicesWrite, s.quoteAction((*Server).shareQuote))
+	need("DELETE /api/companies/{cid}/quotes/{id}/share", auth.PermInvoicesWrite, s.quoteAction((*Server).unshareQuote))
+	// ponuka pre zákazníka cez tajný odkaz (bez prihlásenia)
+	public("GET /api/public/quotes/{token}", s.publicQuote)
+	public("GET /api/public/quotes/{token}/pdf", s.publicQuotePDF)
+	public("POST /api/public/quotes/{token}/respond", s.publicQuoteRespond)
 
 	need("GET /api/companies/{cid}/recurring", auth.PermInvoicesRead, s.listRecurring)
 	need("GET /api/companies/{cid}/recurring/drafts", auth.PermInvoicesRead, s.recurringDrafts)
@@ -223,6 +232,11 @@ func (s *Server) Handler() http.Handler {
 	need("GET /api/companies/{cid}/open-items", auth.PermLedgerRead, s.openItems)
 	need("GET /api/companies/{cid}/statements", auth.PermLedgerRead, s.getStatements)
 	need("PUT /api/companies/{cid}/statements/{year}", auth.PermLedgerWrite, s.setStatementInputs)
+	need("GET /api/companies/{cid}/assets", auth.PermLedgerRead, s.listAssets)
+	need("POST /api/companies/{cid}/assets", auth.PermLedgerWrite, s.saveAsset)
+	need("PUT /api/companies/{cid}/assets/{id}", auth.PermLedgerWrite, s.saveAsset)
+	need("DELETE /api/companies/{cid}/assets/{id}", auth.PermLedgerWrite, s.deleteAsset)
+	need("POST /api/companies/{cid}/assets/depreciation/{year}", auth.PermLedgerWrite, s.postDepreciation)
 	need("PUT /api/companies/{cid}/journal/{key}", auth.PermLedgerWrite, s.classifyJournal)
 	need("DELETE /api/companies/{cid}/journal/{key}", auth.PermLedgerWrite, s.resetJournal)
 	need("GET /api/companies/{cid}/users", auth.PermUsersManage, s.listMembers)
@@ -248,6 +262,8 @@ func (s *Server) Handler() http.Handler {
 	need("POST /api/companies/{cid}/bank/{id}/ignore", auth.PermBankWrite, s.ignoreBank)
 
 	need("GET /api/companies/{cid}/vat", auth.PermVATRead, s.vatReturn)
+	need("GET /api/companies/{cid}/vat/filings", auth.PermVATRead, s.vatFilings)
+	need("POST /api/companies/{cid}/vat/filings", auth.PermLedgerWrite, s.recordVATFiling)
 	need("GET /api/companies/{cid}/vat/{kind}", auth.PermVATRead, s.vatExport)
 	open("GET /api/audit", s.allAudit)
 	open("GET /api/audit/verify", s.verifyAudit)

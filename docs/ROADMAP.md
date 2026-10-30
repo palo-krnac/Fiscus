@@ -27,7 +27,7 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] Cenová ponuka: vlastný číselný rad (CP), platnosť, stavy odoslaná / prijatá / odmietnutá / po platnosti, kópia ako nová verzia, tlač, jedným klikom koncept faktúry; nezapočíta sa do DPH
 - [x] Pravidelná fakturácia: šablóna faktúry s intervalom (mesačne, štvrťročne, polročne, ročne), koncom, splatnosťou a texty {obdobie} / {mesiac} / {rok} / {minule_obdobie}; Fiškus faktúru vytvorí a vystaví sám (pri štarte a každú hodinu), dobehnuté staršie obdobia ostanú ako koncepty; pozastavenie, faktúra hneď, história
 - [x] Pravidelná fakturácia: automatické odoslanie vystavenej faktúry e-mailom
-- [x] Pravidelná fakturácia: upozornenie na koncepty na kontrolu
+- [x] Pravidelná fakturácia: upozornenie na koncepty na kontrolu (zoznam s dôvodom, odznak v menu, súhrnný e-mail)
 - [x] Zálohová faktúra (nie je daňový doklad), po úhrade automaticky daňový doklad k prijatej platbe (dátum dodania = deň prijatia platby, § 19 ods. 4), vyúčtovacia faktúra s presným odpočtom zálohy po sadzbách; do DPH a KV iba zostatok, pri 100 % zálohe sa vyúčtovanie do KV neuvádza
 - [x] Zálohy: čiastočná úhrada zálohy (daňový doklad ku každej platbe, sadzby v pomere zálohy), vyúčtovanie s odpočtom všetkých dokladov k platbám aj po čiastočnej úhrade; vyúčtovaná záloha sa nevymáha
 - [x] Zálohy: viac zálohových faktúr toho istého odberateľa na jedno vyúčtovanie (pridanie a odobratie v koncepte)
@@ -35,7 +35,7 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] Zálohy s tuzemským prenesením pri službách (stavebné práce): doklad k platbe bez DPH v KV A.2, vyúčtovanie iba so zostatkom
 - [x] Zálohy: dodanie do 15 dní od platby bez dokladu k platbe — kontrola lehoty a obdobia DPH pri vyúčtovaní, dodatočný doklad k platbe jedným klikom
 - [ ] Zálohy v cudzej mene, s prenesením pri tovare (množstvo v A.2)
-- [ ] Cenová ponuka: prijatie zákazníkom cez odkaz, objednávka
+- [x] Cenová ponuka: prijatie alebo odmietnutie zákazníkom cez tajný odkaz (server s verejnou adresou), číslo objednávky zákazníka do faktúry, upozornenie e-mailom
 - [x] Prijaté faktúry: evidencia z rekapitulácie DPH dodávateľa, odpočet / bez odpočtu, prenesenie, kontrola duplicít, úhrady
 - [x] AI vyťaženie prijatých faktúr z PDF a fotky (Claude API; AI iba navrhuje, používateľ skontroluje)
 - [x] Banka: import výpisov camt.053, automatické párovanie podľa VS a sumy, návrhy, ručné párovanie, nepárované pohyby
@@ -48,12 +48,14 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] Súhrnný výkaz (SVDPHv20): tovar do EÚ (kód 0), služby do EÚ (kód 2); r. 13–15 pre dodanie do EÚ a vývoz; nadobudnutie tovaru z EÚ (r. 05–08) a služby zo zahraničia (r. 09–10)
 - [x] A.2 a tuzemské prenesenie pri dodaní (§ 69 ods. 12) pri položkách: druhy a) až j), kód colného sadzobníka, hranica 5 000 €, XML
 - [ ] Dobropis k A.2 (kód opravy), trojstranný obchod (kód 1), call-off stock, dovoz s DPH na colnici (r. 22–23)
-- [ ] Dobropisy od dodávateľov (C.2, r. 28), zjednodušené faktúry a pokladničné doklady (B.3, D.1), čiastočný odpočet (koeficient)
-- [ ] Opravné a dodatočné priznanie / KV (KOpr, r. 36–37)
+- [x] Dobropisy od tuzemských dodávateľov: oprava odpočítanej dane v r. 28 a riadky C.2 (číslo pôvodnej faktúry)
+- [ ] Dobropisy od zahraničných dodávateľov a pri prenesení daňovej povinnosti, čiastočný odpočet (koeficient)
+- [x] Opravné a dodatočné priznanie k DPH (dátum zistenia, r. 36 rozdiel oproti poslednej známej povinnosti, r. 37), opravný KV, záznam o podaní (posledná známa povinnosť, návrh druhu podľa lehoty)
+- [ ] Dodatočný kontrolný výkaz (iba opravované záznamy)
 - [ ] Podanie priamo na portál finančnej správy (vyžaduje autentifikáciu)
 - [x] Upomienky: faktúry po splatnosti podľa odberateľov, 1., 2. a posledná upomienka, zákonný úrok z omeškania (ECB + 9 p. b. podnikateľ, + 5 p. b. spotrebiteľ, k prvému dňu omeškania), dohodnutá sadzba, paušálna náhrada 40 € (§ 369c ObZ), tlač listu, číselný rad UP
 - [x] Legislatíva v nastaveniach (spoločná pre všetky firmy): obdobia sadzieb DPH, sadzby ECB, prirážky úroku z omeškania, paušálna náhrada; nová inštalácia sa predvyplní, nová verzia programu doplní nové riadky a úpravy používateľa nechá
-- [ ] Upomienky: sadzby ECB pre úrok z omeškania načítať automaticky (zatiaľ ručne v Legislatíve)
+- [x] Upomienky: základná úroková sadzba ECB pre úrok z omeškania sa dopĺňa automaticky zo servera ECB (ECB Data Portal), aj tlačidlom v Legislatíve
 - [ ] Ďalšie zákonné hodnoty do Legislatívy podľa potreby (limity, sadzby pre mzdy a odvody v etape 4)
 - [x] Obrazovka Zálohy: stav, ručná záloha, stiahnutie, obnova naplánovaná na ďalšie spustenie, `-restore` zo súboru
 - [x] Nastavenie priečinka a hesla záloh priamo v rozhraní, návrh priečinka synchronizovaného do cloudu (OneDrive, Dropbox, Google Disk, iCloud)
@@ -96,7 +98,9 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 
 ## Etapa 3 — sklad a majetok
 - [ ] Sklad, prepojenie s e-shopom
-- [ ] Evidencia a odpisy majetku
+- [x] Register dlhodobého majetku s daňovými odpismi (§ 22 – 29 ZDP): skupiny 0 – 6, rovnomerné a zrýchlené odpisovanie, pomerná časť v roku zaradenia, podiel na podnikaní, vyradenie (ZC do výdavkov), odpisový plán, väzba na prijatú faktúru, hľadanie a export
+- [x] Odpisy z registra jedným tlačidlom do uzávierky roka (stĺpec e6); zostatkové ceny do výkazu o majetku a záväzkoch (r. 01, 02) a tabuľky 1a DP typ B
+- [ ] Účtovné odpisy, technické zhodnotenie, prerušenie odpisovania, prenájom (§ 27 ods. 2)
 - [ ] Kniha jázd
 
 ## Etapa 4 — mzdy (samostatný návrh)

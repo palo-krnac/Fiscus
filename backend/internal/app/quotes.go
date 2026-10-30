@@ -31,6 +31,9 @@ func (a *App) Quotes(ctx context.Context, companyID int64, year int) ([]quote.Qu
 // linkInvoice doplní aktuálne číslo faktúry vytvorenej z ponuky (koncept
 // faktúry číslo ešte nemá, dostane ho až pri vystavení).
 func (a *App) linkInvoice(ctx context.Context, companyID int64, q *quote.Quote) {
+	if q.Share != nil {
+		q.Share.URL = a.QuoteURL(*q)
+	}
 	if q.InvoiceID == 0 {
 		return
 	}
@@ -91,7 +94,7 @@ func (a *App) SaveQuote(ctx context.Context, companyID int64, q quote.Quote) (qu
 		}
 		before = &old
 	}
-	q.Status, q.Number, q.InvoiceID, q.InvoiceNumber = quote.StatusDraft, "", 0, ""
+	q.Status, q.Number, q.InvoiceID, q.InvoiceNumber, q.Share = quote.StatusDraft, "", 0, "", nil
 	if q.IssueDate.IsZero() {
 		q.IssueDate = a.Today()
 	}
@@ -152,6 +155,13 @@ func (a *App) IssueQuote(ctx context.Context, companyID, id int64) (quote.Quote,
 	}
 	a.record(ctx, companyID, audit.CatQuotes, "issue", "quote", q.ID,
 		"Vystavená ponuka "+q.Number+" pre "+q.Customer.Name+", "+q.Summary.Total.Display()+" €", nil, q)
+	if a.PublicURL != "" {
+		// na serveri s verejnou adresou dostane ponuka hneď odkaz pre zákazníka (do e-mailu)
+		if err := a.share(ctx, companyID, &q); err != nil {
+			return q, err
+		}
+		a.linkInvoice(ctx, companyID, &q)
+	}
 	return q, nil
 }
 

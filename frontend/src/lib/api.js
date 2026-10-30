@@ -141,6 +141,11 @@ export const api = {
   statements: (cid, year) => request('GET', `/api/companies/${cid}/statements` + query({ year })),
   setStatementInputs: (cid, year, inputs) => request('PUT', `/api/companies/${cid}/statements/${year}`, inputs),
   openItems: (cid, date) => request('GET', `/api/companies/${cid}/open-items` + query({ date })),
+  assets: (cid, year) => request('GET', `/api/companies/${cid}/assets` + query({ year })),
+  saveAsset: (cid, a) =>
+    a.id ? request('PUT', `/api/companies/${cid}/assets/${a.id}`, a) : request('POST', `/api/companies/${cid}/assets`, a),
+  deleteAsset: (cid, id) => request('DELETE', `/api/companies/${cid}/assets/${id}`),
+  postDepreciation: (cid, year) => request('POST', `/api/companies/${cid}/assets/depreciation/${year}`),
   resetJournal: (cid, key) => request('DELETE', `/api/companies/${cid}/journal/${encodeURIComponent(key)}`),
   cashBook: (cid, year) => request('GET', `/api/companies/${cid}/cash` + query({ year })),
   cash: (cid, id) => request('GET', `/api/companies/${cid}/cash/${id}`),
@@ -156,10 +161,13 @@ export const api = {
   bankUnmatch: (cid, id) => request('POST', `/api/companies/${cid}/bank/${id}/unmatch`),
   bankIgnore: (cid, id, ignore, note) => request('POST', `/api/companies/${cid}/bank/${id}/ignore`, { ignore, note }),
 
-  vat: (cid, period, excess) => request('GET', `/api/companies/${cid}/vat` + query({ period, excess })),
+  vat: (cid, period, excess, opts = {}) => request('GET', `/api/companies/${cid}/vat` + query({ period, excess, ...opts })),
+  vatFilings: (cid, period) => request('GET', `/api/companies/${cid}/vat/filings` + query({ period })),
+  recordVatFiling: (cid, period, excess, opts = {}, podane) =>
+    request('POST', `/api/companies/${cid}/vat/filings` + query({ period, excess, ...opts, podane })),
   /** XML pre eDane ako Blob (kind: 'dph' | 'kv'). */
-  vatXML: (cid, kind, period, excess, fetchImpl = globalThis.fetch) =>
-    download(`/api/companies/${cid}/vat/${kind}.xml` + query({ period, excess }), `${kind}.xml`, fetchImpl),
+  vatXML: (cid, kind, period, excess, opts = {}, fetchImpl = globalThis.fetch) =>
+    download(`/api/companies/${cid}/vat/${kind}.xml` + query({ period, excess, ...opts }), `${kind}.xml`, fetchImpl),
   /** E-faktúra (UBL, Peppol BIS 3.0) ako Blob; chýbajúce údaje sú v ApiError.fields. */
   einvoice: (cid, id, fetchImpl = globalThis.fetch) => download(`/api/companies/${cid}/invoices/${id}/ubl`, 'e-faktura.xml', fetchImpl),
 
@@ -226,6 +234,11 @@ export const api = {
       : request('POST', `/api/companies/${cid}/quotes`, q),
   previewQuote: (cid, q) => request('POST', `/api/companies/${cid}/quotes/preview`, q),
   quoteAction: (cid, id, action) => request('POST', `/api/companies/${cid}/quotes/${id}/${action}`),
+  unshareQuote: (cid, id) => request('DELETE', `/api/companies/${cid}/quotes/${id}/share`),
+  // ponuka pre zákazníka cez odkaz (bez prihlásenia)
+  publicQuote: (token) => request('GET', `/api/public/quotes/${encodeURIComponent(token)}`),
+  respondQuote: (token, body) => request('POST', `/api/public/quotes/${encodeURIComponent(token)}/respond`, body),
+  publicQuotePDF: (token) => `/api/public/quotes/${encodeURIComponent(token)}/pdf`,
   recurringList: (cid) => request('GET', `/api/companies/${cid}/recurring`),
   recurringDrafts: (cid) => request('GET', `/api/companies/${cid}/recurring/drafts`),
   recurring: (cid, id) => request('GET', `/api/companies/${cid}/recurring/${id}`),
@@ -276,6 +289,7 @@ export const api = {
   legal: () => request('GET', '/api/legal'),
   saveLegal: (p) => request('PUT', '/api/legal', p),
   resetLegal: () => request('POST', '/api/legal/reset'),
+  updateECBRates: () => request('POST', '/api/legal/ecb'),
   reminders: (cid, year) => request('GET', `/api/companies/${cid}/reminders` + (year ? `?year=${year}` : '')),
   reminder: (cid, id) => request('GET', `/api/companies/${cid}/reminders/${id}`),
   previewReminder: (cid, req) => request('POST', `/api/companies/${cid}/reminders/preview`, req),

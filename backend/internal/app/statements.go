@@ -67,6 +67,12 @@ func (a *App) assetFacts(ctx context.Context, companyID int64, book JournalBook)
 		}
 	}
 	f.Transit = book.Totals.Columns[journal.TransitOut].Sub(book.Totals.Columns[journal.TransitIn])
+	list, err := a.Store.ListAssets(ctx, companyID)
+	if err != nil {
+		return f, err
+	}
+	t := registerTotals(list, book.Year)
+	f.Tangible, f.Intangible = t.Tangible, t.Intangible
 	return f, nil
 }
 
