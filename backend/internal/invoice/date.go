@@ -47,6 +47,16 @@ func (d Date) Before(o Date) bool   { return d.t.Before(o.t) }
 func (d Date) After(o Date) bool    { return d.t.After(o.t) }
 func (d Date) AddDays(n int) Date   { return Date{d.t.AddDate(0, 0, n)} }
 func (d Date) DaysUntil(o Date) int { return int(o.t.Sub(d.t).Hours() / 24) }
+
+// Weekday vráti deň v týždni.
+func (d Date) Weekday() time.Weekday { return d.t.Weekday() }
+
+// AddMonths pridá mesiace; deň presahujúci kratší mesiac sa zníži na jeho posledný deň.
+func (d Date) AddMonths(n int) Date {
+	first := time.Date(d.t.Year(), d.t.Month()+time.Month(n), 1, 0, 0, 0, 0, time.UTC)
+	last := first.AddDate(0, 1, -1).Day()
+	return NewDate(first.Year(), first.Month(), min(d.t.Day(), last))
+}
 func (d Date) String() string {
 	if d.IsZero() {
 		return ""

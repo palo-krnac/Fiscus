@@ -14,8 +14,8 @@ import { loadCodes } from '../lib/codes.js'
 import DatePicker from 'primevue/datepicker'
 import { formatDate, fromISODate, toISODate } from '../lib/format.js'
 import { matches, searchTerms } from '../lib/search.js'
-import { ecbColumns, kmRateColumns, vatPeriodColumns } from '../lib/columns.js'
-import { ecbErrors, formatRates, parseRates } from '../lib/legal.js'
+import { ecbColumns, holidayColumns, kmRateColumns, vatPeriodColumns } from '../lib/columns.js'
+import { ecbErrors, formatRates, holidayDayLabel, parseRates, parseYears } from '../lib/legal.js'
 import ExportButton from '../components/ExportButton.vue'
 import FormField from '../components/FormField.vue'
 
@@ -38,6 +38,7 @@ function toForm(p) {
     consumerMargin: Number(p.consumerMargin),
     flatFee: Number(p.flatFee),
     kmRates: [...(p.kmRates ?? [])].reverse().map((r) => ({ from: r.from, car: Number(r.car), moto: Number(r.moto), _k: ++key })),
+    holidays: (p.holidays ?? []).map((h) => ({ day: h.day, name: h.name, from: h.from || null, to: h.to || null, exceptText: (h.except ?? []).join(', '), _k: ++key })),
   }
 }
 const toAPI = (f) => ({
@@ -47,6 +48,7 @@ const toAPI = (f) => ({
   consumerMargin: String(f.consumerMargin ?? 0),
   flatFee: String(f.flatFee ?? 0),
   kmRates: f.kmRates.map((r) => ({ from: r.from || null, car: String(r.car ?? ''), moto: String(r.moto ?? '') })),
+  holidays: f.holidays.map((h) => ({ day: h.day.trim(), name: h.name, from: h.from || 0, to: h.to || 0, except: parseYears(h.exceptText) })),
 })
 
 // sadzba ECB zo servera ECB (program ju sťahuje aj sám, keď má internet)
@@ -88,6 +90,18 @@ const ecbErr = computed(() => ecbErrors(errors.value))
 const ecbExport = () => visibleECB.value.map((r) => ({ from: r.from, rate: r.rate }))
 const vatExport = () => form.value.vatPeriods.map((v) => ({ from: v.from, to: v.to, rates: parseRates(v.ratesText) }))
 const latestECB = computed(() => [...(form.value?.ecb ?? [])].filter((r) => r.from).sort((a, b) => b.from.localeCompare(a.from))[0])
+
+// dni pracovného pokoja (posun lehôt v kalendári)
+const holSearch = ref('')
+const visibleHol = computed(() => {
+  const terms = searchTerms(holSearch.value)
+  return (form.value?.holidays ?? []).map((h, i) => ({ ...h, _i: i })).filter((h) => matches(terms, [h.name, h.day, holidayDayLabel(h.day), h.exceptText]))
+})
+const holErr = (i) => errors.value[`holidays[${i}].day`]
+function addHoliday() {
+  form.value.holidays.push({ day: '', name: '', from: new Date().getFullYear(), to: null, exceptText: '', _k: ++key })
+  touch()
+}
 
 // sadzby základnej náhrady za 1 km (kniha jázd)
 const kmSearch = ref('')
@@ -141,7 +155,7 @@ async function save() {
 function reset() {
   confirm.require({
     header: 'Obnoviť hodnoty programu',
-    message: 'Všetky sadzby DPH, sadzby ECB, náhrady za km a parametre úroku z omeškania sa nahradia hodnotami dodanými s programom. Ručné úpravy sa stratia (zostanú v audite).',
+    message: 'Všetky sadzby DPH, sadzby ECB, náhrady za km, dni pracovného pokoja a parametre úroku z omeškania sa nahradia hodnotami dodanými s programom. Ručné úpravy sa stratia (zostanú v audite).',
     acceptProps: { label: 'Obnoviť', severity: 'danger', size: 'small' },
     rejectProps: { label: 'Späť', severity: 'secondary', text: true, size: 'small' },
     accept: async () => {
@@ -287,6 +301,43 @@ function reset() {
           </tbody>
         </table>
       </section>
+      <section class="card">
+        <div class="card-head">
+          <h2>Dni pracovného pokoja <span class="muted">{{ form.holidays.length }}</span></h2>
+          <div class="spacer" />
+          <IconField class="search">
+            <InputIcon class="pi pi-search" />
+            <InputText v-model="holSearch" placeholder="Hľadať sviatok" size="small" aria-label="Hľadať sviatok" />
+          </IconField>
+          <ExportButton name="Dni pracovného pokoja" :columns="holidayColumns" :rows="() => visibleHol" />
+        </div>
+        <p class="hint">
+          Zákon č. 241/1993 Z. z. Kalendár termínov podľa nich posúva lehoty, ktoré pripadnú na víkend alebo sviatok, na najbližší
+          pracovný deň. Deň zadajte ako MM-DD (05-01) alebo posun od Veľkonočnej nedele (easter-2 = Veľký piatok). Roky „od“ a „do“
+          obmedzujú platnosť, „okrem rokov“ sú výnimky (napr. 8. máj v roku 2026).
+        </p>
+        <Button label="Pridať deň" icon="pi pi-plus" text size="small" @click="addHoliday" />
+        <div class="scroll">
+        <table class="grid hol">
+          <thead><tr><th>Deň</th><th>Názov</th><th>Od roku</th><th>Do roku</th><th>Okrem rokov</th><th aria-label="Akcie" /></tr></thead>
+          <tbody>
+            <tr v-if="!visibleHol.length"><td colspan="6" class="muted">Nič sa nenašlo.</td></tr>
+            <tr v-for="h in visibleHol" :key="h._k">
+              <td>
+                <InputText v-model="form.holidays[h._i].day" size="small" fluid spellcheck="false" :invalid="!!holErr(h._i)" aria-label="Deň" @input="touch" />
+                <small v-if="holErr(h._i)" class="err">{{ holErr(h._i) }}</small>
+                <small v-else class="muted">{{ holidayDayLabel(h.day) }}</small>
+              </td>
+              <td><InputText v-model="form.holidays[h._i].name" size="small" fluid aria-label="Názov" @input="touch" /></td>
+              <td><InputNumber v-model="form.holidays[h._i].from" :use-grouping="false" size="small" fluid aria-label="Od roku" @input="touch" /></td>
+              <td><InputNumber v-model="form.holidays[h._i].to" :use-grouping="false" size="small" fluid aria-label="Do roku" @input="touch" /></td>
+              <td><InputText v-model="form.holidays[h._i].exceptText" size="small" fluid aria-label="Okrem rokov" @input="touch" /></td>
+              <td class="act"><Button icon="pi pi-times" text severity="secondary" size="small" aria-label="Odstrániť deň" @click="form.holidays.splice(h._i, 1); touch()" /></td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+      </section>
     </template>
   </div>
 </template>
@@ -381,6 +432,22 @@ function reset() {
 }
 .grid.ecb {
   max-width: 460px;
+}
+.scroll {
+  overflow-x: auto;
+}
+.grid.hol {
+  min-width: 600px;
+}
+.grid.hol th:nth-child(1) {
+  width: 120px;
+}
+.grid.hol th:nth-child(3),
+.grid.hol th:nth-child(4) {
+  width: 84px;
+}
+.grid.hol th:nth-child(5) {
+  width: 120px;
 }
 .act {
   width: 40px;

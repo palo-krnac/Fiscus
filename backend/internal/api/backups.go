@@ -14,8 +14,10 @@ func failBackup(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, backup.ErrNoBackup):
 		writeErr(w, http.StatusNotFound, "Záloha neexistuje", nil)
-	case errors.Is(err, app.ErrBackupsOff):
+	case errors.Is(err, app.ErrBackupsOff), errors.Is(err, backup.ErrNoRemote), errors.Is(err, backup.ErrNotReady):
 		writeErr(w, http.StatusConflict, err.Error(), nil)
+	case errors.Is(err, app.ErrCloud):
+		writeErr(w, http.StatusBadGateway, err.Error(), nil)
 	default:
 		fail(w, err)
 	}
@@ -81,4 +83,38 @@ func (s *Server) setBackupSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, st)
+}
+
+// setBackupRemote: PUT /api/backups/remote — kópia záloh v cloude.
+func (s *Server) setBackupRemote(w http.ResponseWriter, r *http.Request) {
+	var req app.BackupRemoteRequest
+	if !decode(w, r, &req) {
+		return
+	}
+	st, err := s.App.SetBackupRemote(r.Context(), req)
+	if err != nil {
+		failBackup(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, st)
+}
+
+// remoteBackups: GET /api/backups/remote — zálohy v cloude.
+func (s *Server) remoteBackups(w http.ResponseWriter, r *http.Request) {
+	list, err := s.App.RemoteBackups(r.Context())
+	if err != nil {
+		failBackup(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, list)
+}
+
+// fetchRemoteBackup: POST /api/backups/remote/{name}/fetch — stiahne zálohu z cloudu.
+func (s *Server) fetchRemoteBackup(w http.ResponseWriter, r *http.Request) {
+	it, err := s.App.FetchRemoteBackup(r.Context(), r.PathValue("name"))
+	if err != nil {
+		failBackup(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, it)
 }

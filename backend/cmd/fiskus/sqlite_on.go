@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"os"
 	"path/filepath"
@@ -52,6 +53,7 @@ func openWithBackups(path string, o backupOpts) (store.Store, *backup.Manager, *
 		pw, setup.PasswordFixed = env, true
 	}
 	m := &backup.Manager{Dir: dir, Password: pw, Policy: backup.DefaultPolicy, Source: verifier{}}
+	m.SetRemote(cfg.Remote)
 	if !m.Ready() {
 		log.Print("upozornenie: heslo záloh nie je nastavené, zálohy sa nevytvárajú (nastavíte ho v programe v časti Zálohy)")
 	}
@@ -84,6 +86,10 @@ func openWithBackups(path string, o backupOpts) (store.Store, *backup.Manager, *
 			return
 		}
 		info, err := m.Create(ctx, time.Now())
+		if errors.Is(err, backup.ErrRemoteCopy) {
+			log.Printf("záloha (%s): %s; %v", reason, info.Path, err)
+			return
+		}
 		if err != nil {
 			log.Printf("záloha (%s) zlyhala: %v", reason, err)
 			return

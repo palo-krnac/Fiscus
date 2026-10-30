@@ -219,7 +219,7 @@ func (inv *Invoice) Recalculate() error {
 	inv.SyncPaid()
 	inv.Local = nil
 	if inv.Foreign() && inv.FXRate.Sign() > 0 {
-		local := ToEUR(inv.Summary, inv.FXRate)
+		local := inv.localSummary()
 		inv.Local = &local
 	} else if !inv.Foreign() {
 		inv.FXRate, inv.FXDate, inv.FXManual = money.Zero, Date{}, false

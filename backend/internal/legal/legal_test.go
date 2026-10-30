@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/palo-krnac/fiscus/backend/internal/calendar"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/logbook"
 	m "github.com/palo-krnac/fiscus/backend/internal/money"
@@ -149,5 +150,30 @@ func TestSeedKmRates(t *testing.T) {
 	p.KmRates = append(p.KmRates, logbook.KmRate{From: p.KmRates[0].From, Car: p.KmRates[0].Car, Moto: p.KmRates[0].Moto})
 	if err := p.Validate(); err == nil || !strings.Contains(err.Error(), "kmRates") {
 		t.Fatalf("duplicitná sadzba: %v", err)
+	}
+}
+
+func TestSeedHolidays(t *testing.T) {
+	// staršia inštalácia bez sviatkov: doplnia sa, upravený ostane, zmazaný sa nevráti
+	p := Defaults()
+	p.Holidays, p.Seeded = nil, slices.DeleteFunc(p.Seeded, func(k string) bool { return strings.HasPrefix(k, "hol:") })
+	if !p.Seed() || len(p.Holidays) != len(calendar.DefaultHolidays) {
+		t.Fatalf("doplnenie: %+v", p.Holidays)
+	}
+	if p.Holidays[0].Day != "01-01" || p.Holidays[2].Day != "easter-2" || p.Holidays[len(p.Holidays)-1].Day != "12-26" {
+		t.Errorf("poradie: %+v", p.Holidays)
+	}
+	p.Holidays[0].Except = []int{2030}
+	p.Holidays = p.Holidays[:len(p.Holidays)-1]
+	if p.Seed() || len(p.Holidays) != len(calendar.DefaultHolidays)-1 || p.Holidays[0].Except[0] != 2030 {
+		t.Fatalf("úprava alebo zmazanie sa prepísali: %+v", p.Holidays)
+	}
+	p.Holidays = append(p.Holidays, calendar.Holiday{Day: "01-01", Name: "Znova"})
+	if err := p.Validate(); err == nil || !strings.Contains(err.Error(), "holidays") {
+		t.Fatalf("duplicitný sviatok: %v", err)
+	}
+	p.Holidays[len(p.Holidays)-1] = calendar.Holiday{Day: "1. 5.", Name: "x"}
+	if err := p.Validate(); err == nil {
+		t.Fatal("neplatný deň")
 	}
 }

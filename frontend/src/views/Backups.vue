@@ -12,6 +12,8 @@ import { matches, searchTerms } from '../lib/search.js'
 import { backupColumns } from '../lib/columns.js'
 import ExportButton from '../components/ExportButton.vue'
 import BackupSettingsForm from '../components/BackupSettingsForm.vue'
+import BackupRemoteForm from '../components/BackupRemoteForm.vue'
+import { remoteStateText, remoteTarget } from '../lib/backups.js'
 
 const toast = useToast()
 const confirm = useConfirm()
@@ -41,6 +43,44 @@ const showSettings = ref(false)
 function onSaved(s) {
   st.value = s
   showSettings.value = false
+  showRemote.value = false
+  cloud.value = null
+}
+
+// kópia v cloude
+const showRemote = ref(false)
+const remoteState = computed(() => remoteStateText(st.value?.remote?.state))
+const cloud = ref(null) // zálohy v cloude (načítané na požiadanie)
+const cloudBusy = ref('')
+const cloudSearch = ref('')
+const cloudVisible = computed(() => {
+  const terms = searchTerms(cloudSearch.value)
+  return (cloud.value ?? []).filter((b) => matches(terms, [b.name, fmtTime.format(new Date(b.time))]))
+})
+const localNames = computed(() => new Set((st.value?.backups ?? []).map((b) => b.name)))
+
+async function loadCloud() {
+  cloudBusy.value = 'list'
+  try {
+    cloud.value = await api.remoteBackups()
+  } catch (e) {
+    toast.add({ severity: 'error', summary: 'Zoznam z cloudu sa nenačítal', detail: e.message, life: 8000 })
+  } finally {
+    cloudBusy.value = ''
+  }
+}
+
+async function fetchCloud(b) {
+  cloudBusy.value = b.name
+  try {
+    await api.fetchRemoteBackup(b.name)
+    toast.add({ severity: 'success', summary: 'Záloha stiahnutá z cloudu', detail: 'Nájdete ju v zozname nižšie, odkiaľ ju môžete obnoviť.', life: 6000 })
+    await load()
+  } catch (e) {
+    toast.add({ severity: 'error', summary: 'Stiahnutie zlyhalo', detail: e.message, life: 8000 })
+  } finally {
+    cloudBusy.value = ''
+  }
 }
 
 async function backupNow() {
@@ -137,7 +177,55 @@ async function cancelRestore() {
         </p>
         <BackupSettingsForm v-if="st.settings && showSettings" :status="st" @saved="onSaved" />
 
+        <section v-if="st.settings && !showRemote" class="card cloud" :class="'tone-' + (st.remote.kind ? remoteState.tone : 'none')">
+          <div class="cloud-text">
+            <h2><i class="pi pi-cloud" /> Kópia v cloude</h2>
+            <template v-if="st.remote.kind">
+              <p><code>{{ remoteTarget(st.remote) }}</code></p>
+              <p class="state">{{ remoteState.text }}</p>
+            </template>
+            <p v-else>Vypnutá. Druhá kópia mimo počítača (Nextcloud, Synology, S3…) chráni aj pri krádeži alebo požiari.</p>
+          </div>
+          <div class="cloud-act">
+            <Button v-if="st.remote.kind" label="Zálohy v cloude" severity="secondary" outlined size="small" :loading="cloudBusy === 'list'" @click="loadCloud" />
+            <Button :label="st.remote.kind ? 'Zmeniť' : 'Nastaviť cloud'" :icon="st.remote.kind ? '' : 'pi pi-cloud-upload'" size="small"
+              :severity="st.remote.kind ? 'secondary' : undefined" :text="!!st.remote.kind" @click="showRemote = true" />
+          </div>
+        </section>
+        <BackupRemoteForm v-if="st.settings && showRemote" :remote="st.remote" @saved="onSaved" @cancel="showRemote = false" />
+
+        <section v-if="cloud" class="cloud-list" aria-labelledby="cl-title">
+          <div class="toolbar">
+            <h2 id="cl-title">Zálohy v cloude</h2>
+            <IconField class="search">
+              <InputIcon class="pi pi-search" />
+              <InputText v-model="cloudSearch" placeholder="Hľadať v cloude" size="small" aria-label="Hľadať v cloude" />
+            </IconField>
+            <div class="spacer" />
+            <ExportButton name="Zálohy v cloude" :columns="backupColumns" :rows="cloudVisible" />
+            <Button icon="pi pi-times" severity="secondary" text size="small" aria-label="Zavrieť zoznam z cloudu" @click="cloud = null" />
+          </div>
+          <table class="list">
+            <thead>
+              <tr><th>Čas</th><th>Súbor</th><th class="num">Veľkosť</th><th aria-label="Akcie" /></tr>
+            </thead>
+            <tbody>
+              <tr v-if="!cloudVisible.length"><td colspan="4" class="empty">V cloude zatiaľ nie je žiadna záloha.</td></tr>
+              <tr v-for="b in cloudVisible" :key="b.name">
+                <td>{{ fmtTime.format(new Date(b.time)) }}</td>
+                <td><code>{{ b.name }}</code></td>
+                <td class="num">{{ kb(b.size) }}</td>
+                <td class="act">
+                  <span v-if="localNames.has(b.name)" class="have">aj v počítači</span>
+                  <Button v-else label="Stiahnuť do počítača" text size="small" :loading="cloudBusy === b.name" :disabled="!!cloudBusy" @click="fetchCloud(b)" />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
         <div class="toolbar">
+          <h2 v-if="cloud" class="local-title">Zálohy v počítači</h2>
           <IconField class="search">
             <InputIcon class="pi pi-search" />
             <InputText v-model="search" placeholder="Hľadať zálohu" size="small" aria-label="Hľadať zálohu" />
@@ -312,7 +400,69 @@ async function cancelRestore() {
 .empty {
   color: var(--ink-faint);
 }
+.cloud {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  border-left: 3px solid var(--rule);
+}
+.cloud.tone-ok {
+  border-left-color: var(--blue);
+}
+.cloud.tone-error {
+  border-left-color: var(--tone-overdue);
+}
+.cloud.tone-error .state {
+  color: var(--tone-overdue);
+}
+.cloud.tone-wait .state {
+  color: var(--tone-draft);
+}
+.cloud-text {
+  flex: 1 1 280px;
+  min-width: 0;
+}
+.cloud-text code {
+  word-break: break-all;
+}
+.cloud-text p:last-child {
+  margin-bottom: 0;
+}
+.state {
+  font-size: var(--fs-sm);
+  color: var(--ink-soft);
+}
+.cloud-act {
+  display: flex;
+  gap: 6px;
+}
+.cloud-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cloud-list h2,
+.local-title {
+  font-size: var(--fs-md);
+  margin: 0;
+}
+.have {
+  color: var(--ink-faint);
+  font-size: var(--fs-sm);
+  padding: 0 10px;
+}
 @media (max-width: 640px) {
+  .cloud-list .toolbar {
+    flex-wrap: wrap;
+  }
+  .cloud-list h2,
+  .local-title {
+    flex: 1 1 100%;
+  }
+  .toolbar {
+    flex-wrap: wrap;
+  }
   .search {
     flex: 1;
     width: auto;
