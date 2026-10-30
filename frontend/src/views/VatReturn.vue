@@ -1,4 +1,6 @@
 <script setup>
+import VatCoefficient from '../components/VatCoefficient.vue'
+import { coefYear } from '../lib/coef.js'
 // Priznanie k DPH (DPHv25) a kontrolný výkaz (KVDPHv25). Všetky sumy počíta
 // backend (/api/companies/{cid}/vat); rozhranie ich iba zobrazuje.
 import { computed, onMounted, ref, watch } from 'vue'
@@ -12,7 +14,7 @@ import InputIcon from 'primevue/inputicon'
 import { useToast } from 'primevue/usetoast'
 import { api } from '../lib/api.js'
 import { codes } from '../lib/codes.js'
-import { formatAmount, formatDate, formatQuantity } from '../lib/format.js'
+import { formatAmount, formatDate, formatMoney, formatQuantity } from '../lib/format.js'
 import { session } from '../lib/session.js'
 import { defaultPeriod, dueDate, kindParams, lastKnownOf, periodOptions, returnKinds, suggestKind } from '../lib/vat.js'
 import DatePicker from 'primevue/datepicker'
@@ -291,6 +293,11 @@ async function downloadXML(which) {
             </tr>
           </tbody>
         </table>
+        <p v-if="data.coef" class="coef-note">
+          V r. 18 – 19 je vysporiadanie pomerného odpočítania za rok {{ data.coef.year }}: {{ formatMoney(data.coef.total) }}
+          (ročný koeficient {{ data.coef.final }} %<template v-if="data.coef.provisional">, predbežný {{ data.coef.provisional }} %</template>, {{ data.coef.docs }} dokladov).
+        </p>
+        <VatCoefficient :year="coefYear(period)" @saved="load" />
       </template>
 
       <!-- SÚHRNNÝ VÝKAZ -->
@@ -588,6 +595,13 @@ async function downloadXML(which) {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+}
+.coef-note {
+  margin: 8px 0 0;
+  padding: 6px 10px;
+  border-left: 3px solid var(--blue);
+  background: var(--blue-wash);
+  font-size: var(--fs-sm);
 }
 .excess {
   display: flex;

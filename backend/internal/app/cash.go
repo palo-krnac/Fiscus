@@ -246,6 +246,9 @@ func (a *App) prepareCash(ctx context.Context, companyID int64, d *cash.Document
 		if !company.VATPayer {
 			return &invoice.ValidationError{Fields: []invoice.FieldError{{Field: "tax", Message: "DPH na pokladničnom doklade uvádza iba platiteľ DPH"}}}
 		}
+		if err := a.stampCoef(ctx, company, "tax.mixed", d.Tax.Mixed, d.Date, &d.Tax.Coef); err != nil {
+			return err
+		}
 	}
 	return d.Validate()
 }

@@ -3,6 +3,7 @@ package journal
 import (
 	"github.com/palo-krnac/fiscus/backend/internal/money"
 	"github.com/palo-krnac/fiscus/backend/internal/purchase"
+	pkgvat "github.com/palo-krnac/fiscus/backend/internal/vat"
 )
 
 // Návrh rozpisu úhrad dokladov. Pri čiastočnej úhrade sa DPH rozdelí
@@ -39,6 +40,10 @@ type Buy struct {
 	Deduct bool                 // DPH sa odpočítava (inak je súčasťou výdavku)
 	// Percent je čiastočný odpočet (1–99 %); neodpočítaná časť DPH je výdavkom.
 	Percent int
+	// Mixed a Coef: pomerné odpočítanie podľa § 50 (koeficient v percentách);
+	// neodpočítaná časť DPH je výdavkom.
+	Mixed bool
+	Coef  int
 }
 
 // ExpenseColumn vráti stĺpec pre druh výdavku.
@@ -60,8 +65,12 @@ func BuyLines(amount money.Dec, b Buy) []Line {
 	paid := amount.Neg() // kladná úhrada
 	col := ExpenseColumn(b.Kind)
 	vat := proportional(paid, b.VAT, b.Total)
-	if b.Deduct && b.Percent > 0 && b.Percent < 100 {
-		vat = vat.MulRatio(money.FromInt(int64(b.Percent)), money.FromInt(100)).RoundCents()
+	if b.Deduct {
+		coef := 100
+		if b.Mixed {
+			coef = b.Coef
+		}
+		vat = pkgvat.DeductShare(vat, b.Percent, coef)
 	}
 	if !b.Deduct || vat.IsZero() {
 		return []Line{{col, paid}}

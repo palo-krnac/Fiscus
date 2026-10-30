@@ -1180,6 +1180,18 @@ func Run(t *testing.T, newStore Factory) {
 			t.Fatalf("cudzia mena sa líši:\n got %+v\nwant %+v", g, *czk)
 		}
 		_ = s.DeletePurchase(ctx, a.ID, czk.ID)
+		// čiastočný odpočet (vozidlo), pomerné odpočítanie § 50, číslo opravovanej faktúry
+		car := mk("PF20260003", "Autoservis s.r.o.", "2026-10-09")
+		car.NoDeduction, car.ReverseCharge, car.SupplyKind = false, false, ""
+		car.DeductPercent, car.VehicleID, car.Mixed, car.Coef, car.CorrectsNumber = 50, 4, true, 80, "FV-7"
+		car.Normalize()
+		if err := s.SavePurchase(ctx, a.ID, car); err != nil {
+			t.Fatal(err)
+		}
+		if g, err := s.GetPurchase(ctx, a.ID, car.ID); err != nil || !reflect.DeepEqual(g, *car) || g.Deducted.IsZero() {
+			t.Fatalf("údaje odpočtu sa líšia:\n got %+v\nwant %+v", g, *car)
+		}
+		_ = s.DeletePurchase(ctx, a.ID, car.ID)
 		// oddelenie firiem
 		if l, _ := s.ListPurchases(ctx, b.ID, store.PurchaseFilter{}); len(l) != 0 {
 			t.Fatal("firma B vidí nákup firmy A")

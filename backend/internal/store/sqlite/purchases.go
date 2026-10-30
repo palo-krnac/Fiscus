@@ -18,15 +18,15 @@ import (
 
 const purchaseCols = `id, company_id, number, supplier_number, variable_symbol, status, contact_id,
 	supplier_json, supplier_iban, issue_date, delivery_date, received_date, due_date, paid_date,
-	payment_method, reverse_charge, no_deduction, description, note, rates_json, summary_json, supply_kind, fx_json, expense`
+	payment_method, reverse_charge, no_deduction, description, note, rates_json, summary_json, supply_kind, fx_json, expense, extra_json`
 
 func scanPurchase(r interface{ Scan(...any) error }) (purchase.Purchase, error) {
 	var p purchase.Purchase
-	var supplier, rates, summary, fxJSON string
+	var supplier, rates, summary, fxJSON, extra string
 	var dates [5]string
 	err := r.Scan(&p.ID, &p.CompanyID, &p.Number, &p.SupplierNumber, &p.VariableSymbol, &p.Status, &p.ContactID,
 		&supplier, &p.SupplierIBAN, &dates[0], &dates[1], &dates[2], &dates[3], &dates[4],
-		&p.PaymentMethod, &p.ReverseCharge, &p.NoDeduction, &p.Description, &p.Note, &rates, &summary, &p.SupplyKind, &fxJSON, &p.Expense)
+		&p.PaymentMethod, &p.ReverseCharge, &p.NoDeduction, &p.Description, &p.Note, &rates, &summary, &p.SupplyKind, &fxJSON, &p.Expense, &extra)
 	if err != nil {
 		return p, err
 	}
@@ -52,7 +52,24 @@ func scanPurchase(r interface{ Scan(...any) error }) (purchase.Purchase, error) 
 		}
 		p.Currency, p.FXRate, p.FXDate, p.FXManual, p.Local = f.Currency, f.Rate, f.Date, f.Manual, f.Local
 	}
+	if extra != "" {
+		var x purchaseExtra
+		if err := json.Unmarshal([]byte(extra), &x); err != nil {
+			return p, fmt.Errorf("údaje odpočtu: %w", err)
+		}
+		p.DeductPercent, p.VehicleID, p.CorrectsNumber, p.Mixed, p.Coef = x.DeductPercent, x.VehicleID, x.CorrectsNumber, x.Mixed, x.Coef
+	}
+	p.Deducted = p.Deductible()
 	return p, nil
+}
+
+// purchaseExtra sú údaje prijatej faktúry bez vlastného stĺpca.
+type purchaseExtra struct {
+	DeductPercent  int    `json:"deductPercent,omitempty"`
+	VehicleID      int64  `json:"vehicleId,omitempty"`
+	CorrectsNumber string `json:"correctsNumber,omitempty"`
+	Mixed          bool   `json:"mixed,omitempty"`
+	Coef           int    `json:"coef,omitempty"`
 }
 
 // purchaseFX je mena, kurz a sumy v eurách prijatej faktúry v cudzej mene.
@@ -127,15 +144,19 @@ func (s *Store) SavePurchase(ctx context.Context, companyID int64, p *purchase.P
 		}
 		fxJSON = string(b)
 	}
+	extra, err := json.Marshal(purchaseExtra{p.DeductPercent, p.VehicleID, p.CorrectsNumber, p.Mixed, p.Coef})
+	if err != nil {
+		return err
+	}
 	vals := []any{p.Number, p.SupplierNumber, p.VariableSymbol, string(p.Status), p.ContactID,
 		string(supplier), p.SupplierIBAN, p.IssueDate.String(), p.DeliveryDate.String(), p.ReceivedDate.String(),
 		p.DueDate.String(), p.PaidDate.String(), string(p.PaymentMethod), p.ReverseCharge, p.NoDeduction,
-		p.Description, p.Note, string(ratesJSON), string(summary), string(p.SupplyKind), fxJSON, string(p.Expense)}
+		p.Description, p.Note, string(ratesJSON), string(summary), string(p.SupplyKind), fxJSON, string(p.Expense), string(extra)}
 	if p.ID == 0 {
 		res, err := s.db.ExecContext(ctx, `INSERT INTO purchases (company_id, number, supplier_number, variable_symbol,
 			status, contact_id, supplier_json, supplier_iban, issue_date, delivery_date, received_date, due_date,
-			paid_date, payment_method, reverse_charge, no_deduction, description, note, rates_json, summary_json, supply_kind, fx_json, expense)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, append([]any{companyID}, vals...)...)
+			paid_date, payment_method, reverse_charge, no_deduction, description, note, rates_json, summary_json, supply_kind, fx_json, expense, extra_json)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, append([]any{companyID}, vals...)...)
 		if err != nil {
 			return err
 		}
@@ -146,7 +167,7 @@ func (s *Store) SavePurchase(ctx context.Context, companyID int64, p *purchase.P
 		res, err := s.db.ExecContext(ctx, `UPDATE purchases SET number = ?, supplier_number = ?, variable_symbol = ?,
 			status = ?, contact_id = ?, supplier_json = ?, supplier_iban = ?, issue_date = ?, delivery_date = ?,
 			received_date = ?, due_date = ?, paid_date = ?, payment_method = ?, reverse_charge = ?, no_deduction = ?,
-			description = ?, note = ?, rates_json = ?, summary_json = ?, supply_kind = ?, fx_json = ?, expense = ?
+			description = ?, note = ?, rates_json = ?, summary_json = ?, supply_kind = ?, fx_json = ?, expense = ?, extra_json = ?
 			WHERE id = ? AND company_id = ?`, append(vals, p.ID, companyID)...)
 		if err != nil {
 			return err

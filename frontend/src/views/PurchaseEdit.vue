@@ -112,6 +112,7 @@ async function recalc() {
     summary.value = out.summary
     // odpočet DPH (aj 50 % pri osobnom aute) určuje server
     p.value.deductPercent = out.deductPercent ?? 0
+    p.value.coef = out.coef ?? 0
     p.value.deducted = out.deducted
     // kurz ECB a sumy v eurách určuje server
     Object.assign(p.value, { fxRate: out.fxRate, fxDate: out.fxDate, fxManual: out.fxManual, local: out.local ?? null })
@@ -464,6 +465,11 @@ const set = (obj, key) => (v) => {
               <Checkbox :model-value="p.noDeduction" binary :disabled="locked" @update:model-value="set(p, 'noDeduction')($event)" />
               <span>Neuplatňovať odpočet DPH</span>
             </label>
+            <label v-if="!p.noDeduction" class="check">
+              <Checkbox :model-value="!!p.mixed" binary :disabled="locked" @update:model-value="set(p, 'mixed')($event)" />
+              <span>Spoločný nákup aj pre oslobodené plnenia — pomerné odpočítanie koeficientom (§ 50)<template v-if="p.mixed && p.coef"> — koeficient {{ p.coef }} %</template></span>
+            </label>
+            <small v-if="fieldError('mixed')" class="err">{{ fieldError('mixed') }}</small>
           </div>
           <div v-if="vehicles.length" class="vehicle">
             <span class="supply-label">Vozidlo</span>
@@ -501,7 +507,7 @@ const set = (obj, key) => (v) => {
           <dt>Základ dane</dt><dd class="num">{{ formatAmount(summary.base) }}</dd>
           <dt>{{ p.reverseCharge ? 'DPH (samozdanenie)' : 'DPH' }}</dt><dd class="num">{{ formatAmount(summary.vat) }}</dd>
           <template v-if="!foreign">
-            <dt>Odpočet DPH<template v-if="p.deductPercent && !p.noDeduction"> ({{ p.deductPercent }} %)</template></dt><dd class="num">{{ p.noDeduction ? 'neuplatňuje sa' : formatAmount(p.deducted ?? summary.vat) }}</dd>
+            <dt>Odpočet DPH<template v-if="p.deductPercent && !p.noDeduction"> ({{ p.deductPercent }} %)</template><template v-if="p.mixed && !p.noDeduction"> (koeficient {{ p.coef }} %)</template></dt><dd class="num">{{ p.noDeduction ? 'neuplatňuje sa' : formatAmount(p.deducted ?? summary.vat) }}</dd>
           </template>
         </dl>
         <div class="payable">
@@ -513,7 +519,7 @@ const set = (obj, key) => (v) => {
           <dl v-if="p.local">
             <dt>Základ v EUR</dt><dd>{{ formatMoney(p.local.summary.base) }}</dd>
             <dt>DPH v EUR</dt><dd>{{ formatMoney(p.local.summary.vat) }}</dd>
-            <dt>Odpočet DPH</dt><dd>{{ p.noDeduction ? 'neuplatňuje sa' : formatMoney(p.deducted ?? p.local.summary.vat) }}</dd>
+            <dt>Odpočet DPH<template v-if="p.mixed && !p.noDeduction"> (koeficient {{ p.coef }} %)</template></dt><dd>{{ p.noDeduction ? 'neuplatňuje sa' : formatMoney(p.deducted ?? p.local.summary.vat) }}</dd>
             <dt>Spolu v EUR</dt><dd>{{ formatMoney(p.local.summary.total) }}</dd>
           </dl>
         </div>

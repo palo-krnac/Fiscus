@@ -40,6 +40,10 @@ type Tax struct {
 	// vozidle podľa § 85n); 0 = plný. VehicleID je vozidlo z knihy jázd.
 	DeductPercent int   `json:"deductPercent,omitempty"`
 	VehicleID     int64 `json:"vehicleId,omitempty"`
+	// Mixed: pomerné odpočítanie podľa § 50, Coef je predbežný koeficient
+	// roka v percentách (dopĺňa program).
+	Mixed bool `json:"mixed,omitempty"`
+	Coef  int  `json:"coef,omitempty"`
 	// Expense je druh výdavku v peňažnom denníku (výdavok).
 	Expense purchase.ExpenseKind `json:"expense"`
 	// Goods: tržba za predaj tovaru (stĺpec d1), inak výrobky a služby (d2).
@@ -60,7 +64,19 @@ func (d Document) Deductible() money.Dec {
 		return money.Zero
 	}
 	_, tax, _ := d.Tax.Totals()
-	return vat.DeductPart(tax, d.Tax.DeductPercent)
+	return d.Tax.DeductOf(tax)
+}
+
+// DeductOf vráti odpočítateľnú časť dane (osobné vozidlo, koeficient § 50).
+func (t *Tax) DeductOf(tax money.Dec) money.Dec {
+	if t.NoDeduction {
+		return money.Zero
+	}
+	coef := 100
+	if t.Mixed {
+		coef = t.Coef
+	}
+	return vat.DeductShare(tax, t.DeductPercent, coef)
 }
 
 // NormalizeTax zlúči riadky s rovnakou sadzbou, vynechá nulové, dopočíta
@@ -91,7 +107,7 @@ func (d *Document) NormalizeTax() {
 	}
 	t.SupplierICDPH = strings.ToUpper(strings.Join(strings.Fields(t.SupplierICDPH), ""))
 	if d.Kind == In {
-		t.SupplierICDPH, t.NoDeduction, t.Expense, t.DeductPercent, t.VehicleID = "", false, "", 0, 0
+		t.SupplierICDPH, t.NoDeduction, t.Expense, t.DeductPercent, t.VehicleID, t.Mixed, t.Coef = "", false, "", 0, 0, false, 0
 	} else {
 		t.Goods = false
 	}

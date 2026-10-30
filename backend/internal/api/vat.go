@@ -2,8 +2,10 @@ package api
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 
+	"github.com/palo-krnac/fiscus/backend/internal/app"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/money"
 	"github.com/palo-krnac/fiscus/backend/internal/vatreturn"
@@ -133,4 +135,40 @@ func (s *Server) recordVATFiling(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, list)
+}
+
+// vatCoefficient: GET …/vat/coefficient/{year} — koeficient § 50 na rok.
+func (s *Server) vatCoefficient(w http.ResponseWriter, r *http.Request) {
+	cid, _ := pathID(w, r, "cid")
+	year, err := strconv.Atoi(r.PathValue("year"))
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "Neplatný rok", nil)
+		return
+	}
+	v, err := s.App.VATCoefficient(r.Context(), cid, year)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, v)
+}
+
+// setVATCoefficient: PUT …/vat/coefficient/{year} {"provisional": 90, "final": null, "note": ""}
+func (s *Server) setVATCoefficient(w http.ResponseWriter, r *http.Request) {
+	cid, _ := pathID(w, r, "cid")
+	year, err := strconv.Atoi(r.PathValue("year"))
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "Neplatný rok", nil)
+		return
+	}
+	var y app.CoefYear
+	if !decode(w, r, &y) {
+		return
+	}
+	v, err := s.App.SetVATCoefficient(r.Context(), cid, year, y)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, v)
 }

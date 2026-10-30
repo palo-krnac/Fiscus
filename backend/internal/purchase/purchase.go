@@ -66,6 +66,11 @@ type Purchase struct {
 	// DeductPercent je čiastočný odpočet DPH (1–99 %, napr. 50 % pri
 	// osobnom vozidle podľa § 85n); 0 = plný odpočet.
 	DeductPercent int `json:"deductPercent,omitempty"`
+	// Mixed: nákup slúži plneniam s nárokom na odpočet aj bez neho (napr.
+	// oslobodený nájom) — DPH sa odpočíta koeficientom podľa § 50. Coef je
+	// predbežný koeficient roka v percentách (dopĺňa program).
+	Mixed bool `json:"mixed,omitempty"`
+	Coef  int  `json:"coef,omitempty"`
 	// VehicleID je vozidlo z knihy jázd, ku ktorému nákup patrí (PHM,
 	// servis, nájom) — určí percento odpočtu DPH.
 	VehicleID int64 `json:"vehicleId,omitempty"`
@@ -236,7 +241,19 @@ func (p *Purchase) Deductible() money.Dec {
 	if p.NoDeduction || !ok {
 		return money.Zero
 	}
-	return vat.DeductPart(t.Summary.VAT, p.DeductPercent)
+	return p.DeductOf(t.Summary.VAT)
+}
+
+// DeductOf vráti odpočítateľnú časť dane (osobné vozidlo, koeficient § 50).
+func (p *Purchase) DeductOf(tax money.Dec) money.Dec {
+	if p.NoDeduction {
+		return money.Zero
+	}
+	coef := 100
+	if p.Mixed {
+		coef = p.Coef
+	}
+	return vat.DeductShare(tax, p.DeductPercent, coef)
 }
 
 // CreditNote: doklad je dobropis od dodávateľa (záporné sumy).
