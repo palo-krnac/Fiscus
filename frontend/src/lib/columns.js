@@ -453,3 +453,29 @@ export const ownEventColumns = [
   t('Posun na pracovný deň', (r) => yes(r.workday), 10),
   t('Poznámka', (r) => r.note, 40),
 ]
+
+export const accountColumns = [
+  t('Účet', (r) => (r.number.length > 3 ? `${r.number.slice(0, 3)}.${r.number.slice(3)}` : r.number), 10),
+  t('Názov', (r) => r.name, 48),
+  t('Druh', (r) => ({ A: 'aktívny', P: 'pasívny', X: 'aktívny / pasívny', N: 'nákladový', V: 'výnosový', Z: 'závierkový', S: 'podsúvahový' })[r.type] ?? r.type, 16),
+  t('Nedaňový', (r) => yes(r.nonTax), 9),
+  t('Používa sa', (r) => yes(r.active), 9),
+  t('Poznámka', (r) => r.note, 30),
+]
+
+export const centerColumns = [
+  t('Kód', (r) => r.code, 10),
+  t('Stredisko', (r) => r.name, 36),
+  t('Aktívne', (r) => yes(r.active), 8),
+  t('Poznámka', (r) => r.note, 30),
+]
+
+export const jobColumns = [
+  t('Kód', (r) => r.code, 14),
+  t('Zákazka', (r) => r.name, 36),
+  t('Odberateľ', (r) => r.customer, 28),
+  date('Od', (r) => r.from),
+  date('Do', (r) => r.to),
+  t('Aktívna', (r) => yes(r.active), 8),
+  t('Poznámka', (r) => r.note, 30),
+]

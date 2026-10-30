@@ -67,6 +67,7 @@ type App struct {
 	quoteMu sync.Mutex // odpovede zákazníkov na ponuky
 	calMu   sync.Mutex // vlastné termíny v kalendári
 	coefMu  sync.Mutex // koeficient § 50
+	chartMu sync.Mutex // účtový rozvrh, strediská, zákazky
 	legal   atomic.Pointer[legal.Params]
 	// mfaTickets sú rozpracované prihlásenia, ktoré čakajú na kód 2FA.
 	mfaTickets mfaTickets
