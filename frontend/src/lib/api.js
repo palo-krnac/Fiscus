@@ -156,6 +156,16 @@ export const api = {
   statements: (cid, year) => request('GET', `/api/companies/${cid}/statements` + query({ year })),
   setStatementInputs: (cid, year, inputs) => request('PUT', `/api/companies/${cid}/statements/${year}`, inputs),
   openItems: (cid, date) => request('GET', `/api/companies/${cid}/open-items` + query({ date })),
+  chart: (cid) => request('GET', `/api/companies/${cid}/chart`),
+  saveAccount: (cid, old, a) =>
+    old ? request('PUT', `/api/companies/${cid}/chart/accounts/${old}`, a) : request('POST', `/api/companies/${cid}/chart/accounts`, a),
+  deleteAccount: (cid, number) => request('DELETE', `/api/companies/${cid}/chart/accounts/${number}`),
+  saveCenter: (cid, old, c) =>
+    old ? request('PUT', `/api/companies/${cid}/chart/centers/${encodeURIComponent(old)}`, c) : request('POST', `/api/companies/${cid}/chart/centers`, c),
+  deleteCenter: (cid, code) => request('DELETE', `/api/companies/${cid}/chart/centers/${encodeURIComponent(code)}`),
+  saveJob: (cid, old, j) =>
+    old ? request('PUT', `/api/companies/${cid}/chart/jobs/${encodeURIComponent(old)}`, j) : request('POST', `/api/companies/${cid}/chart/jobs`, j),
+  deleteJob: (cid, code) => request('DELETE', `/api/companies/${cid}/chart/jobs/${encodeURIComponent(code)}`),
   assets: (cid, year) => request('GET', `/api/companies/${cid}/assets` + query({ year })),
   vehicles: (cid) => request('GET', `/api/companies/${cid}/vehicles`),
   saveVehicle: (cid, v) => (v.id ? request('PUT', `/api/companies/${cid}/vehicles/${v.id}`, v) : request('POST', `/api/companies/${cid}/vehicles`, v)),
