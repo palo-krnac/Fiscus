@@ -146,3 +146,29 @@ func (s *Server) setMoneyAccounts(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+func (s *Server) fxRevaluation(w http.ResponseWriter, r *http.Request) {
+	cid, ok := s.company(w, r)
+	if !ok {
+		return
+	}
+	rv, err := s.App.FXRevaluationFor(r.Context(), cid, pathYear(r))
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, rv)
+}
+
+func (s *Server) postFXRevaluation(w http.ResponseWriter, r *http.Request) {
+	cid, ok := s.company(w, r)
+	if !ok {
+		return
+	}
+	doc, err := s.App.PostFXRevaluation(r.Context(), cid, pathYear(r))
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, doc)
+}

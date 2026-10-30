@@ -103,7 +103,8 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] Predkontácie (vzory zaúčtovania) pre faktúry, nákupy, banku a pokladňu — 23 predvolených, vlastné, kontrola vyrovnania MD = D
 - [x] Podvojné účtovníctvo: účtovný denník, hlavná kniha (obratová predvaha), automatické účtovanie faktúr, nákupov, banky a pokladne podľa predkontácií, ručné zápisy, interné doklady, počiatočné stavy
 - [x] Podvojné účtovníctvo: strediská a zákazky v zápisoch (náklady, výnosy a výsledok po strediskách), kurzové rozdiely pri úhrade faktúry v cudzej mene, automatické účtovanie záloh (DPH zo zálohy, zúčtovanie vo vyúčtovaní), analytické účty bánk a pokladníc
-- [ ] Podvojné účtovníctvo ďalej: dovoz s DPH z colného vyhlásenia, kurzové rozdiely pri čiastočných úhradách a k 31. 12., pokladnica v cudzej mene s DPH
+- [x] Podvojné účtovníctvo: dovoz s DPH vyrubenou colným úradom (343 / 379), kurzové rozdiely k 31. 12. (prepočet neuhradených pohľadávok a záväzkov, platí aj pri úhrade v ďalšom roku), pokladničné doklady bez DPH (aj v cudzej mene) podľa predkontácie
+- [ ] Podvojné účtovníctvo ďalej: kurzové rozdiely pri čiastočných úhradách, clo a náklady obstarania pri dovoze, zostatky bankových účtov a pokladníc v cudzej mene k 31. 12.
 - [x] Závierka mikro účtovnej jednotky z hlavnej knihy: súvaha (Úč MÚJ 1-01) a výkaz ziskov a strát (Úč MÚJ 2-01), počiatočné stavy z konečných stavov minulého roka
 - [ ] Závierka ďalej: malá účtovná jednotka (Úč POD), poznámky, uzamknutie obdobia, uloženie do RÚZ (XML)
 - [ ] Daňové priznanie k dani z príjmov (typ A/B pre FO, PO)
