@@ -4,6 +4,7 @@ import InvoiceEdit from './views/InvoiceEdit.vue'
 import OAuthConsent from './views/OAuthConsent.vue'
 import Assets from './views/Assets.vue'
 import Logbook from './views/Logbook.vue'
+import LogbookPrint from './views/LogbookPrint.vue'
 import JournalBook from './views/JournalBook.vue'
 import OpenItems from './views/OpenItems.vue'
 import Statements from './views/Statements.vue'
@@ -129,6 +130,7 @@ export const router = createRouter({
     { path: '/pohladavky-zavazky', component: OpenItems, meta: { title: 'Pohľadávky a záväzky', perm: 'ledger.read' } },
     { path: '/dennik', component: JournalBook, meta: { title: 'Peňažný denník', perm: 'ledger.read' } },
     { path: '/kniha-jazd', component: Logbook, meta: { title: 'Kniha jázd', perm: 'ledger.read' } },
+    { path: '/kniha-jazd/:id(\\d+)/tlac', component: LogbookPrint, props: true, meta: { title: 'Kniha jázd', bare: true, perm: 'ledger.read' } },
     { path: '/majetok', component: Assets, meta: { title: 'Majetok', perm: 'ledger.read' } },
     { path: '/majetok/:id(\\d+|novy)', component: Assets, props: true, meta: { title: 'Majetok', perm: 'ledger.read' } },
     { path: '/prijate/nova', component: PurchaseEdit, meta: { title: 'Nová prijatá faktúra', perm: 'purchases.write' } },

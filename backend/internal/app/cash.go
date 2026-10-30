@@ -231,6 +231,13 @@ func (a *App) prepareCash(ctx context.Context, companyID int64, d *cash.Document
 	}
 	d.SyncEUR()
 	d.NormalizeTax()
+	if d.Tax != nil && d.Tax.VehicleID != 0 {
+		pct, err := a.vehicleVAT(ctx, companyID, d.Tax.VehicleID, d.Date)
+		if err != nil {
+			return err
+		}
+		d.Tax.DeductPercent = pct
+	}
 	if d.Tax != nil {
 		company, err := a.Store.GetCompany(ctx, companyID)
 		if err != nil {

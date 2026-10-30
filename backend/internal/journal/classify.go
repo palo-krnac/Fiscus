@@ -37,6 +37,8 @@ type Buy struct {
 	VAT    money.Dec            // DPH zaplatená dodávateľovi (pri prenesení 0)
 	Kind   purchase.ExpenseKind // druh výdavku
 	Deduct bool                 // DPH sa odpočítava (inak je súčasťou výdavku)
+	// Percent je čiastočný odpočet (1–99 %); neodpočítaná časť DPH je výdavkom.
+	Percent int
 }
 
 // ExpenseColumn vráti stĺpec pre druh výdavku.
@@ -58,6 +60,9 @@ func BuyLines(amount money.Dec, b Buy) []Line {
 	paid := amount.Neg() // kladná úhrada
 	col := ExpenseColumn(b.Kind)
 	vat := proportional(paid, b.VAT, b.Total)
+	if b.Deduct && b.Percent > 0 && b.Percent < 100 {
+		vat = vat.MulRatio(money.FromInt(int64(b.Percent)), money.FromInt(100)).RoundCents()
+	}
 	if !b.Deduct || vat.IsZero() {
 		return []Line{{col, paid}}
 	}

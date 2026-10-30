@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/palo-krnac/fiscus/backend/internal/audit"
 	"github.com/palo-krnac/fiscus/backend/internal/auth"
@@ -361,10 +362,32 @@ func (a *App) DeleteFuel(ctx context.Context, companyID, id int64) error {
 	return nil
 }
 
+// VATDoc je doklad s DPH k vozidlu (nákup PHM, servis, nájom).
+type VATDoc struct {
+	Kind     string       `json:"kind"` // purchase | cash
+	ID       int64        `json:"id"`
+	Number   string       `json:"number"`
+	Date     invoice.Date `json:"date"`
+	Text     string       `json:"text"`
+	VAT      money.Dec    `json:"vat"`      // DPH na doklade
+	Deducted money.Dec    `json:"deducted"` // odpočítaná DPH
+	Percent  int          `json:"percent"`  // percento odpočtu na doklade
+	Expected int          `json:"expected"` // percento podľa vozidla
+}
+
+// VehicleVAT je DPH z nákupov k vozidlu za rok.
+type VehicleVAT struct {
+	Percent  int       `json:"percent"` // odpočet podľa vozidla (k 31. 12. roka)
+	VAT      money.Dec `json:"vat"`
+	Deducted money.Dec `json:"deducted"`
+	Docs     []VATDoc  `json:"docs"`
+}
+
 // LogbookReport je vyúčtovanie vozidla za rok so stavom zaúčtovania.
 type LogbookReport struct {
 	logbook.Report
 	Vehicle logbook.Vehicle `json:"vehicle"`
+	VAT     VehicleVAT      `json:"vat"`
 	// Posting je suma, ktorá sa zaúčtuje do uzávierky (náhrady +, vylúčenie −),
 	// Posted je suma už zaúčtovaná.
 	Posting money.Dec `json:"posting"`
@@ -399,6 +422,14 @@ func (a *App) VehicleReport(ctx context.Context, companyID, vehicleID int64, yea
 		}
 	}
 	out := LogbookReport{Report: logbook.Compute(in), Vehicle: v}
+	if out.VAT, err = a.vehicleVATDocs(ctx, companyID, v, fuels, year); err != nil {
+		return out, err
+	}
+	for _, d := range out.VAT.Docs {
+		if d.Percent != d.Expected {
+			out.Warnings = append(out.Warnings, fmt.Sprintf("Doklad %s má odpočet DPH %d %%, pri tomto vozidle patrí %d %% — vyberte na doklade vozidlo, odpočet sa nastaví sám", d.Number, d.Percent, d.Expected))
+		}
+	}
 	out.Posting = out.Allowance.Sub(out.Exclude)
 	overrides, err := a.Store.ListJournalOverrides(ctx, companyID)
 	if err != nil {
@@ -443,4 +474,79 @@ func (a *App) PostLogbook(ctx context.Context, companyID, vehicleID int64, year 
 		text = fmt.Sprintf("Kniha jázd %d – vylúčenie PHM na súkromné jazdy a nadspotreby, %s", year, r.Vehicle.Plate)
 	}
 	return r.Posting, a.saveClosing(ctx, companyID, key, text, []journal.Line{{Column: journal.ExpOther, Amount: r.Posting}})
+}
+
+// vehicleVAT vráti percento odpočtu DPH z nákupu k vozidlu k dňu (0 = plný).
+func (a *App) vehicleVAT(ctx context.Context, companyID, vehicleID int64, d invoice.Date) (int, error) {
+	v, err := a.Store.GetVehicle(ctx, companyID, vehicleID)
+	if errors.Is(err, store.ErrNotFound) {
+		return 0, vErr("vehicleId", "Vozidlo z knihy jázd neexistuje")
+	}
+	if err != nil {
+		return 0, err
+	}
+	if pct := v.VATPercent(d); pct < 100 {
+		return pct, nil
+	}
+	return 0, nil
+}
+
+// vehicleVATDocs zozbiera doklady s DPH k vozidlu za rok: prijaté faktúry
+// a pokladničné bloky s vozidlom alebo priradené k tankovaniu.
+func (a *App) vehicleVATDocs(ctx context.Context, companyID int64, v logbook.Vehicle, fuels []logbook.Fuel, year int) (VehicleVAT, error) {
+	out := VehicleVAT{Percent: v.VATPercent(invoice.NewDate(year, time.December, 31)), Docs: []VATDoc{}}
+	linked := map[string]bool{}
+	for _, f := range fuels {
+		if f.DocKind != "" {
+			linked[f.DocKind+":"+strconv.FormatInt(f.DocID, 10)] = true
+		}
+	}
+	pct := func(p int) int {
+		if p <= 0 || p >= 100 {
+			return 100
+		}
+		return p
+	}
+	add := func(d VATDoc) {
+		if d.VAT.IsZero() {
+			return
+		}
+		out.VAT, out.Deducted = out.VAT.Add(d.VAT), out.Deducted.Add(d.Deducted)
+		out.Docs = append(out.Docs, d)
+	}
+	purs, err := a.Store.ListPurchases(ctx, companyID, store.PurchaseFilter{Year: year})
+	if err != nil {
+		return out, err
+	}
+	for _, p := range purs {
+		if p.VehicleID != v.ID && !linked["purchase:"+strconv.FormatInt(p.ID, 10)] {
+			continue
+		}
+		t, ok := p.Tax()
+		if !ok || p.NoDeduction {
+			continue
+		}
+		date := p.DeliveryDate
+		if date.IsZero() {
+			date = p.IssueDate
+		}
+		add(VATDoc{Kind: "purchase", ID: p.ID, Number: p.Number, Date: date, Text: p.Description, VAT: t.Summary.VAT,
+			Deducted: p.Deductible(), Percent: pct(p.DeductPercent), Expected: v.VATPercent(date)})
+	}
+	docs, err := a.Store.ListCashDocuments(ctx, companyID, year)
+	if err != nil {
+		return out, err
+	}
+	for _, d := range docs {
+		if d.Cancelled || d.Tax == nil || d.Kind != cash.Out || d.Tax.NoDeduction {
+			continue
+		}
+		if d.Tax.VehicleID != v.ID && !linked["cash:"+strconv.FormatInt(d.ID, 10)] {
+			continue
+		}
+		_, tax, _ := d.Tax.Totals()
+		add(VATDoc{Kind: "cash", ID: d.ID, Number: d.Number, Date: d.Date, Text: d.Purpose, VAT: tax,
+			Deducted: d.Deductible(), Percent: pct(d.Tax.DeductPercent), Expected: v.VATPercent(d.Date)})
+	}
+	return out, nil
 }

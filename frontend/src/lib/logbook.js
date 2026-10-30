@@ -97,3 +97,37 @@ export function logbookPosting(r) {
   if (posted !== posting) return { tone: 'overdue', label: 'Kniha sa zmenila po zaúčtovaní', action: 'Zaúčtovať znova' }
   return { tone: 'paid', label: 'Zaúčtované v uzávierke (stĺpec e6)', action: 'Zaúčtovať znova' }
 }
+
+/** Kategórie vozidiel z technického preukazu (rozhodujú o odpočte DPH). */
+export const categories = [
+  { value: 'M1', label: 'M1 – osobné auto' },
+  { value: 'N1', label: 'N1 – úžitkové do 3,5 t' },
+  { value: 'N2', label: 'N2 – nákladné' },
+  { value: 'L3e', label: 'L3e – motocykel' },
+  { value: 'L1e', label: 'L1e – malý motocykel' },
+  { value: 'other', label: 'iná' },
+]
+
+/** Dôvody plného odpočtu DPH pri osobnom vozidle (§ 85n). */
+export const vatReasons = [
+  { value: 'exclusive', label: 'Výlučne na podnikanie (podrobná evidencia)' },
+  { value: 'rental', label: 'Požičovňa, nájom' },
+  { value: 'transport', label: 'Preprava osôb, taxi' },
+  { value: 'school', label: 'Autoškola' },
+  { value: 'demo', label: 'Predvádzacie, skúšobné, náhradné' },
+]
+
+/** Kategórie s obmedzeným odpočtom DPH na 50 % (§ 85n, 1. 1. 2026 – 30. 6. 2028). */
+export const limitedVAT = (category) => ['M1', 'L1e', 'L3e'].includes(category)
+
+/** Vysvetlenie odpočtu DPH pri vozidle. */
+export function vatHint(v) {
+  if (!v) return ''
+  if (!limitedVAT(v.category)) return 'DPH z nákupov k vozidlu sa odpočítava v plnej výške (obmedzenie platí iba pre osobné autá a motocykle).'
+  if (!v.fullVat) {
+    return 'Osobné vozidlo používané aj súkromne: z nákupov k nemu (PHM, servis, nájom, kúpa) sa od 1. 1. 2026 do 30. 6. 2028 odpočíta 50 % DPH. Na doklade vyberte vozidlo a odpočet sa nastaví sám.'
+  }
+  return v.vatReason === 'exclusive'
+    ? 'Plný odpočet DPH: vozidlo iba na podnikanie. Treba elektronickú evidenciu každej jazdy (kniha jázd s VIN a tachometrom) aj nákladov a oznámenie daňovému úradu do lehoty na podanie priznania. Súkromná jazda sa zdaňuje.'
+    : 'Plný odpočet DPH podľa výnimky § 85n ods. 4.'
+}

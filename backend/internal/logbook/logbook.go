@@ -84,6 +84,45 @@ type Vehicle struct {
 	OdometerDate invoice.Date `json:"odometerDate"`
 	Archived     bool         `json:"archived"`
 	Note         string       `json:"note"`
+	// Category je kategória vozidla podľa technického preukazu (M1, L1e,
+	// L3e, N1 …) — rozhoduje o obmedzení odpočtu DPH (§ 85n zákona o DPH).
+	Category string `json:"category"`
+	VIN      string `json:"vin"`
+	// FullVAT: plný odpočet DPH — vozidlo výlučne na podnikanie s podrobnou
+	// elektronickou evidenciou (§ 85n ods. 5, 6 a oznámenie daňovému úradu)
+	// alebo výnimka podľa § 85n ods. 4 (VATReason).
+	FullVAT   bool         `json:"fullVat"`
+	VATReason string       `json:"vatReason,omitempty"`
+	Notified  invoice.Date `json:"notified"` // oznámenie daňovému úradu (plný odpočet)
+}
+
+// Dôvody plného odpočtu DPH pri osobnom vozidle (§ 85n).
+const (
+	VATExclusive = "exclusive" // výlučne na podnikanie, podrobná evidencia
+	VATRental    = "rental"    // krátkodobý alebo iný nájom (požičovňa)
+	VATTransport = "transport" // preprava osôb, taxi
+	VATSchool    = "school"    // výcvik v autoškole
+	VATDemo      = "demo"      // predvádzacie, skúšobné, náhradné vozidlo
+)
+
+// LimitedCategories sú kategórie s obmedzeným odpočtom DPH (§ 85n).
+var LimitedCategories = map[string]bool{"M1": true, "L1e": true, "L3e": true}
+
+// LimitFrom a LimitTo je obdobie obmedzenia odpočtu DPH na 50 % (§ 85n).
+var (
+	LimitFrom = invoice.MustDate("2026-01-01")
+	LimitTo   = invoice.MustDate("2028-06-30")
+)
+
+// VATPercent vráti, koľko percent DPH z nákupu k vozidlu (PHM, servis,
+// pneumatiky, nájom, kúpa) možno odpočítať k dňu d: 50 % pri osobnom
+// vozidle (M1, L1e, L3e) používanom aj súkromne od 1. 1. 2026 do
+// 30. 6. 2028, inak 100 %.
+func (v Vehicle) VATPercent(d invoice.Date) int {
+	if !LimitedCategories[v.Category] || v.FullVAT || d.Before(LimitFrom) || d.After(LimitTo) {
+		return 100
+	}
+	return 50
 }
 
 // FlatRate vráti percento paušálnych výdavkov na PHM: 80 % pri vozidle
@@ -113,7 +152,21 @@ func (v *Vehicle) Normalize() {
 	if v.Ownership != Business {
 		v.AssetID = 0 // odpisuje sa iba vozidlo v obchodnom majetku
 	}
+	v.VIN = strings.ToUpper(strings.ReplaceAll(strings.TrimSpace(v.VIN), " ", ""))
+	if v.Category == "" {
+		v.Category = "M1"
+		if v.Moto {
+			v.Category = "L3e"
+		}
+	}
+	if !v.FullVAT {
+		v.VATReason, v.Notified = "", invoice.Date{}
+	} else if v.VATReason == "" {
+		v.VATReason = VATExclusive
+	}
 }
+
+var vinRe = regexp.MustCompile(`^[A-HJ-NPR-Z0-9]{17}$`)
 
 // Validate skontroluje vozidlo.
 func (v *Vehicle) Validate() error {
@@ -147,6 +200,28 @@ func (v *Vehicle) Validate() error {
 	}
 	if v.Odometer < 0 {
 		add("odometer", "Stav tachometra nemôže byť záporný")
+	}
+	switch v.Category {
+	case "M1", "L1e", "L3e", "N1", "N2", "other":
+	default:
+		add("category", "Vyberte kategóriu vozidla z technického preukazu")
+	}
+	if v.VIN != "" && !vinRe.MatchString(v.VIN) {
+		add("vin", "VIN má 17 znakov (písmená bez I, O, Q a číslice)")
+	}
+	if v.FullVAT {
+		switch v.VATReason {
+		case VATExclusive:
+			if v.VIN == "" {
+				add("vin", "Pri plnom odpočte DPH (výlučne na podnikanie) zadajte VIN — je súčasťou evidencie podľa § 85n")
+			}
+			if v.Method != MethodLog {
+				add("method", "Plný odpočet DPH vyžaduje podrobnú evidenciu každej jazdy — vyberte knihu jázd, nie paušál")
+			}
+		case VATRental, VATTransport, VATSchool, VATDemo:
+		default:
+			add("vatReason", "Vyberte dôvod plného odpočtu DPH")
+		}
 	}
 	if len(fe) > 0 {
 		return &invoice.ValidationError{Fields: fe}

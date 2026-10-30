@@ -110,6 +110,9 @@ async function recalc() {
     const out = await api.previewPurchase(session.companyId, payload())
     if (mine !== seq) return
     summary.value = out.summary
+    // odpočet DPH (aj 50 % pri osobnom aute) určuje server
+    p.value.deductPercent = out.deductPercent ?? 0
+    p.value.deducted = out.deducted
     // kurz ECB a sumy v eurách určuje server
     Object.assign(p.value, { fxRate: out.fxRate, fxDate: out.fxDate, fxManual: out.fxManual, local: out.local ?? null })
     computedVat.value = out.rates.map((r) => r.vat)
@@ -152,8 +155,11 @@ function removeRow(i) {
 // ---- dodávateľ z adresára / registra ----
 const contacts = shallowRef([])
 const suggestions = ref([])
+const vehicles = ref([])
 onMounted(async () => {
   contacts.value = await api.contacts(session.companyId).catch(() => [])
+  const list = await api.vehicles(session.companyId).catch(() => [])
+  vehicles.value = list.filter((v) => !v.archived || v.id === p.value?.vehicleId).map((v) => ({ value: v.id, label: `${v.plate} ${v.name}` }))
 })
 function searchContacts(e) {
   suggestions.value = filterContacts(contacts.value, e.query).slice(0, 12)
@@ -459,6 +465,12 @@ const set = (obj, key) => (v) => {
               <span>Neuplatňovať odpočet DPH</span>
             </label>
           </div>
+          <div v-if="vehicles.length" class="vehicle">
+            <span class="supply-label">Vozidlo</span>
+            <Select :model-value="p.vehicleId || null" :options="vehicles" option-label="label" option-value="value" show-clear size="small"
+              placeholder="nákup nesúvisí s autom" :disabled="locked" aria-label="Vozidlo" @update:model-value="set(p, 'vehicleId')($event || 0)" />
+            <small class="supply-hint">PHM, servis, nájom k autu — pri osobnom aute sa od 2026 odpočíta 50 % DPH (§ 85n)<template v-if="p.deductPercent"> — odpočet {{ p.deductPercent }} %</template></small>
+          </div>
           <small v-if="fieldError('supplier.icdph')" class="err">{{ fieldError('supplier.icdph') }}</small>
           <div v-if="isForeign(p.supplier.country)" class="supply">
             <span class="supply-label">Druh plnenia</span>
@@ -489,7 +501,7 @@ const set = (obj, key) => (v) => {
           <dt>Základ dane</dt><dd class="num">{{ formatAmount(summary.base) }}</dd>
           <dt>{{ p.reverseCharge ? 'DPH (samozdanenie)' : 'DPH' }}</dt><dd class="num">{{ formatAmount(summary.vat) }}</dd>
           <template v-if="!foreign">
-            <dt>Odpočet DPH</dt><dd class="num">{{ p.noDeduction ? 'neuplatňuje sa' : formatAmount(summary.vat) }}</dd>
+            <dt>Odpočet DPH<template v-if="p.deductPercent && !p.noDeduction"> ({{ p.deductPercent }} %)</template></dt><dd class="num">{{ p.noDeduction ? 'neuplatňuje sa' : formatAmount(p.deducted ?? summary.vat) }}</dd>
           </template>
         </dl>
         <div class="payable">
@@ -501,7 +513,7 @@ const set = (obj, key) => (v) => {
           <dl v-if="p.local">
             <dt>Základ v EUR</dt><dd>{{ formatMoney(p.local.summary.base) }}</dd>
             <dt>DPH v EUR</dt><dd>{{ formatMoney(p.local.summary.vat) }}</dd>
-            <dt>Odpočet DPH</dt><dd>{{ p.noDeduction ? 'neuplatňuje sa' : formatMoney(p.local.summary.vat) }}</dd>
+            <dt>Odpočet DPH</dt><dd>{{ p.noDeduction ? 'neuplatňuje sa' : formatMoney(p.deducted ?? p.local.summary.vat) }}</dd>
             <dt>Spolu v EUR</dt><dd>{{ formatMoney(p.local.summary.total) }}</dd>
           </dl>
         </div>
@@ -651,6 +663,13 @@ const set = (obj, key) => (v) => {
   align-items: center;
   gap: 6px 10px;
   margin-top: 8px;
+}
+.vehicle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
 }
 .supply-label {
   font-size: var(--fs-sm);

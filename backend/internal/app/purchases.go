@@ -37,6 +37,29 @@ func (a *App) PreviewPurchase(ctx context.Context, p purchase.Purchase) Purchase
 	return out
 }
 
+// PreviewPurchaseFor prepočíta doklad firmy (aj odpočet DPH podľa vozidla).
+func (a *App) PreviewPurchaseFor(ctx context.Context, companyID int64, p purchase.Purchase) PurchasePreview {
+	_ = a.applyVehicleVAT(ctx, companyID, &p)
+	return a.PreviewPurchase(ctx, p)
+}
+
+// applyVehicleVAT: nákup k vozidlu — percento odpočtu DPH určí vozidlo (§ 85n).
+func (a *App) applyVehicleVAT(ctx context.Context, companyID int64, p *purchase.Purchase) error {
+	if p.VehicleID == 0 {
+		return nil
+	}
+	date := p.DeliveryDate
+	if date.IsZero() {
+		date = p.IssueDate
+	}
+	pct, err := a.vehicleVAT(ctx, companyID, p.VehicleID, date)
+	if err != nil {
+		return err
+	}
+	p.DeductPercent = pct
+	return nil
+}
+
 func normalizePurchase(p *purchase.Purchase) {
 	p.SupplierNumber = strings.TrimSpace(p.SupplierNumber)
 	p.CorrectsNumber = strings.TrimSpace(p.CorrectsNumber)
@@ -70,6 +93,9 @@ func (a *App) SavePurchase(ctx context.Context, companyID int64, p purchase.Purc
 	}
 	normalizePurchase(&p)
 	if err := a.applyPurchaseRate(ctx, &p); err != nil {
+		return p, nil, err
+	}
+	if err := a.applyVehicleVAT(ctx, companyID, &p); err != nil {
 		return p, nil, err
 	}
 	warns := p.Normalize()

@@ -80,9 +80,13 @@ async function load() {
   }
 }
 watch([year, registerId], load)
+const vehicles = ref([])
 onMounted(() => {
   loadRegisters()
   load()
+  api.vehicles(session.companyId).then((list) => {
+    vehicles.value = list.filter((v) => !v.archived).map((v) => ({ value: v.id, label: `${v.plate} ${v.name}` }))
+  }).catch(() => {})
 })
 
 // úprava zoznamu pokladní
@@ -428,6 +432,10 @@ const docLink = (kind, id) => (kind === 'purchase' ? `/prijate/${id}` : `/faktur
               <FormField label="IČ DPH predajcu" :span="2" :error="errors['tax.supplierIcdph']" hint="Z pokladničného bloku — bez neho nemožno DPH odpočítať">
                 <InputText v-model="form.tax.supplierIcdph" size="small" spellcheck="false" placeholder="SK…" :disabled="form.tax.noDeduction" />
               </FormField>
+              <FormField v-if="vehicles.length" label="Vozidlo" :span="2" :error="errors['tax.vehicleId'] || errors.vehicleId"
+                :hint="preview?.tax?.deductPercent ? `odpočet DPH ${preview.tax.deductPercent} % (osobné auto, § 85n)` : 'PHM, servis, parkovanie k autu'">
+                <Select v-model="form.tax.vehicleId" :options="vehicles" option-label="label" option-value="value" show-clear size="small" fluid placeholder="nesúvisí s autom" />
+              </FormField>
               <FormField label="Druh výdavku" :span="2" hint="Stĺpec v peňažnom denníku">
                 <Select v-model="form.tax.expense" :options="codes.expenseKinds" option-label="label" option-value="code" size="small" fluid />
               </FormField>
@@ -476,6 +484,7 @@ const docLink = (kind, id) => (kind === 'purchase' ? `/prijate/${id}` : `/faktur
               <span v-for="r in detail.tax.rows" :key="r.vatRate" class="vat-line">{{ r.vatRate }} %: základ {{ formatAmount(r.base) }} €, DPH {{ formatAmount(r.vat) }} €</span>
               <span v-if="detail.tax.supplierIcdph" class="vat-line">IČ DPH predajcu {{ detail.tax.supplierIcdph }}</span>
               <span v-if="detail.tax.noDeduction" class="vat-line">bez odpočtu</span>
+              <span v-else-if="detail.tax.deductPercent" class="vat-line">odpočet {{ detail.tax.deductPercent }} % (osobné auto)</span>
             </dd>
           </template>
           <dt v-if="detail.linkNumber">Uhrádza</dt>

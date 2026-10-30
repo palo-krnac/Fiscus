@@ -36,6 +36,10 @@ type Tax struct {
 	SupplierICDPH string `json:"supplierIcdph"`
 	// NoDeduction: DPH z bloku sa neodpočítava (reprezentácia, súkromná spotreba).
 	NoDeduction bool `json:"noDeduction"`
+	// DeductPercent je čiastočný odpočet (1–99 %, napr. 50 % pri osobnom
+	// vozidle podľa § 85n); 0 = plný. VehicleID je vozidlo z knihy jázd.
+	DeductPercent int   `json:"deductPercent,omitempty"`
+	VehicleID     int64 `json:"vehicleId,omitempty"`
 	// Expense je druh výdavku v peňažnom denníku (výdavok).
 	Expense purchase.ExpenseKind `json:"expense"`
 	// Goods: tržba za predaj tovaru (stĺpec d1), inak výrobky a služby (d2).
@@ -56,7 +60,7 @@ func (d Document) Deductible() money.Dec {
 		return money.Zero
 	}
 	_, tax, _ := d.Tax.Totals()
-	return tax
+	return vat.DeductPart(tax, d.Tax.DeductPercent)
 }
 
 // NormalizeTax zlúči riadky s rovnakou sadzbou, vynechá nulové, dopočíta
@@ -87,7 +91,7 @@ func (d *Document) NormalizeTax() {
 	}
 	t.SupplierICDPH = strings.ToUpper(strings.Join(strings.Fields(t.SupplierICDPH), ""))
 	if d.Kind == In {
-		t.SupplierICDPH, t.NoDeduction, t.Expense = "", false, ""
+		t.SupplierICDPH, t.NoDeduction, t.Expense, t.DeductPercent, t.VehicleID = "", false, "", 0, 0
 	} else {
 		t.Goods = false
 	}
@@ -125,6 +129,9 @@ func (d *Document) ValidateTax(date string) []invoice.FieldError {
 	if d.Kind == Out {
 		if !t.Expense.Valid() {
 			add("tax.expense", "Neznámy druh výdavku")
+		}
+		if t.DeductPercent < 0 || t.DeductPercent > 100 {
+			add("tax.deductPercent", "Odpočet DPH musí byť 0 až 100 %")
 		}
 		if !t.NoDeduction && !strings.HasPrefix(t.SupplierICDPH, "SK") {
 			add("tax.supplierIcdph", "Zadajte IČ DPH predajcu z bloku (SK…) — bez neho nemožno DPH odpočítať")

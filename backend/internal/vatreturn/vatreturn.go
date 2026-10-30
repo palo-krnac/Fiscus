@@ -340,7 +340,7 @@ func Compute(in Input) Return {
 			if r.Rate == 0 {
 				continue
 			}
-			deducted := r.VAT
+			deducted := vat.DeductPart(r.VAT, p.DeductPercent) // čiastočný odpočet (osobné auto § 85n)
 			if p.NoDeduction {
 				deducted = money.Zero
 			}
@@ -576,9 +576,11 @@ func (ret *Return) addPurchaseCredit(p purchase.Purchase, tax purchase.Amounts) 
 		if r.Rate == 0 || r.VAT.IsZero() && r.Base.IsZero() {
 			continue
 		}
-		ret.Rows["r28"] = ret.Rows["r28"].Add(r.VAT.Neg())
+		// pri čiastočnom odpočte (osobné auto § 85n) sa opravuje iba odpočítaná časť
+		deducted := vat.DeductPart(r.VAT, p.DeductPercent)
+		ret.Rows["r28"] = ret.Rows["r28"].Add(deducted.Neg())
 		ret.KV.C2 = append(ret.KV.C2, KVCorrection{Partner: noSpaces(s.ICDPH), Name: s.Name, Number: noSpaces(p.SupplierNumber),
-			Original: noSpaces(p.CorrectsNumber), BaseDiff: r.Base, VATDiff: r.VAT, Rate: r.Rate, DeductedDiff: r.VAT, ID: p.ID})
+			Original: noSpaces(p.CorrectsNumber), BaseDiff: r.Base, VATDiff: r.VAT, Rate: r.Rate, DeductedDiff: deducted, ID: p.ID})
 	}
 	return ""
 }
@@ -626,7 +628,7 @@ func (ret *Return) addCash(in Input, add func(string, money.Dec), warn func(stri
 			warn(d.Number, "cash", d.ID, "Pokladničný blok bez IČ DPH predajcu — DPH nemožno odpočítať")
 			continue
 		}
-		var base, tax money.Dec
+		var base, tax, deducted money.Dec
 		for _, r := range d.Tax.Rows {
 			if r.Rate == 0 {
 				continue
@@ -636,9 +638,10 @@ func (ret *Return) addCash(in Input, add func(string, money.Dec), warn func(stri
 				warn(d.Number, "cash", d.ID, fmt.Sprintf("Sadzba %d %% nepatrí do tlačiva DPHv25", r.Rate))
 				continue
 			}
-			add(row, r.VAT)
-			add(domesticRow[r.Rate], r.VAT)
-			base, tax = base.Add(r.Base), tax.Add(r.VAT)
+			part := vat.DeductPart(r.VAT, d.Tax.DeductPercent)
+			add(row, part)
+			add(domesticRow[r.Rate], part)
+			base, tax, deducted = base.Add(r.Base), tax.Add(r.VAT), deducted.Add(part)
 		}
 		if tax.IsZero() {
 			continue
@@ -650,8 +653,8 @@ func (ret *Return) addCash(in Input, add func(string, money.Dec), warn func(stri
 			b3[partner] = line
 			order = append(order, partner)
 		}
-		line.Base, line.VAT, line.Deducted, line.Count = line.Base.Add(base), line.VAT.Add(tax), line.Deducted.Add(tax), line.Count+1
-		total.Base, total.VAT, total.Deducted, total.Count = total.Base.Add(base), total.VAT.Add(tax), total.Deducted.Add(tax), total.Count+1
+		line.Base, line.VAT, line.Deducted, line.Count = line.Base.Add(base), line.VAT.Add(tax), line.Deducted.Add(deducted), line.Count+1
+		total.Base, total.VAT, total.Deducted, total.Count = total.Base.Add(base), total.VAT.Add(tax), total.Deducted.Add(deducted), total.Count+1
 	}
 	if total.Count == 0 {
 		return

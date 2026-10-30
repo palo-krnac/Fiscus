@@ -25,7 +25,7 @@ import { formatAmount, formatDate, formatMoney, fromISODate, toISODate } from '.
 import { fiskusGridTheme, skGridLocale, gridRows } from '../lib/grid.js'
 import { fuelColumns, tripColumns } from '../lib/columns.js'
 import {
-  blankTrip, filterFuel, filterTrips, fuelKinds, fuelUnit, logbookPosting, methodHint, methodOptions, ownerships,
+  blankTrip, categories, filterFuel, filterTrips, fuelKinds, fuelUnit, limitedVAT, logbookPosting, methodHint, methodOptions, ownerships, vatHint, vatReasons,
   purposeSuggestions, returnTrip, tripKinds, tripRoute, tripTime, vehicleLabel,
 } from '../lib/logbook.js'
 
@@ -282,8 +282,10 @@ const vehOpen = computed({ get: () => !!vehForm.value, set: (v) => !v && (vehFor
 const assets = ref([])
 async function openVehicle(v) {
   errors.value = {}
-  const x = v ?? { id: 0, name: '', plate: '', moto: false, fuel: 'diesel', consumption: null, ownership: 'business', method: 'log', assetId: 0, driver: '', odometer: null, odometerDate: todayISO, archived: false, note: '' }
-  vehForm.value = { ...x, consumption: x.consumption == null ? null : Number(x.consumption), odometerDate: x.odometerDate ? fromISODate(x.odometerDate) : null, assetId: x.assetId || null }
+  const x = v ?? { id: 0, name: '', plate: '', moto: false, fuel: 'diesel', consumption: null, ownership: 'business', method: 'log', assetId: 0, driver: '', odometer: null,
+    odometerDate: todayISO, archived: false, note: '', category: 'M1', vin: '', fullVat: false, vatReason: 'exclusive', notified: '' }
+  vehForm.value = { ...x, consumption: x.consumption == null ? null : Number(x.consumption), odometerDate: x.odometerDate ? fromISODate(x.odometerDate) : null,
+    assetId: x.assetId || null, notified: x.notified ? fromISODate(x.notified) : null, vatReason: x.vatReason || 'exclusive' }
   try {
     const reg = await api.assets(session.companyId, year.value)
     assets.value = reg.items.filter((a) => a.kind === 'tangible').map((a) => ({ value: a.id, label: `${a.number} ${a.name}` }))
@@ -297,6 +299,7 @@ async function saveVehicle() {
     const f = vehForm.value
     const saved = await api.saveVehicle(session.companyId, {
       ...f, consumption: String(f.consumption ?? 0), odometer: f.odometer || 0, odometerDate: f.odometerDate ? toISODate(f.odometerDate) : '', assetId: f.assetId || 0,
+      notified: f.notified ? toISODate(f.notified) : '',
     })
     toast.add({ severity: 'success', summary: f.id ? 'Vozidlo uložené' : 'Vozidlo pridané', life: 2500 })
     vehForm.value = null
@@ -377,6 +380,8 @@ onBeforeUnmount(() => {
       <div class="spacer" />
       <template v-if="canWrite">
         <Button v-if="vehicle" icon="pi pi-cog" text severity="secondary" size="small" aria-label="Upraviť vozidlo" v-tooltip.bottom="'Upraviť vozidlo'" @click="openVehicle(vehicle)" />
+        <Button v-if="vehicle" icon="pi pi-print" text severity="secondary" size="small" aria-label="Tlač knihy jázd" v-tooltip.bottom="'Tlač knihy jázd'"
+          @click="router.push({ path: `/kniha-jazd/${vehicle.id}/tlac`, query: { rok: year } })" />
         <Button icon="pi pi-plus" label="Vozidlo" text size="small" @click="openVehicle()" />
         <template v-if="vehicle && !vehicle.archived">
           <Button size="small" @click="openTrip()"><i class="pi pi-plus" /><span>Jazda</span><kbd class="hint">N</kbd></Button>
@@ -484,6 +489,23 @@ onBeforeUnmount(() => {
             </tbody>
           </table>
         </div>
+        <section v-if="report.vat.docs.length || limitedVAT(vehicle.category)" class="vatbox">
+          <h3>DPH z nákupov k vozidlu <span class="muted">odpočet {{ report.vat.percent }} %</span></h3>
+          <table class="sheet">
+            <thead><tr><th>Doklad</th><th>Dátum</th><th>Predmet</th><th class="num">DPH</th><th class="num">Odpočet</th><th class="num">Odpočítaná</th></tr></thead>
+            <tbody>
+              <tr v-if="!report.vat.docs.length"><td colspan="6" class="muted">Žiadne doklady s DPH k vozidlu — na pokladničnom bloku alebo prijatej faktúre vyberte vozidlo.</td></tr>
+              <tr v-for="d in report.vat.docs" :key="d.kind + d.id" :class="{ off: d.percent !== d.expected }">
+                <td><RouterLink :to="d.kind === 'cash' ? '/pokladna' : `/prijate/${d.id}`">{{ d.number }}</RouterLink></td>
+                <td>{{ formatDate(d.date) }}</td><td>{{ d.text }}</td>
+                <td class="num">{{ formatMoney(d.vat) }}</td><td class="num">{{ d.percent }} %</td><td class="num">{{ formatMoney(d.deducted) }}</td>
+              </tr>
+            </tbody>
+            <tfoot v-if="report.vat.docs.length">
+              <tr><td colspan="3">Spolu</td><td class="num">{{ formatMoney(report.vat.vat) }}</td><td /><td class="num">{{ formatMoney(report.vat.deducted) }}</td></tr>
+            </tfoot>
+          </table>
+        </section>
         <div class="post">
           <div>
             <span class="tag" :data-tone="posting.tone"><span class="tag-text">{{ posting.label }}</span></span>
@@ -617,6 +639,22 @@ onBeforeUnmount(() => {
           <InputText v-model="vehForm.driver" size="small" />
         </FormField>
         <label class="check-row"><Checkbox v-model="vehForm.moto" binary /><span>Jednostopové vozidlo</span></label>
+        <FormField label="Kategória (technický preukaz)" :error="errors.category">
+          <Select v-model="vehForm.category" :options="categories" option-label="label" option-value="value" size="small" fluid />
+        </FormField>
+        <FormField label="VIN" :error="errors.vin" hint="17 znakov">
+          <InputText v-model="vehForm.vin" size="small" maxlength="17" spellcheck="false" />
+        </FormField>
+        <label v-if="limitedVAT(vehForm.category)" class="check-row span2"><Checkbox v-model="vehForm.fullVat" binary /><span>Plný odpočet DPH (výnimka z 50 %)</span></label>
+        <template v-if="vehForm.fullVat && limitedVAT(vehForm.category)">
+          <FormField label="Dôvod" :error="errors.vatReason">
+            <Select v-model="vehForm.vatReason" :options="vatReasons" option-label="label" option-value="value" size="small" fluid />
+          </FormField>
+          <FormField label="Oznámené daňovému úradu" :error="errors.notified" hint="dátum podania oznámenia">
+            <DatePicker v-model="vehForm.notified" date-format="d. m. yy" size="small" fluid show-clear />
+          </FormField>
+        </template>
+        <p class="method span2">{{ vatHint(vehForm) }}</p>
         <FormField label="Stav tachometra na začiatku" :error="errors.odometer">
           <InputNumber v-model="vehForm.odometer" :use-grouping="false" size="small" suffix=" km" />
         </FormField>
@@ -844,6 +882,21 @@ onBeforeUnmount(() => {
 .sheet .muted {
   margin-left: 6px;
   font-size: var(--fs-xs);
+}
+.vatbox h3 {
+  font-size: var(--fs-md);
+  margin: 0 0 6px;
+}
+.vatbox h3 .muted {
+  font-weight: 400;
+  margin-left: 6px;
+}
+.vatbox tr.off td {
+  background: var(--tone-overdue-bg);
+}
+.vatbox tfoot td {
+  font-weight: 600;
+  border-top: 1px solid var(--rule);
 }
 .post {
   display: flex;
