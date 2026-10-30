@@ -53,3 +53,21 @@ export function validDays(issueDate, validUntil) {
   if (!issueDate || !validUntil) return null
   return Math.round((Date.parse(validUntil) - Date.parse(issueDate)) / 86400000)
 }
+
+const dt = new Intl.DateTimeFormat('sk-SK', { day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+
+/** Stav odkazu pre zákazníka: otvorenie a odpoveď (texty do panela ponuky). */
+export function shareInfo(share) {
+  if (!share) return null
+  const r = share.response
+  return {
+    viewed: share.viewed ? `Zákazník ponuku otvoril ${dt.format(new Date(share.viewed))}.` : 'Zákazník odkaz ešte neotvoril.',
+    response: r ? `${r.accepted ? 'Prijal' : 'Odmietol'} ${r.name}, ${dt.format(new Date(r.at))}.` : '',
+    order: r?.order ? `Objednávka ${r.order}` : '',
+    note: r?.note ?? '',
+  }
+}
+
+/** Zákazník môže na verejnej stránke odpovedať (server posiela canRespond). */
+export const publicVerdict = (v) =>
+  v.response ? (v.response.accepted ? 'accepted' : 'rejected') : v.status === 'accepted' ? 'accepted' : v.status === 'rejected' ? 'rejected' : v.status === 'invoiced' ? 'accepted' : v.expired ? 'expired' : 'open'

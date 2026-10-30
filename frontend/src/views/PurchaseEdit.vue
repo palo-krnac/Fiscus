@@ -68,7 +68,7 @@ async function load() {
     } else {
       const today = toISODate(new Date())
       p.value = {
-        supplierNumber: '', variableSymbol: '', contactId: 0,
+        supplierNumber: '', correctsNumber: '', variableSymbol: '', contactId: 0,
         supplier: { name: '', street: '', city: '', zip: '', country: 'SK', ico: '', dic: '', icdph: '', email: '' },
         supplierIban: '', issueDate: today, deliveryDate: today, receivedDate: today, dueDate: null,
         paymentMethod: 'transfer', reverseCharge: false, noDeduction: false, supplyKind: '', description: '', note: '',
@@ -361,6 +361,10 @@ const set = (obj, key) => (v) => {
           <div class="form-grid">
             <FormField label="Číslo faktúry dodávateľa" :span="2" :error="fieldError('supplierNumber')">
               <InputText :model-value="p.supplierNumber" :disabled="locked" :invalid="!!fieldError('supplierNumber')" size="small" @update:model-value="set(p, 'supplierNumber')($event)" />
+            </FormField>
+            <FormField v-if="Number(summary.total) < 0 || p.correctsNumber" label="Opravuje faktúru č." :span="2" :error="fieldError('correctsNumber')"
+              hint="Dobropis (záporné sumy): číslo pôvodnej faktúry dodávateľa — do kontrolného výkazu C.2">
+              <InputText :model-value="p.correctsNumber" :disabled="locked" :invalid="!!fieldError('correctsNumber')" size="small" @update:model-value="set(p, 'correctsNumber')($event)" />
             </FormField>
             <FormField label="Variabilný symbol" hint="Prázdne = z čísla faktúry">
               <InputText :model-value="p.variableSymbol" :disabled="locked" inputmode="numeric" size="small" @update:model-value="set(p, 'variableSymbol')($event)" />

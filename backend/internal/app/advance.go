@@ -3,12 +3,14 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/palo-krnac/fiscus/backend/internal/audit"
 	"github.com/palo-krnac/fiscus/backend/internal/auth"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/money"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
+	"github.com/palo-krnac/fiscus/backend/internal/vatreturn"
 )
 
 // ErrReceiptIssued: k úhrade zálohy je vystavený daňový doklad — úhradu nemožno zrušiť.
@@ -208,4 +210,96 @@ func (a *App) changeFinalAdvances(ctx context.Context, companyID, finalID, profo
 	a.record(ctx, companyID, audit.CatInvoices, "update", "invoice", saved.ID,
 		what+p.Number+" vo vyúčtovaní pre "+saved.Customer.Name, nil, saved.Advance)
 	return saved, nil
+}
+
+// within15Check: záloha bez dokladu k platbe (dodanie do 15 dní) sa dá
+// vyúčtovať iba faktúrou s dodaním do 15 dní od platby v tom istom
+// zdaňovacom období — daňová povinnosť vzniká dňom prijatia platby.
+func within15Check(inv invoice.Invoice, company store.Company) error {
+	if msg := inv.Within15Error(); msg != "" {
+		return &invoice.ValidationError{Fields: []invoice.FieldError{{Field: "deliveryDate", Message: msg}}}
+	}
+	if inv.Advance == nil {
+		return nil
+	}
+	quarterly := company.VATPeriod == store.VATPeriodQuarter
+	at := vatreturn.PeriodOf(inv.DeliveryDate, quarterly)
+	for _, d := range inv.Advance.Deductions {
+		if d.Untaxed != invoice.UntaxedWithin15 {
+			continue
+		}
+		if paid := vatreturn.PeriodOf(d.Date, quarterly); paid != at {
+			return &invoice.ValidationError{Fields: []invoice.FieldError{{Field: "deliveryDate", Message: fmt.Sprintf(
+				"Platba zálohy %s je v období %s, dodanie v období %s — daň z platby patrí do obdobia platby. Vystavte k platbe daňový doklad (na zálohovej faktúre).",
+				d.Number, paid.Label(), at.Label())}}}
+		}
+	}
+	return nil
+}
+
+// payFromAdvances zapíše do vystaveného vyúčtovania úhrady zo záloh bez
+// daňového dokladu k platbe (peniaze už prišli na zálohovú faktúru).
+func (a *App) payFromAdvances(ctx context.Context, companyID int64, inv *invoice.Invoice) error {
+	changed := false
+	for _, d := range inv.Advance.Deductions {
+		if d.Untaxed == "" || inv.Status != invoice.StatusIssued {
+			continue
+		}
+		if err := inv.AddPayment(invoice.Payment{Date: d.Date, Amount: d.Total, Source: invoice.PaymentAdvance, Ref: d.ProformaID}); err != nil {
+			return err
+		}
+		changed = true
+	}
+	if !changed {
+		return nil
+	}
+	return a.Store.SaveInvoice(ctx, companyID, inv)
+}
+
+// IssueMissingReceipts vystaví daňové doklady k platbám zálohy, ku ktorým
+// doklad chýba — napr. keď sa dodanie do 15 dní od platby nestihlo.
+func (a *App) IssueMissingReceipts(ctx context.Context, companyID, proformaID int64) (invoice.Invoice, error) {
+	if err := a.Require(ctx, companyID, auth.PermInvoicesWrite); err != nil {
+		return invoice.Invoice{}, err
+	}
+	p, err := a.Store.GetInvoice(ctx, companyID, proformaID)
+	if err != nil {
+		return p, err
+	}
+	if !p.CanIssueReceipt() {
+		_, why := p.AdvanceMode()
+		if why == "" {
+			why = "k tejto zálohe sa daňový doklad k prijatej platbe nevyhotovuje"
+		}
+		return p, &invoice.ValidationError{Fields: []invoice.FieldError{{Field: "advance", Message: why}}}
+	}
+	if p.Settled() {
+		return p, invoice.ErrAlreadySettled
+	}
+	missing := p.UncoveredPayments()
+	if len(missing) == 0 {
+		return p, &invoice.ValidationError{Fields: []invoice.FieldError{{Field: "advance", Message: "Všetky platby zálohy už majú daňový doklad"}}}
+	}
+	for _, pay := range missing {
+		if p, err = a.issueAdvanceReceipt(ctx, companyID, p, pay); err != nil {
+			return p, err
+		}
+	}
+	// rozpracované vyúčtovanie: odpočet už podľa nových dokladov
+	if p.Advance != nil && p.Advance.FinalID != 0 {
+		f, err := a.Store.GetInvoice(ctx, companyID, p.Advance.FinalID)
+		if err == nil && f.Status == invoice.StatusDraft {
+			receipts, err := a.receiptsOf(ctx, companyID, p)
+			if err != nil {
+				return p, err
+			}
+			if err := f.RefreshAdvance(p, receipts); err != nil {
+				return p, err
+			}
+			if _, err := a.saveDraft(ctx, companyID, f); err != nil {
+				return p, err
+			}
+		}
+	}
+	return p, nil
 }

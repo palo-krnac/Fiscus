@@ -69,6 +69,6 @@ var Rows = []RowDef{
 	{"r33", "Nadmerný odpočet", "Výsledok", true},
 	{"r34", "Nadmerný odpočet z predchádzajúceho obdobia (§ 79)", "Výsledok", false},
 	{"r35", "Vlastná daňová povinnosť na úhradu", "Výsledok", true},
-	{"r36", "Rozdiel oproti poslednej známej daňovej povinnosti (dodatočné priznanie)", "Výsledok", false},
-	{"r37", "Daň na úhradu / vrátenie (dodatočné priznanie)", "Výsledok", false},
+	{"r36", "Rozdiel oproti poslednej známej daňovej povinnosti alebo nadmernému odpočtu (dodatočné priznanie)", "Výsledok", false},
+	{"r37", "Suma na vysporiadanie so štátnym rozpočtom (dodatočné priznanie)", "Výsledok", false},
 }

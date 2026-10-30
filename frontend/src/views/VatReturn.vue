@@ -14,7 +14,9 @@ import { api } from '../lib/api.js'
 import { codes } from '../lib/codes.js'
 import { formatAmount, formatDate, formatQuantity } from '../lib/format.js'
 import { session } from '../lib/session.js'
-import { defaultPeriod, dueDate, periodOptions } from '../lib/vat.js'
+import { defaultPeriod, dueDate, kindParams, lastKnownOf, periodOptions, returnKinds, suggestKind } from '../lib/vat.js'
+import DatePicker from 'primevue/datepicker'
+import { fromISODate, toISODate } from '../lib/format.js'
 import { matches, searchTerms } from '../lib/search.js'
 import { kvColumns, svColumns, vatRowColumns } from '../lib/columns.js'
 import { saveBlob } from '../lib/export.js'
@@ -46,6 +48,25 @@ const loading = ref(false)
 const showAll = ref(false)
 const search = ref('')
 const busyXML = ref('')
+// druh priznania (riadne / opravné / dodatočné) a zaznamenané podania
+const filings = ref([])
+const sup = ref({ druh: 'riadne', zistene: '', posledne: '', r37: '' })
+const zisteneDate = computed({
+  get: () => fromISODate(sup.value.zistene),
+  set: (d) => (sup.value.zistene = d ? toISODate(d) : ''),
+})
+const opts = () => kindParams(sup.value)
+async function loadFilings() {
+  try {
+    filings.value = await api.vatFilings(session.companyId, period.value)
+  } catch {
+    filings.value = []
+  }
+  const deadline = dueDateISO(period.value)
+  const druh = suggestKind(filings.value, deadline, toISODate(new Date()))
+  sup.value = { druh, zistene: druh === 'dodatocne' ? toISODate(new Date()) : '', posledne: lastKnownOf(filings.value), r37: '' }
+}
+const dueDateISO = (p) => dueDate(p) || ''
 
 watch(kind, (k) => {
   try {
@@ -60,21 +81,35 @@ async function load() {
   if (!period.value) return
   loading.value = true
   try {
-    data.value = await api.vat(session.companyId, period.value, excess.value.trim().replace(',', '.'))
+    data.value = await api.vat(session.companyId, period.value, excess.value.trim().replace(',', '.'), opts())
     error.value = ''
   } catch (e) {
     data.value = null
-    error.value = e.message
+    error.value = e.fields?.[0]?.message ?? e.message
   } finally {
     loading.value = false
   }
 }
 let timer
-watch([period, excess], () => {
+watch([period, excess, () => JSON.stringify(sup.value)], () => {
   clearTimeout(timer)
-  timer = setTimeout(load, 200)
+  timer = setTimeout(load, 250)
 })
-onMounted(load)
+watch(period, loadFilings)
+onMounted(() => loadFilings().then(load))
+const recording = ref(false)
+async function recordFiling() {
+  recording.value = true
+  try {
+    filings.value = await api.recordVatFiling(session.companyId, period.value, excess.value.trim().replace(',', '.'), opts())
+    toast.add({ severity: 'success', summary: 'Podanie zaznamenané', detail: 'Pri ďalšej oprave Fiškus navrhne opravné alebo dodatočné priznanie.', life: 5000 })
+  } catch (e) {
+    toast.add({ severity: 'error', summary: 'Podanie sa nezaznamenalo', detail: e.message, life: 6000 })
+  } finally {
+    recording.value = false
+  }
+}
+const kindLabel = (k) => returnKinds.find((x) => x.value === k)?.label.toLowerCase() ?? k
 
 const rows = computed(() => data.value?.rows ?? {})
 const val = (code) => rows.value[code] ?? '0'
@@ -113,6 +148,7 @@ const kvSections = computed(() => {
     { code: 'B.1', title: 'Prijaté faktúry – prenesenie daňovej povinnosti', rows: f(kv.b1, 'B.1'), kind: 'purchase' },
     { code: 'B.2', title: 'Prijaté faktúry s odpočtom DPH', rows: f(kv.b2, 'B.2'), kind: 'purchase' },
     { code: 'C.1', title: 'Vydané opravné faktúry (dobropisy) platiteľom', rows: f(kv.c1, 'C.1'), kind: 'invoice', correction: true },
+    { code: 'C.2', title: 'Prijaté opravné faktúry (dobropisy od dodávateľov)', rows: f(kv.c2 ?? [], 'C.2'), kind: 'purchase', correction: true },
   ]
 })
 const kvAll = computed(() => kvSections.value.flatMap((s) => s.rows))
@@ -142,7 +178,7 @@ function openDoc(kind, id) {
 async function downloadXML(which) {
   busyXML.value = which
   try {
-    const { blob, name } = await api.vatXML(session.companyId, which, period.value, excess.value.trim().replace(',', '.'))
+    const { blob, name } = await api.vatXML(session.companyId, which, period.value, excess.value.trim().replace(',', '.'), which === 'sv' ? {} : opts())
     saveBlob(blob, name)
     toast.add({ severity: 'success', summary: `Uložené ${name}`, detail: 'Súbor načítajte v eDane alebo na portáli finančnej správy.', life: 5000 })
   } catch (e) {
@@ -166,6 +202,32 @@ async function downloadXML(which) {
       <Select v-model="period" :options="options" option-label="label" option-value="value" size="small" class="period" aria-label="Obdobie" />
     </header>
 
+      <section v-if="tab !== 'sv' && (data || filings.length || sup.druh !== 'riadne')" class="kindbar" aria-label="Druh priznania">
+        <SelectButton v-model="sup.druh" :options="returnKinds" option-label="label" option-value="value" :allow-empty="false" size="small" aria-label="Druh priznania" />
+        <template v-if="sup.druh === 'dodatocne'">
+          <label>
+            <span>Dátum zistenia</span>
+            <DatePicker v-model="zisteneDate" date-format="d. m. yy" size="small" show-icon icon-display="input" />
+          </label>
+          <label>
+            <span>Posledná známa povinnosť (−&nbsp;odpočet)</span>
+            <InputText v-model="sup.posledne" size="small" inputmode="decimal" placeholder="napr. 230,00 alebo -60,00" />
+          </label>
+          <label>
+            <span>r. 37 (ak sa líši od r. 36)</span>
+            <InputText v-model="sup.r37" size="small" inputmode="decimal" placeholder="= r. 36" />
+          </label>
+        </template>
+        <div class="spacer" />
+        <span v-if="filings.length" class="filed">
+          Podané: <template v-for="(f, i) in filings" :key="i"><template v-if="i">, </template>{{ kindLabel(f.kind) }} {{ formatDate(f.filed) }}</template>
+        </span>
+        <Button label="Zaznamenať podanie" icon="pi pi-check-square" severity="secondary" outlined size="small" :loading="recording" :disabled="!data"
+          v-tooltip.bottom="'Po podaní v eDane si Fiškus zapamätá výsledok — pri ďalšej oprave navrhne opravné alebo dodatočné priznanie'" @click="recordFiling" />
+      </section>
+      <p v-if="tab === 'kv' && sup.druh === 'dodatocne'" class="kindnote">
+        <i class="pi pi-info-circle" /> Dodatočný kontrolný výkaz obsahuje iba opravované záznamy — Fiškus ho zatiaľ nevytvára, opravu urobte v eDane. Opravný KV (pred lehotou) vytvorí.
+      </p>
     <p v-if="error" class="error"><i class="pi pi-exclamation-circle" /> {{ error }}</p>
 
     <template v-if="data">
@@ -318,7 +380,7 @@ async function downloadXML(which) {
                     <td class="num">{{ formatAmount(l.vat ?? l.vatDiff) }}</td>
                     <td class="num">{{ l.rate }}</td>
                   </template>
-                  <td v-if="s.kind === 'purchase'" class="num">{{ formatAmount(l.deducted) }}</td>
+                  <td v-if="s.kind === 'purchase'" class="num">{{ formatAmount(s.code === 'C.2' ? l.deductedDiff : l.deducted) }}</td>
                 </tr>
               </tbody>
             </table>
@@ -473,6 +535,34 @@ async function downloadXML(which) {
 .grand {
   border-bottom: 3px double currentColor;
   line-height: 1.15;
+}
+.kindbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
+  padding: 8px 10px;
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+}
+.kindbar label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--fs-sm);
+  color: var(--ink-soft);
+}
+.kindbar label :deep(input) {
+  width: 11rem;
+}
+.kindbar .filed {
+  font-size: var(--fs-sm);
+  color: var(--ink-soft);
+}
+.kindnote {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--ink-soft);
 }
 .warnings {
   border-left: 3px solid var(--tone-overdue);

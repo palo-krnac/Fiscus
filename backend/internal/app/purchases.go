@@ -62,6 +62,7 @@ func (a *App) applyVehicleVAT(ctx context.Context, companyID int64, p *purchase.
 
 func normalizePurchase(p *purchase.Purchase) {
 	p.SupplierNumber = strings.TrimSpace(p.SupplierNumber)
+	p.CorrectsNumber = strings.TrimSpace(p.CorrectsNumber)
 	p.SupplierIBAN = formatIBAN(p.SupplierIBAN)
 	if p.VariableSymbol == "" {
 		p.VariableSymbol = invoice.VariableSymbol(p.SupplierNumber)

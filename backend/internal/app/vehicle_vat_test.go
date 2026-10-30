@@ -101,3 +101,27 @@ func TestVehicleVAT(t *testing.T) {
 		t.Fatalf("upozornenie na nesúlad: %v", r.Warnings)
 	}
 }
+
+func TestVehicleVATCreditNote(t *testing.T) {
+	// dobropis od autoservisu k osobnému autu: opravuje sa iba odpočítaná polovica DPH
+	a, c := newApp(t, edition.Desktop)
+	car, err := a.SaveVehicle(ctx, c.ID, logbook.Vehicle{Name: "Octavia", Plate: "BB123AB", Consumption: m.MustParse("5"), Category: "M1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cn, _, err := a.SavePurchase(ctx, c.ID, purchase.Purchase{SupplierNumber: "D-1", CorrectsNumber: "S-1",
+		Supplier:  invoice.Party{Name: "Autoservis s.r.o.", ICDPH: "SK2020372640", Country: "SK"},
+		IssueDate: invoice.MustDate("2026-10-05"), DeliveryDate: invoice.MustDate("2026-10-05"), ReceivedDate: invoice.MustDate("2026-10-06"),
+		DueDate: invoice.MustDate("2026-10-20"), Description: "Dobropis – servis", VehicleID: car.ID,
+		Rates: []purchase.RateRow{{Rate: vat.Rate23, Base: m.MustParse("-100")}}})
+	if err != nil || cn.DeductPercent != 50 {
+		t.Fatalf("dobropis: %d %v", cn.DeductPercent, err)
+	}
+	ret, _, err := a.VATReturn(ctx, c.ID, "2026-10", m.Zero)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ret.Rows["r28"].Equal(m.MustParse("11.5")) || len(ret.KV.C2) != 1 || !ret.KV.C2[0].DeductedDiff.Equal(m.MustParse("-11.5")) || !ret.KV.C2[0].VATDiff.Equal(m.MustParse("-23")) {
+		t.Fatalf("r. 28 a C.2: %s %+v", ret.Rows["r28"], ret.KV.C2)
+	}
+}

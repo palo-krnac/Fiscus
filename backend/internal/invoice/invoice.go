@@ -110,14 +110,25 @@ type Invoice struct {
 	PaidAmount money.Dec `json:"paidAmount"`
 	// Balance je zostatok na úhradu, BalanceEUR v eurách (pri cudzej mene
 	// prepočítaný kurzom faktúry) — pre zoznamy a QR platbu (dopĺňa program).
-	Balance       money.Dec     `json:"balance"`
-	BalanceEUR    money.Dec     `json:"balanceEur"`
+	Balance    money.Dec `json:"balance"`
+	BalanceEUR money.Dec `json:"balanceEur"`
+	// AmountDue je suma na úhradu: pri vyúčtovaní po odpočte záloh bez
+	// daňového dokladu k platbe (dopĺňa program).
+	Due           money.Dec     `json:"amountDue"`
 	Currency      string        `json:"currency"`
 	PriceMode     vat.PriceMode `json:"priceMode"`
 	ReverseCharge bool          `json:"reverseCharge"`
 	// SupplyKind: tovar alebo služba — rozhoduje pri zahraničnom odberateľovi
 	// (dodanie do EÚ / vývoz, súhrnný výkaz).
 	SupplyKind SupplyKind `json:"supplyKind"`
+	// Within15 (zálohová faktúra): dodanie bude do 15 dní od prijatia platby —
+	// namiesto dokladu k prijatej platbe sa vyhotoví rovno faktúra k dodaniu (§ 73).
+	Within15 bool `json:"within15,omitempty"`
+	// Pri zálohovej faktúre dopĺňa program: čo sa stane s platbou
+	// (AdvanceMode), prečo ju treba vyúčtovať ručne a platby bez dokladu.
+	AdvanceKind AdvanceMode `json:"advanceMode,omitempty"`
+	AdvanceNote string      `json:"advanceNote,omitempty"`
+	Uncovered   []Payment   `json:"uncoveredPayments,omitempty"`
 	// NonVATPayer: dodávateľ nie je platiteľ DPH — faktúra je bez DPH.
 	NonVATPayer bool  `json:"nonVatPayer"`
 	ContactID   int64 `json:"contactId"` // odkaz do adresára (0 = zadané ručne)

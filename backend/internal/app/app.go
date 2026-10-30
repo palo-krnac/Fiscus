@@ -49,7 +49,10 @@ type App struct {
 	// BackupSetup umožní nastaviť priečinok a heslo záloh v programe (nil = iba parametrami).
 	BackupSetup *BackupSetup
 	// ECBURL je adresa kurzov ECB ("" = nesťahovať); FetchRates ju v testoch nahradí.
-	ECBURL     string
+	ECBURL string
+	// ECBRateURL je séria základnej úrokovej sadzby ECB (CSV) pre úrok
+	// z omeškania ("" = nesťahovať, sadzby sa zadávajú ručne).
+	ECBRateURL string
 	FetchRates func(ctx context.Context, url string) ([]fx.Rate, error)
 	// AIBaseURL je adresa Claude API ("" = api.anthropic.com; v testoch falošný server).
 	AIBaseURL string
@@ -61,6 +64,7 @@ type App struct {
 	Mailer  mail.Sender
 	lic     atomic.Pointer[license.License]
 	recurMu sync.Mutex // jeden beh pravidelnej fakturácie naraz
+	quoteMu sync.Mutex // odpovede zákazníkov na ponuky
 	legal   atomic.Pointer[legal.Params]
 	// mfaTickets sú rozpracované prihlásenia, ktoré čakajú na kód 2FA.
 	mfaTickets mfaTickets
@@ -455,6 +459,9 @@ func (a *App) Issue(ctx context.Context, companyID, id int64) (invoice.Invoice, 
 	if err != nil {
 		return inv, err
 	}
+	if err := within15Check(inv, company); err != nil {
+		return inv, err
+	}
 	year, month := inv.IssueDate.Year(), inv.IssueDate.Month()
 	seq, err := a.Store.NextSequence(ctx, companyID, invoice.SequenceKey(inv.Kind), year)
 	if err != nil {
@@ -482,7 +489,10 @@ func (a *App) Issue(ctx context.Context, companyID, id int64) (invoice.Invoice, 
 		if err := a.linkFinal(ctx, companyID, inv); err != nil {
 			return inv, err
 		}
-		if inv.Summary.Total.IsZero() {
+		if err := a.payFromAdvances(ctx, companyID, &inv); err != nil {
+			return inv, err
+		}
+		if inv.Summary.Total.IsZero() && inv.Status == invoice.StatusIssued {
 			// celé plnenie uhradené zálohou
 			return a.MarkPaid(ctx, companyID, inv.ID, inv.IssueDate)
 		}

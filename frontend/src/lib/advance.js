@@ -50,3 +50,35 @@ export function settledAdvances(inv) {
   }
   return [...out.values()]
 }
+
+/**
+ * Čo sa stane s platbou zálohy (advanceMode určuje server):
+ * receipt – daňový doklad k platbe, within15 – faktúra k dodaniu do 15 dní,
+ * untaxed – platba nezakladá daňovú povinnosť, nonvat – neplatiteľ, manual.
+ */
+export function advanceModeText(inv) {
+  switch (inv?.advanceMode) {
+    case 'receipt':
+      return inv.reverseCharge || inv.lines?.some((l) => l.reverse)
+        ? 'Zálohová faktúra nie je daňový doklad. Ku každej platbe vznikne doklad k prijatej platbe bez DPH s prenesením daňovej povinnosti a zálohu potom vyúčtujete.'
+        : 'Zálohová faktúra nie je daňový doklad. Ku každej prijatej platbe (aj čiastočnej) vznikne daňový doklad k prijatej platbe a zálohu potom vyúčtujete.'
+    case 'within15':
+      return 'Dodanie do 15 dní od platby: k platbe sa daňový doklad nevystaví. Zálohu vyúčtujte faktúrou s dodaním najneskôr 15. deň po platbe a v tom istom období DPH.'
+    case 'untaxed':
+      return 'Pri dodaní tovaru do EÚ, vývoze a službe mimo EÚ platba vopred nezakladá daňovú povinnosť — doklad k platbe sa nevystaví, DPH a súhrnný výkaz sú až z vyúčtovania.'
+    case 'manual':
+      return `${inv.advanceNote}.`.replace(/\.\.$/, '.')
+    default:
+      return 'Zálohová faktúra nie je daňový doklad. Po úhrade zálohu vyúčtujete.'
+  }
+}
+
+/** Voľbu „dodanie do 15 dní“ má zmysel ponúknuť iba tam, kde by inak vznikol doklad k platbe. */
+export const canChooseWithin15 = (inv) => inv?.kind === 'proforma' && ['receipt', 'within15'].includes(inv.advanceMode)
+
+/** Posledný deň dodania pri platbe bez dokladu (deň platby + 15 dní), ISO dátum. */
+export function within15Deadline(paidISO) {
+  const d = new Date(`${paidISO}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + 15)
+  return d.toISOString().slice(0, 10)
+}
