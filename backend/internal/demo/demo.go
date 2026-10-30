@@ -340,7 +340,25 @@ func seedForeign(ctx context.Context, a *app.App, c store.Company) error {
 		Description: "Cloudový server a zálohovanie – október",
 		Rates:       []purchase.RateRow{{Rate: vat.Rate23, Base: m.MustParse("149.00")}},
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	// druhá pokladňa v korunách: služobné cesty do Česka
+	regs, err := a.SaveCashRegisters(ctx, c.ID, []cash.Register{{ID: 0}, {ID: -1, Name: "Pokladňa CZK", Currency: "CZK", Prefix: "CZ"}})
+	if err != nil {
+		return err
+	}
+	czk := regs[len(regs)-1].ID
+	for _, d := range []cash.Document{
+		{RegisterID: czk, Kind: cash.In, Date: today.AddDays(-20), Amount: m.MustParse("5000"), Partner: "Majiteľ", Purpose: "Výber korún na služobnú cestu"},
+		{RegisterID: czk, Kind: cash.Out, Date: today.AddDays(-17), Amount: m.MustParse("1280"), Partner: "OMV Brno", Purpose: "Pohonné hmoty – cesta Brno"},
+		{RegisterID: czk, Kind: cash.Out, Date: today.AddDays(-17), Amount: m.MustParse("450"), Partner: "Parkovisko Brno-střed", Purpose: "Parkovné"},
+	} {
+		if _, err := a.CreateCash(ctx, c.ID, d); err != nil {
+			return fmt.Errorf("demo pokladňa CZK: %w", err)
+		}
+	}
+	return nil
 }
 
 // seedRecurring pripraví pravidelné faktúry: mesačný paušál (dnes sa vystaví),

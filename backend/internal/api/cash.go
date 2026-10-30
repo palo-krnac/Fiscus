@@ -24,12 +24,39 @@ func (s *Server) cashBook(w http.ResponseWriter, r *http.Request) {
 	if year == 0 {
 		year = s.App.Today().Year()
 	}
-	book, err := s.App.CashBook(r.Context(), cid, year)
+	reg, _ := strconv.ParseInt(r.URL.Query().Get("register"), 10, 64)
+	book, err := s.App.CashBookOf(r.Context(), cid, year, reg)
 	if err != nil {
 		failCash(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, book)
+}
+
+// cashRegisters: GET /api/companies/{cid}/cash-registers — pokladne so zostatkami.
+func (s *Server) cashRegisters(w http.ResponseWriter, r *http.Request) {
+	cid, _ := pathID(w, r, "cid")
+	list, err := s.App.CashRegisters(r.Context(), cid)
+	if err != nil {
+		failCash(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, list)
+}
+
+// saveCashRegisters: PUT /api/companies/{cid}/cash-registers — celý zoznam (nové so záporným ID).
+func (s *Server) saveCashRegisters(w http.ResponseWriter, r *http.Request) {
+	cid, _ := pathID(w, r, "cid")
+	var list []cash.Register
+	if !decode(w, r, &list) {
+		return
+	}
+	out, err := s.App.SaveCashRegisters(r.Context(), cid, list)
+	if err != nil {
+		failCash(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) getCash(w http.ResponseWriter, r *http.Request) {
@@ -48,7 +75,8 @@ func (s *Server) getCash(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) cashCandidates(w http.ResponseWriter, r *http.Request) {
 	cid, _ := pathID(w, r, "cid")
-	list, err := s.App.CashCandidates(r.Context(), cid, cash.Kind(r.URL.Query().Get("kind")))
+	reg, _ := strconv.ParseInt(r.URL.Query().Get("register"), 10, 64)
+	list, err := s.App.CashCandidates(r.Context(), cid, cash.Kind(r.URL.Query().Get("kind")), reg)
 	if err != nil {
 		failCash(w, err)
 		return

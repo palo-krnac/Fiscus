@@ -134,7 +134,7 @@ func TestBalances(t *testing.T) {
 		{Means: Bank, Account: "SK8975000000000012345671", Amount: m.MustParse("-10")},
 		{Means: Cash, Account: "Pokladnica", Amount: m.MustParse("-30")},
 	}
-	got := Balances(es, m.MustParse("100"), map[string]m.Dec{"SK3112000000198742637541": m.MustParse("1000")}, []string{"SK3112000000198742637541"})
+	got := Balances(es, []CashOpening{{"Pokladnica", m.MustParse("100")}}, map[string]m.Dec{"SK3112000000198742637541": m.MustParse("1000")}, []string{"SK3112000000198742637541"})
 	if len(got) != 3 {
 		t.Fatalf("%+v", got)
 	}
@@ -168,7 +168,7 @@ func TestClosing(t *testing.T) {
 	if tot.Result.String() != "-700.00" || tot.BankIn.String() != "500.00" || !tot.CashIn.IsZero() {
 		t.Fatalf("%+v", tot)
 	}
-	if b := Balances([]Entry{{Means: Closing, Lines: lines(ExpOther, "1")}}, m.Zero, nil, nil); len(b) != 1 || !b[0].Closing.IsZero() {
+	if b := Balances([]Entry{{Means: Closing, Lines: lines(ExpOther, "1")}}, []CashOpening{{"Pokladnica", m.Zero}}, nil, nil); len(b) != 1 || !b[0].Closing.IsZero() {
 		t.Fatalf("stavy: %+v", b)
 	}
 }

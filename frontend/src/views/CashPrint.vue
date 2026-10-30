@@ -5,8 +5,8 @@ import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import { api } from '../lib/api.js'
 import { session } from '../lib/session.js'
-import { formatAmount, formatDate } from '../lib/format.js'
-import { amountInWords } from '../lib/words.js'
+import { formatAmount, formatDate, formatMoney } from '../lib/format.js'
+import { amountInWordsIn } from '../lib/words.js'
 import CompanyLogo from '../components/CompanyLogo.vue'
 
 const props = defineProps({ id: String })
@@ -79,9 +79,9 @@ const addr = (c) => [c.street, [c.zip, c.city].filter(Boolean).join(' ')].filter
       <section class="sum">
         <div>
           <span>Suma</span>
-          <strong class="grand">{{ formatAmount(doc.amount) }} €</strong>
+          <strong class="grand">{{ formatMoney(doc.amount, doc.currency || 'EUR') }}</strong>
         </div>
-        <p class="words">Slovom: {{ amountInWords(doc.amount) }}</p>
+        <p class="words">Slovom: {{ amountInWordsIn(doc.amount, doc.currency) }}</p>
       </section>
 
       <footer class="signs">

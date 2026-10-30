@@ -1,7 +1,8 @@
 <script setup>
 // Pokladňa: príjmové a výdavkové pokladničné doklady, zostatok, úhrada faktúr v hotovosti.
 import { computed, onMounted, ref, shallowRef, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import Dialog from 'primevue/dialog'
 import { AgGridVue } from 'ag-grid-vue3'
 import Button from 'primevue/button'
 import Select from 'primevue/select'
@@ -24,8 +25,11 @@ import Checkbox from 'primevue/checkbox'
 import { codes, ratesOn } from '../lib/codes.js'
 import { emptyTax, taxErrors, taxLabel, taxPayload } from '../lib/cashvat.js'
 import ExportButton from '../components/ExportButton.vue'
+import { currencyOptions } from '../lib/fx.js'
+import { blankRegister, registerLocked, registerOptions, registersPayload } from '../lib/cashregisters.js'
 
 const router = useRouter()
+const route = useRoute()
 const toast = useToast()
 const confirm = useConfirm()
 const canWrite = computed(() => can('cash.write'))
@@ -44,10 +48,30 @@ const book = ref({ documents: [], opening: '0', balance: '0', in: '0', out: '0' 
 const loading = ref(true)
 const loadError = ref('')
 
+// ---- pokladne (hlavná má ID 0) ----
+const registers = ref([])
+const registerId = computed({
+  get: () => Number(route.query.pokladna ?? 0),
+  set: (v) => router.replace({ query: { ...route.query, pokladna: v ? String(v) : undefined } }),
+})
+const register = computed(() => book.value.register ?? registers.value.find((r) => r.id === registerId.value) ?? { name: 'Pokladnica', currency: 'EUR' })
+const currency = computed(() => register.value.currency || 'EUR')
+const foreign = computed(() => currency.value !== 'EUR')
+const regOptions = computed(() => registerOptions(registers.value, registerId.value))
+const money = (v) => formatMoney(v, currency.value)
+
+async function loadRegisters() {
+  try {
+    registers.value = await api.cashRegisters(session.companyId)
+  } catch {
+    registers.value = []
+  }
+}
+
 async function load() {
   loading.value = true
   try {
-    book.value = await api.cashBook(session.companyId, year.value)
+    book.value = await api.cashBook(session.companyId, year.value, registerId.value)
     loadError.value = ''
   } catch (e) {
     loadError.value = e.message
@@ -55,8 +79,35 @@ async function load() {
     loading.value = false
   }
 }
-watch(year, load)
-onMounted(load)
+watch([year, registerId], load)
+onMounted(() => {
+  loadRegisters()
+  load()
+})
+
+// úprava zoznamu pokladní
+const regDlg = ref(null)
+const regErrors = ref({})
+function openRegisters() {
+  regErrors.value = {}
+  regDlg.value = registers.value.map((r) => ({ ...r }))
+}
+async function saveRegisters() {
+  busy.value = true
+  try {
+    registers.value = await api.saveCashRegisters(session.companyId, registersPayload(regDlg.value))
+    regDlg.value = null
+    toast.add({ severity: 'success', summary: 'Pokladne uložené', life: 2500 })
+    await load()
+  } catch (e) {
+    regErrors.value = e.fieldMap?.() ?? {}
+    if (!Object.keys(regErrors.value).length) toast.add({ severity: 'error', summary: 'Pokladne sa neuložili', detail: e.message, life: 6000 })
+  } finally {
+    busy.value = false
+  }
+}
+const regError = (i, f) => regErrors.value[`registers[${i}].${f}`]
+const curOptions = computed(() => currencyOptions(codes.currencies))
 
 const visibleRows = computed(() => {
   const terms = searchTerms(search.value)
@@ -132,14 +183,14 @@ async function openNew(kind) {
   errors.value = {}
   candidates.value = []
   try {
-    candidates.value = await api.cashCandidates(session.companyId, kind)
+    candidates.value = await api.cashCandidates(session.companyId, kind, registerId.value)
   } catch {
     /* bez kandidátov */
   }
 }
 const kindLabel = (k) => (k === 'purchase' ? 'prijatá' : 'vydaná')
 const candidateOptions = computed(() =>
-  candidates.value.map((c) => ({ ...c, label: `${c.number} · ${c.partner} · ${formatAmount(c.amount)} €` })),
+  candidates.value.map((c) => ({ ...c, label: `${c.number} · ${c.partner} · ${money(c.amount)}` })),
 )
 function pickLink(c) {
   form.value.link = c
@@ -155,6 +206,7 @@ async function save() {
   const f = form.value
   try {
     const d = await api.createCash(session.companyId, {
+      registerId: registerId.value,
       kind: f.kind,
       date: toISODate(f.date),
       amount: String(f.amount).replace(/\s/g, '').replace(',', '.'),
@@ -177,7 +229,7 @@ async function save() {
 }
 
 // ---- DPH (iba platiteľ, doklad bez väzby na faktúru) ----
-const vatPayer = computed(() => !!session.company?.vatPayer)
+const vatPayer = computed(() => !!session.company?.vatPayer && !foreign.value)
 const preview = ref(null) // doklad po prepočte na serveri (základ, daň)
 const rateOptions = computed(() => ratesOn(toISODate(form.value?.date) ?? undefined).map((r) => ({ label: `${r} %`, value: r })))
 function toggleTax(on) {
@@ -257,8 +309,12 @@ const docLink = (kind, id) => (kind === 'purchase' ? `/prijate/${id}` : `/faktur
   <div class="page">
     <header class="head">
       <h1>Pokladňa</h1>
+      <Select v-if="regOptions.length > 1" v-model="registerId" :options="regOptions" option-label="label" option-value="value" size="small"
+        aria-label="Pokladňa" class="reg-select" />
       <Select v-model="year" :options="years" option-label="label" option-value="value" size="small" aria-label="Rok" />
       <div class="spacer" />
+      <Button v-if="canWrite" size="small" icon="pi pi-cog" severity="secondary" text :label="regOptions.length > 1 ? undefined : 'Pokladne'"
+        v-tooltip.bottom="'Pokladne – ďalšia pokladňa, cudzia mena'" aria-label="Pokladne" @click="openRegisters" />
       <template v-if="canWrite">
         <Button size="small" icon="pi pi-plus" label="Príjem" @click="openNew('in')" />
         <Button size="small" icon="pi pi-minus" label="Výdavok" severity="secondary" outlined @click="openNew('out')" />
@@ -268,19 +324,19 @@ const docLink = (kind, id) => (kind === 'purchase' ? `/prijate/${id}` : `/faktur
     <section class="ledger" aria-label="Súhrn">
       <div class="figure">
         <span class="label">Počiatočný stav {{ year }}</span>
-        <span class="value">{{ formatMoney(book.opening) }}</span>
+        <span class="value">{{ money(book.opening) }}</span>
       </div>
       <div class="figure">
         <span class="label">Príjmy</span>
-        <span class="value in">{{ formatMoney(book.in) }}</span>
+        <span class="value in">{{ money(book.in) }}</span>
       </div>
       <div class="figure">
         <span class="label">Výdavky</span>
-        <span class="value">{{ formatMoney(book.out) }}</span>
+        <span class="value">{{ money(book.out) }}</span>
       </div>
       <div class="figure">
         <span class="label">Zostatok v pokladni</span>
-        <span class="value"><span class="grand">{{ formatMoney(book.balance) }}</span></span>
+        <span class="value"><span class="grand">{{ money(book.balance) }}</span></span>
       </div>
     </section>
 
@@ -290,7 +346,7 @@ const docLink = (kind, id) => (kind === 'purchase' ? `/prijate/${id}` : `/faktur
         <InputIcon class="pi pi-search" />
         <InputText v-model="search" placeholder="Hľadať číslo, partnera, účel, sumu" size="small" aria-label="Hľadať" />
       </IconField>
-      <ExportButton :name="`Pokladňa ${year}`" :columns="cashColumns" :rows="() => gridRows(gridApi, visibleRows)" />
+      <ExportButton :name="`${register.name} ${year}`" :columns="cashColumns" :rows="() => gridRows(gridApi, visibleRows)" />
     </div>
 
     <p v-if="loadError" class="error">{{ loadError }}</p>
@@ -331,7 +387,7 @@ const docLink = (kind, id) => (kind === 'purchase' ? `/prijate/${id}` : `/faktur
               <div class="opt">
                 <strong>{{ option.number }}</strong> <span class="muted">{{ kindLabel(option.kind) }}</span>
                 <span>{{ option.partner }}</span>
-                <span class="amt">{{ formatAmount(option.amount) }} €</span>
+                <span class="amt">{{ money(option.amount) }}</span>
               </div>
             </template>
           </Select>
@@ -339,7 +395,7 @@ const docLink = (kind, id) => (kind === 'purchase' ? `/prijate/${id}` : `/faktur
         <FormField label="Dátum" :error="errors.date">
           <DatePicker v-model="form.date" date-format="d. m. yy" size="small" fluid />
         </FormField>
-        <FormField label="Suma €" :error="errors.amount">
+        <FormField :label="`Suma ${foreign ? currency : '€'}`" :error="errors.amount">
           <InputText v-model="form.amount" inputmode="decimal" size="small" class="num" :disabled="!!form.link" />
         </FormField>
         <FormField :label="form.kind === 'in' ? 'Prijaté od' : 'Vyplatené komu'" :span="2" :error="errors.partner">
@@ -404,12 +460,16 @@ const docLink = (kind, id) => (kind === 'purchase' ? `/prijate/${id}` : `/faktur
     <Drawer v-model:visible="detailOpen" position="right" class="cash-panel" :header="detail?.number">
       <template v-if="detail">
         <div class="amount" :class="detail.kind">
-          {{ detail.kind === 'in' ? '+' : '−' }}{{ formatAmount(detail.amount) }} €
+          {{ detail.kind === 'in' ? '+' : '−' }}{{ money(detail.amount) }}
           <span v-if="detail.cancelled" class="badge">stornovaný</span>
         </div>
         <dl class="facts">
           <dt>Druh</dt><dd>{{ detail.kind === 'in' ? 'Príjmový pokladničný doklad' : 'Výdavkový pokladničný doklad' }}</dd>
           <dt>Dátum</dt><dd>{{ formatDate(detail.date) }}</dd>
+          <template v-if="detail.currency && detail.currency !== 'EUR'">
+            <dt>V eurách</dt>
+            <dd>{{ formatMoney(detail.amountEur) }} <span class="muted">kurz {{ detail.fxManual ? 'dohodnutý' : `ECB ${formatDate(detail.fxDate)}` }}: {{ String(detail.fxRate).replace('.', ',') }} {{ detail.currency }}</span></dd>
+          </template>
           <template v-if="detail.tax?.rows?.length">
             <dt>DPH</dt>
             <dd>
@@ -443,10 +503,89 @@ const docLink = (kind, id) => (kind === 'purchase' ? `/prijate/${id}` : `/faktur
         </div>
       </template>
     </Drawer>
+
+    <!-- pokladne -->
+    <Dialog :visible="!!regDlg" modal header="Pokladne" :style="{ width: '44rem' }" :breakpoints="{ '760px': '96vw' }"
+      @update:visible="(v) => !v && (regDlg = null)">
+      <template v-if="regDlg">
+        <p class="muted small">Každá pokladňa má vlastný zostatok a rad dokladov. Pokladňa v cudzej mene prepočíta doklady kurzom ECB ku dňu dokladu — v peňažnom denníku je v eurách.</p>
+        <div class="reg-list">
+          <div v-for="(r, i) in regDlg" :key="r.id" class="reg-row">
+            <FormField label="Názov" :error="regError(i, 'name')">
+              <InputText v-model="r.name" size="small" :placeholder="r.id === 0 ? 'Pokladnica' : 'napr. Prevádzka Brezno'" />
+            </FormField>
+            <FormField label="Mena" :error="regError(i, 'currency')">
+              <Select v-model="r.currency" :options="curOptions" option-label="code" option-value="code" size="small" filter
+                :disabled="r.id === 0 || registerLocked(r)" />
+            </FormField>
+            <FormField label="Predpona čísiel" :error="regError(i, 'prefix')" :hint="r.id === 0 ? 'PPD / VPD' : `${r.prefix || '…'}PPD${year}0001`">
+              <InputText v-model="r.prefix" size="small" maxlength="6" :disabled="r.id === 0 || registerLocked(r)" :placeholder="r.id === 0 ? '' : 'CZ'" />
+            </FormField>
+            <div class="reg-state">
+              <span class="muted">{{ r.documents ? `zostatok ${formatMoney(r.balance, r.currency)}` : 'bez dokladov' }}</span>
+              <label v-if="r.id !== 0" class="vat-toggle"><Checkbox v-model="r.archived" binary /><span>archivovaná</span></label>
+              <Button v-if="r.id !== 0 && !r.documents" icon="pi pi-trash" text size="small" severity="danger" :aria-label="`Odobrať ${r.name}`"
+                @click="regDlg.splice(i, 1)" />
+            </div>
+          </div>
+        </div>
+        <p v-if="regErrors.registers" class="err">{{ regErrors.registers }}</p>
+        <Button label="Pridať pokladňu" icon="pi pi-plus" text size="small" @click="regDlg.push(blankRegister(regDlg))" />
+      </template>
+      <template #footer>
+        <Button label="Zrušiť" severity="secondary" text size="small" @click="regDlg = null" />
+        <Button label="Uložiť pokladne" icon="pi pi-check" size="small" :loading="busy" @click="saveRegisters" />
+      </template>
+    </Dialog>
   </div>
 </template>
 
 <style scoped>
+.reg-select {
+  min-width: 11rem;
+}
+.reg-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 10px 0;
+}
+.reg-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) 7rem 8rem minmax(0, 1.4fr);
+  gap: 10px;
+  align-items: start;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--rule-soft);
+}
+.reg-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: var(--fs-sm);
+  padding-top: 26px;
+}
+@media (max-width: 760px) {
+  .reg-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .reg-row > :first-child,
+  .reg-state {
+    grid-column: span 2;
+  }
+  .reg-state {
+    padding-top: 0;
+  }
+  .head {
+    flex-wrap: wrap;
+  }
+  .reg-select {
+    min-width: 0;
+    flex: 1 1 100%;
+    order: 10;
+  }
+}
 .page {
   display: flex;
   flex-direction: column;

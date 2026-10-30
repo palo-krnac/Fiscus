@@ -40,6 +40,43 @@ type Document struct {
 	Cancelled  bool         `json:"cancelled"`
 	// Tax je DPH dokladu bez väzby na faktúru (blok, tržba z e-kasy); nil = bez DPH.
 	Tax *Tax `json:"tax,omitempty"`
+	// RegisterID je pokladňa (0 = hlavná). Doklad pokladne v cudzej mene má
+	// sumu v mene pokladne a kurz ECB ku dňu dokladu; AmountEUR je suma
+	// v eurách pre peňažný denník.
+	RegisterID int64        `json:"registerId"`
+	Currency   string       `json:"currency"`
+	FXRate     money.Dec    `json:"fxRate"`
+	FXDate     invoice.Date `json:"fxDate"`
+	FXManual   bool         `json:"fxManual"`
+	AmountEUR  money.Dec    `json:"amountEur"`
+}
+
+// Foreign vráti true pre doklad v cudzej mene.
+func (d Document) Foreign() bool { return d.Currency != "" && d.Currency != "EUR" }
+
+// SyncEUR prepočíta sumu v eurách (v eurách = suma dokladu; v cudzej mene
+// suma / kurz, nula bez kurzu).
+func (d *Document) SyncEUR() {
+	if d.Currency == "" {
+		d.Currency = "EUR"
+	}
+	if !d.Foreign() {
+		d.FXRate, d.FXDate, d.FXManual = money.Zero, invoice.Date{}, false
+		d.AmountEUR = d.Amount
+		return
+	}
+	d.AmountEUR = money.Zero
+	if d.FXRate.Sign() > 0 {
+		d.AmountEUR = d.Amount.DivCents(d.FXRate)
+	}
+}
+
+// SignedEUR vráti sumu v eurách so znamienkom (výdavok záporný).
+func (d Document) SignedEUR() money.Dec {
+	if d.Kind == Out {
+		return d.AmountEUR.Neg()
+	}
+	return d.AmountEUR
 }
 
 // Signed vráti sumu so znamienkom (výdavok záporný).
@@ -73,6 +110,14 @@ func (d *Document) Validate() error {
 	}
 	if strings.TrimSpace(d.Purpose) == "" {
 		add("purpose", "Zadajte účel platby")
+	}
+	if d.Foreign() {
+		if d.FXRate.Sign() <= 0 {
+			add("fxRate", "Chýba kurz ECB ku dňu dokladu — aktualizujte kurzy alebo zadajte kurz ručne")
+		}
+		if d.Tax != nil {
+			add("tax", "DPH sa na doklade v cudzej mene neuvádza — zahraničný blok nie je doklad na odpočet v SR")
+		}
 	}
 	if len(fe) == 0 {
 		fe = append(fe, d.ValidateTax(d.Date.String())...)

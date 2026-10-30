@@ -201,6 +201,8 @@ export const cashColumns = [
   money('Výdavok', (r) => (r.kind === 'out' ? r.amount : '')),
   t('Partner', (r) => r.partner, 24),
   t('Účel', (r) => r.purpose, 36),
+  t('Mena', (r) => r.currency || 'EUR', 6),
+  money('Suma €', (r) => (r.kind === 'out' ? `-${r.amountEur ?? r.amount}` : r.amountEur ?? r.amount)),
   t('Doklad', (r) => r.linkNumber, 14),
   t('Stav', (r) => (r.cancelled ? 'stornovaný' : ''), 10),
   t('Poznámka', (r) => r.note, 24),

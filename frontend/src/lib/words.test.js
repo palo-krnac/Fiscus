@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { amountInWords, numberInWords } from './words.js'
+import { amountInWords, amountInWordsIn, numberInWords } from './words.js'
 
 describe('suma slovom', () => {
   it.each([
@@ -28,4 +28,12 @@ describe('suma slovom', () => {
     ['12.01', 'dvanásť eur 1 cent'],
     ['0.03', 'nula eur 3 centy'],
   ])('%s → %s', (a, w) => expect(amountInWords(a)).toBe(w))
+})
+
+describe('suma slovom v cudzej mene', () => {
+  it.each([
+    ['2500.00', 'CZK', 'dvetisícpäťsto CZK'],
+    ['12.50', 'USD', 'dvanásť USD 50/100'],
+    ['3.00', 'EUR', 'tri eurá'],
+  ])('%s %s', (a, c, want) => expect(amountInWordsIn(a, c)).toBe(want))
 })

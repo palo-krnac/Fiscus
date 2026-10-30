@@ -57,3 +57,11 @@ export function amountInWords(amount) {
   if (cents) s += ` ${cents} ${form(cents, 'cent', 'centy', 'centov')}`
   return s
 }
+
+/** Suma slovom v mene dokladu: v eurách ako amountInWords, inak „dvetisícpäťsto CZK 50/100“. */
+export function amountInWordsIn(amount, currency = 'EUR') {
+  if (!currency || currency === 'EUR') return amountInWords(amount)
+  const [whole, frac = '0'] = String(amount).replace('-', '').split('.')
+  const cents = Math.round(Number(`0.${frac}`) * 100)
+  return `${numberInWords(Number(whole))} ${currency}${cents ? ` ${cents}/100` : ''}`
+}
