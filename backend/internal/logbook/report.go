@@ -240,6 +240,9 @@ func Compute(in Input) Report {
 			warn("V registri majetku je podiel na podnikaní %d %%, podľa knihy jázd %s %% — zvážte úpravu podielu pri odpisoch", in.AssetShare, r.Share.Display())
 		}
 	}
+	if v.FullVAT && v.VATReason == VATExclusive && r.KmPrivate > 0 {
+		warn("Vozidlo má plný odpočet DPH (výlučne na podnikanie), ale v knihe sú súkromné jazdy (%d km) — súkromné použitie treba zdaniť (§ 9 ods. 2 zákona o DPH) alebo uplatňovať 50 %%", r.KmPrivate)
+	}
 	if v.Ownership != Private && noDoc > 0 {
 		warn("Tankovania bez priradeného dokladu (pokladničný blok alebo prijatá faktúra): %d — nákup PHM musí byť vo výdavkoch, inak sa súkromná časť vylúči z výdavkov, ktoré tam nie sú", noDoc)
 	}

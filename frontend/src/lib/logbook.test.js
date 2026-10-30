@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { blankTrip, filterFuel, filterTrips, fuelUnit, logbookPosting, methodHint, methodOptions, purposeSuggestions, returnTrip, tripRoute, tripTime, vehicleLabel } from './logbook.js'
+import { limitedVAT, vatHint, blankTrip, filterFuel, filterTrips, fuelUnit, logbookPosting, methodHint, methodOptions, purposeSuggestions, returnTrip, tripRoute, tripTime, vehicleLabel } from './logbook.js'
 
 const trips = [
   { id: 1, date: '2026-10-01', from: 'Banská Bystrica', to: 'Zvolen', purpose: 'Montáž rozvádzača', kind: 'business', km: 25, driver: 'Pavol' },
@@ -54,5 +54,17 @@ describe('kniha jázd', () => {
   ])('zaúčtovanie %#', (r, tone, action) => {
     const s = logbookPosting(r)
     expect([s.tone, s.action]).toEqual([tone, action])
+  })
+})
+
+describe('DPH vozidla', () => {
+  it.each([
+    [{ category: 'N1' }, 'plnej výške'],
+    [{ category: 'M1' }, '50 % DPH'],
+    [{ category: 'M1', fullVat: true, vatReason: 'exclusive' }, 'oznámenie daňovému úradu'],
+    [{ category: 'L3e', fullVat: true, vatReason: 'transport' }, 'výnimky'],
+  ])('vysvetlenie %#', (v, part) => expect(vatHint(v)).toContain(part))
+  it('obmedzené kategórie', () => {
+    expect(['M1', 'N1', 'L3e', 'L1e'].map(limitedVAT)).toEqual([true, false, true, true])
   })
 })

@@ -37,7 +37,8 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] AI vyťaženie prijatých faktúr z PDF a fotky (Claude API; AI iba navrhuje, používateľ skontroluje)
 - [x] Banka: import výpisov camt.053, automatické párovanie podľa VS a sumy, návrhy, ručné párovanie, nepárované pohyby
 - [x] Banka: výpisy GPC, CSV a Excel, čiastočné úhrady
-- [ ] Banka: platobné príkazy (pain.001), napojenie na banku cez API
+- [x] Banka: platobné príkazy SEPA (pain.001) z prijatých faktúr
+- [ ] Banka: napojenie na banku cez API
 - [x] Pokladňa: príjmové a výdavkové doklady (PPD/VPD), kontrola záporného zostatku, úhrada faktúr v hotovosti, storno, tlač so sumou slovom
 - [x] Pokladňa: DPH na pokladničných dokladoch — blok ako zjednodušená faktúra (odpočet, KV B.3.1/B.3.2 podľa limitu 3 000 €), tržba z e-kasy (daň na výstupe, KV D.1), rozpis v peňažnom denníku
 - [x] Viac pokladní (vlastný zostatok a rad dokladov s predponou, archivácia) a pokladňa v cudzej mene (kurz ECB ku dňu dokladu, v peňažnom denníku v eurách, úhrada faktúr v tej istej mene)
@@ -46,7 +47,7 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] Súhrnný výkaz (SVDPHv20): tovar do EÚ (kód 0), služby do EÚ (kód 2); r. 13–15 pre dodanie do EÚ a vývoz; nadobudnutie tovaru z EÚ (r. 05–08) a služby zo zahraničia (r. 09–10)
 - [x] A.2 a tuzemské prenesenie pri dodaní (§ 69 ods. 12) pri položkách: druhy a) až j), kód colného sadzobníka, hranica 5 000 €, XML
 - [ ] Dobropis k A.2 (kód opravy), trojstranný obchod (kód 1), call-off stock, dovoz s DPH na colnici (r. 22–23)
-- [ ] Dobropisy od dodávateľov (C.2, r. 28), zjednodušené faktúry a pokladničné doklady (B.3, D.1), čiastočný odpočet (koeficient)
+- [ ] Dobropisy od dodávateľov (C.2, r. 28), zjednodušené faktúry a pokladničné doklady (B.3, D.1), čiastočný odpočet (koeficient) — percento odpočtu na doklade je hotové (vozidlá), chýba koeficient podľa § 50
 - [ ] Opravné a dodatočné priznanie / KV (KOpr, r. 36–37)
 - [ ] Podanie priamo na portál finančnej správy (vyžaduje autentifikáciu)
 - [x] Upomienky: faktúry po splatnosti podľa odberateľov, 1., 2. a posledná upomienka, zákonný úrok z omeškania (ECB + 9 p. b. podnikateľ, + 5 p. b. spotrebiteľ, k prvému dňu omeškania), dohodnutá sadzba, paušálna náhrada 40 € (§ 369c ObZ), tlač listu, číselný rad UP
@@ -98,7 +99,9 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] Odpisy z registra jedným tlačidlom do uzávierky roka (stĺpec e6); zostatkové ceny do výkazu o majetku a záväzkoch (r. 01, 02) a tabuľky 1a DP typ B
 - [ ] Účtovné odpisy, technické zhodnotenie, prerušenie odpisovania, prenájom (§ 27 ods. 2)
 - [x] Kniha jázd: vozidlá (v obchodnom majetku, prenajaté, súkromné), jazdy so stavom tachometra, účelom a vodičom, tankovanie z pokladničných blokov a prijatých faktúr; vyúčtovanie za rok — PHM podľa knihy jázd s limitom spotreby z TP (nadspotreba, súkromné jazdy), paušál 80 % / 50 %, cestovné náhrady za súkromné auto (základná náhrada za km podľa dňa jazdy + PHM), odpis z registra majetku, náklady na každú jazdu a na km; zaúčtovanie do uzávierky; sadzby za km v Legislatíve
-- [ ] Kniha jázd: pomerný odpočet DPH z PHM a nájomného podľa služobných km, tlač knihy jázd, import z GPS
+- [x] DPH pri vozidlách od 2026 (§ 85n): kategória a VIN vozidla, odpočet 50 % z nákupov k osobnému autu (M1, L1e, L3e) — vozidlo na prijatej faktúre a pokladničnom bloku nastaví odpočet sám (DPH r. 19/21, KV B.2 a B.3 s odpočítanou daňou, neodpočítaná časť do výdavkov); plný odpočet pri výlučnom podnikaní (VIN, kniha jázd, dátum oznámenia) alebo výnimke; prehľad DPH z dokladov k vozidlu s kontrolou nesúladu
+- [x] Tlač knihy jázd (A4 na šírku): vozidlo, jazdy, tankovanie, náklady s DPH, vyúčtovanie
+- [ ] Kniha jázd: import z GPS, zdanenie súkromného použitia vozidla s plným odpočtom (§ 9 ods. 2), úprava odpočtu pri predaji do 5 rokov
 
 ## Etapa 4 — mzdy (samostatný návrh)
 - [ ] Sociálna poisťovňa, zdravotné poisťovne, preddavky na daň, ročné zúčtovanie

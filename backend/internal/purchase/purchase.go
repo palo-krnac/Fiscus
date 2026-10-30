@@ -62,8 +62,16 @@ type Purchase struct {
 	// medzi nadobudnutím tovaru z EÚ (r. 05–08) a službou (r. 09–10).
 	SupplyKind invoice.SupplyKind `json:"supplyKind"`
 	// NoDeduction: DPH sa neodpočítava (napr. reprezentácia, súkromná spotreba).
-	NoDeduction bool   `json:"noDeduction"`
-	Description string `json:"description"` // predmet plnenia
+	NoDeduction bool `json:"noDeduction"`
+	// DeductPercent je čiastočný odpočet DPH (1–99 %, napr. 50 % pri
+	// osobnom vozidle podľa § 85n); 0 = plný odpočet.
+	DeductPercent int `json:"deductPercent,omitempty"`
+	// VehicleID je vozidlo z knihy jázd, ku ktorému nákup patrí (PHM,
+	// servis, nájom) — určí percento odpočtu DPH.
+	VehicleID int64 `json:"vehicleId,omitempty"`
+	// Deducted je DPH na odpočet v eurách (dopĺňa program).
+	Deducted    money.Dec `json:"deducted"`
+	Description string    `json:"description"` // predmet plnenia
 	// Expense je druh výdavku pre peňažný denník (zásoby, služby…); prázdny = služby.
 	Expense ExpenseKind `json:"expense"`
 	Note    string      `json:"note"`
@@ -215,6 +223,7 @@ func (p *Purchase) Normalize() []Warning {
 		local := p.toEUR()
 		p.Local = &local
 	}
+	p.Deducted = p.Deductible()
 	return warns
 }
 
@@ -224,7 +233,7 @@ func (p *Purchase) Deductible() money.Dec {
 	if p.NoDeduction || !ok {
 		return money.Zero
 	}
-	return t.Summary.VAT
+	return vat.DeductPart(t.Summary.VAT, p.DeductPercent)
 }
 
 // Validate skontroluje doklad.
@@ -298,6 +307,9 @@ func (p *Purchase) Validate() error {
 		}
 	}
 	// pre kontrolný výkaz (B.2) a prenesenie je IČ DPH dodávateľa povinné
+	if p.DeductPercent < 0 || p.DeductPercent > 100 {
+		add("deductPercent", "Odpočet DPH musí byť 0 až 100 %")
+	}
 	if hasVAT && !p.NoDeduction && s.ICDPH == "" {
 		add("supplier.icdph", "Na odpočet DPH zadajte IČ DPH dodávateľa (potrebné do kontrolného výkazu)")
 	}

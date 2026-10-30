@@ -64,14 +64,15 @@ func (s *Server) getPurchase(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) previewPurchase(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.company(w, r); !ok {
+	cid, ok := s.company(w, r)
+	if !ok {
 		return
 	}
 	var p purchase.Purchase
 	if !decodeLoose(w, r, &p) {
 		return
 	}
-	writeJSON(w, http.StatusOK, s.App.PreviewPurchase(r.Context(), p))
+	writeJSON(w, http.StatusOK, s.App.PreviewPurchaseFor(r.Context(), cid, p))
 }
 
 func (s *Server) savePurchase(w http.ResponseWriter, r *http.Request) {

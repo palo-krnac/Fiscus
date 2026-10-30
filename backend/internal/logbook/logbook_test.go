@@ -221,3 +221,49 @@ func TestFuelWithoutDocument(t *testing.T) {
 		t.Fatalf("súkromné auto doklad nepotrebuje vo Fiškuse: %v", r.Warnings)
 	}
 }
+
+func TestVATPercent(t *testing.T) {
+	cases := []struct {
+		name string
+		v    Vehicle
+		date string
+		want int
+	}{
+		{"osobné auto 2026", Vehicle{Category: "M1"}, "2026-03-01", 50},
+		{"osobné auto 2025", Vehicle{Category: "M1"}, "2025-12-31", 100},
+		{"posledný deň obmedzenia", Vehicle{Category: "M1"}, "2028-06-30", 50},
+		{"po obmedzení", Vehicle{Category: "M1"}, "2028-07-01", 100},
+		{"motocykel", Vehicle{Category: "L3e"}, "2026-03-01", 50},
+		{"dodávka N1", Vehicle{Category: "N1"}, "2026-03-01", 100},
+		{"výlučne na podnikanie", Vehicle{Category: "M1", FullVAT: true}, "2026-03-01", 100},
+	}
+	for _, c := range cases {
+		if got := c.v.VATPercent(invoice.MustDate(c.date)); got != c.want {
+			t.Errorf("%s: %d", c.name, got)
+		}
+	}
+	v := Vehicle{Name: "Octavia", Plate: "BB123AB", Consumption: m.MustParse("5"), FullVAT: true}
+	v.Normalize()
+	if err := v.Validate(); err == nil || !strings.Contains(err.Error(), "vin") || v.VATReason != VATExclusive || v.Category != "M1" {
+		t.Fatalf("plný odpočet bez VIN: %v %+v", err, v)
+	}
+	v.VIN = "tmbjj7ne8l0123456"
+	v.Normalize()
+	if err := v.Validate(); err != nil {
+		t.Fatalf("s VIN: %v", err)
+	}
+	v.Method = MethodFlat
+	if err := v.Validate(); err == nil || !strings.Contains(err.Error(), "method") {
+		t.Fatalf("plný odpočet s paušálom: %v", err)
+	}
+	taxi := Vehicle{Name: "Taxi", Plate: "BB1TAXI", Consumption: m.MustParse("5"), FullVAT: true, VATReason: VATTransport}
+	taxi.Normalize()
+	if err := taxi.Validate(); err != nil {
+		t.Fatalf("taxi bez VIN: %v", err)
+	}
+	r := Compute(Input{Vehicle: Vehicle{Ownership: Business, Method: MethodLog, Consumption: m.MustParse("5"), FullVAT: true, VATReason: VATExclusive, AssetID: 1},
+		Year: 2026, Trips: []Trip{trip("2026-01-02", TripPrivate, 1000, 1010)}, Rates: DefaultKmRates})
+	if !hasWarning(r, "súkromné jazdy (10 km)") {
+		t.Fatalf("súkromná jazda pri plnom odpočte: %v", r.Warnings)
+	}
+}

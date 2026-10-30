@@ -485,12 +485,13 @@ func seedLogbook(ctx context.Context, a *app.App, c store.Company) error {
 	today := a.Today()
 	start := invoice.NewDate(today.Year(), time.January, 2) // celý rok, aby sedel odpis na km
 	van, err := a.SaveVehicle(ctx, c.ID, logbook.Vehicle{Name: "Ford Transit", Plate: "ZA-123BC", Fuel: logbook.Diesel, Consumption: m.MustParse("7.9"),
-		Ownership: logbook.Business, Method: logbook.MethodLog, AssetID: transit, Driver: "Pavol Krnáč", Odometer: 48210, OdometerDate: start})
+		Ownership: logbook.Business, Method: logbook.MethodLog, AssetID: transit, Driver: "Pavol Krnáč", Odometer: 48210, OdometerDate: start,
+		Category: "N1", VIN: "WF0XXXTTGXKA12345"})
 	if err != nil {
 		return err
 	}
 	car, err := a.SaveVehicle(ctx, c.ID, logbook.Vehicle{Name: "Škoda Fabia", Plate: "BB-482FK", Fuel: logbook.Petrol, Consumption: m.MustParse("5.6"),
-		Ownership: logbook.Private, Method: logbook.MethodLog, Driver: "Pavol Krnáč"})
+		Ownership: logbook.Private, Method: logbook.MethodLog, Driver: "Pavol Krnáč", Category: "M1"})
 	if err != nil {
 		return err
 	}
