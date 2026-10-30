@@ -1,6 +1,6 @@
 <script setup>
 // Účtový rozvrh (podvojné účtovníctvo): syntetické účty z rámcovej účtovej
-// osnovy, analytické účty firmy, strediská a zákazky.
+// osnovy, analytické účty firmy, strediská, zákazky a predkontácie.
 import { computed, onMounted, ref, watch } from 'vue'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
@@ -20,8 +20,8 @@ import { api, ApiError } from '../lib/api.js'
 import { can, session } from '../lib/session.js'
 import { formatDate, fromISODate, toISODate } from '../lib/format.js'
 import { matches, searchTerms } from '../lib/search.js'
-import { accountColumns, centerColumns, jobColumns } from '../lib/columns.js'
-import { accountDisplay, blankAccount, groupAccounts, typeLabel } from '../lib/chart.js'
+import { accountColumns, centerColumns, jobColumns, templateColumns } from '../lib/columns.js'
+import { accountDisplay, blankAccount, blankTemplate, docLabels, filterTemplates, groupAccounts, partLabels, templateSummary, typeLabel } from '../lib/chart.js'
 
 const toast = useToast()
 const confirm = useConfirm()
@@ -33,10 +33,12 @@ const tabs = [
   { value: 'accounts', label: 'Účty' },
   { value: 'centers', label: 'Strediská' },
   { value: 'jobs', label: 'Zákazky' },
+  { value: 'templates', label: 'Predkontácie' },
 ]
 const search = ref('')
 const cls = ref(-1)
 const showHidden = ref(false)
+const doc = ref('all')
 
 async function load() {
   try {
@@ -62,6 +64,14 @@ const jobs = computed(() => {
   return (v.value?.jobs ?? []).filter((j) => matches(terms, [j.code, j.name, j.customer, j.note]))
 })
 
+const docOptions = computed(() => [{ value: 'all', label: 'Všetky doklady' }, ...(v.value?.docKinds ?? []).map((d) => ({ value: d.code, label: d.label }))])
+const docKindOptions = computed(() => docOptions.value.slice(1))
+const partOptions = computed(() => (v.value?.parts ?? []).map((p) => ({ value: p.code, label: p.label })))
+const sideOptions = [{ value: 'MD', label: 'MD' }, { value: 'D', label: 'D' }]
+const templates = computed(() => filterTemplates(v.value?.templates ?? [], { search: search.value, doc: doc.value === 'all' ? '' : doc.value }))
+// účty na výber v predkontácii: aktívne, syntetický aj analytický
+const accountOptions = computed(() => (v.value?.accounts ?? []).filter((a) => a.active).map((a) => ({ value: a.number, label: `${accountDisplay(a.number)} ${a.name}` })))
+
 // ---- formulár ----
 const open = ref(false)
 const kind = ref('account')
@@ -70,8 +80,9 @@ const old = ref('')
 const errors = ref({})
 const busy = ref(false)
 const title = computed(() => {
-  const n = { account: 'účet', center: 'stredisko', job: 'zákazka' }[kind.value]
-  return old.value ? `Upraviť ${n}` : kind.value === 'job' ? 'Nová zákazka' : kind.value === 'center' ? 'Nové stredisko' : 'Nový analytický účet'
+  const n = { account: 'účet', center: 'stredisko', job: 'zákazku', template: 'predkontáciu' }[kind.value]
+  if (old.value) return `Upraviť ${n}`
+  return { job: 'Nová zákazka', center: 'Nové stredisko', template: 'Nová predkontácia' }[kind.value] ?? 'Nový analytický účet'
 })
 const typeOptions = computed(() => (v.value?.types ?? []).map((t) => ({ value: t.code, label: t.label })))
 const isSynthetic = computed(() => kind.value === 'account' && old.value && old.value.length === 3)
@@ -81,6 +92,7 @@ function edit(k, item, syntheticFor = '') {
   errors.value = {}
   old.value = item ? (k === 'account' ? item.number : item.code) : ''
   if (k === 'account') form.value = item ? { ...item, number: accountDisplay(item.number) } : { ...blankAccount(syntheticFor ? syntheticFor + '.' : ''), type: v.value.accounts.find((a) => a.number === syntheticFor)?.type ?? 'A' }
+  else if (k === 'template') form.value = item ? { ...item, lines: item.lines.map((l) => ({ ...l })) } : blankTemplate(doc.value === 'all' ? 'purchase' : doc.value)
   else if (k === 'center') form.value = item ? { ...item } : { code: '', name: '', active: true, note: '' }
   else form.value = item ? { ...item, from: fromISODate(item.from), to: fromISODate(item.to) } : { code: '', name: '', customer: '', active: true, note: '', from: null, to: null }
   open.value = true
@@ -93,6 +105,7 @@ async function save() {
     const cid = session.companyId
     if (kind.value === 'account') await api.saveAccount(cid, old.value, form.value)
     else if (kind.value === 'center') await api.saveCenter(cid, old.value, form.value)
+    else if (kind.value === 'template') await api.saveTemplate(cid, old.value, form.value)
     else await api.saveJob(cid, old.value, { ...form.value, from: toISODate(form.value.from), to: toISODate(form.value.to) })
     open.value = false
     await load()
@@ -106,7 +119,7 @@ async function save() {
 
 function remove() {
   const k = kind.value
-  const label = k === 'account' ? `účet ${accountDisplay(old.value)}` : k === 'center' ? `stredisko ${old.value}` : `zákazku ${old.value}`
+  const label = { account: `účet ${accountDisplay(old.value)}`, center: `stredisko ${old.value}`, job: `zákazku ${old.value}`, template: `predkontáciu ${old.value}` }[k]
   const hideOnly = k === 'account' && framework.value.has(old.value)
   confirm.require({
     header: hideOnly ? 'Skryť účet' : 'Zmazať',
@@ -120,6 +133,7 @@ function remove() {
         const cid = session.companyId
         if (k === 'account') await api.deleteAccount(cid, old.value)
         else if (k === 'center') await api.deleteCenter(cid, old.value)
+        else if (k === 'template') await api.deleteTemplate(cid, old.value)
         else await api.deleteJob(cid, old.value)
         open.value = false
         await load()
@@ -132,9 +146,16 @@ function remove() {
 
 function addNew() {
   if (tab.value === 'accounts') edit('account', null)
-  else edit(tab.value === 'centers' ? 'center' : 'job', null)
+  else edit({ centers: 'center', jobs: 'job', templates: 'template' }[tab.value], null)
 }
-const addLabel = computed(() => ({ accounts: 'Analytický účet', centers: 'Stredisko', jobs: 'Zákazka' })[tab.value])
+const addLabel = computed(() => ({ accounts: 'Analytický účet', centers: 'Stredisko', jobs: 'Zákazka', templates: 'Predkontácia' })[tab.value])
+
+function addLine() {
+  form.value.lines.push({ side: 'D', account: '', part: 'total' })
+}
+function removeLine(i) {
+  form.value.lines.splice(i, 1)
+}
 </script>
 
 <template>
@@ -145,7 +166,11 @@ const addLabel = computed(() => ({ accounts: 'Analytický účet', centers: 'Str
       <div class="spacer" />
       <Button v-if="canWrite" :label="addLabel" icon="pi pi-plus" size="small" @click="addNew" />
     </header>
-    <p class="lead">
+    <p v-if="tab === 'templates'" class="lead">
+      Predkontácie sú vzory zaúčtovania dokladov: ktorý účet ide na stranu MD a ktorý na D a akú časť sumy (základ, DPH,
+      sumu dokladu). Pri účtovaní ich vyberiete k dokladu a zápisy sa vytvoria samy.
+    </p>
+    <p v-else class="lead">
       Predvyplnený rámcovou účtovou osnovou pre podnikateľov (opatrenie MF SR č. 23054/2002-92). Pridajte analytické účty
       (napr. 221.001 pre každý bankový účet), skryte nepoužívané a označte nedaňové náklady.
     </p>
@@ -159,10 +184,12 @@ const addLabel = computed(() => ({ accounts: 'Analytický účet', centers: 'Str
         <Select v-model="cls" :options="classOptions" option-label="label" option-value="value" size="small" class="cls" aria-label="Účtová trieda" />
         <label class="check"><Checkbox v-model="showHidden" binary /> <span>aj skryté</span></label>
       </template>
+      <Select v-if="tab === 'templates'" v-model="doc" :options="docOptions" option-label="label" option-value="value" size="small" class="cls" aria-label="Druh dokladu" />
       <div class="spacer" />
       <ExportButton v-if="tab === 'accounts'" name="Účtový rozvrh" :columns="accountColumns" :rows="accountRows" />
       <ExportButton v-else-if="tab === 'centers'" name="Strediská" :columns="centerColumns" :rows="centers" />
-      <ExportButton v-else name="Zákazky" :columns="jobColumns" :rows="jobs" />
+      <ExportButton v-else-if="tab === 'jobs'" name="Zákazky" :columns="jobColumns" :rows="jobs" />
+      <ExportButton v-else name="Predkontácie" :columns="templateColumns" :rows="templates" />
     </div>
 
     <template v-if="v">
@@ -203,6 +230,21 @@ const addLabel = computed(() => ({ accounts: 'Analytický účet', centers: 'Str
         </table>
       </section>
 
+      <section v-else-if="tab === 'templates'" class="sheet">
+        <table class="list">
+          <thead><tr><th>Kód</th><th>Predkontácia</th><th class="type">Doklad</th><th>Účtovanie</th></tr></thead>
+          <tbody>
+            <tr v-if="!templates.length"><td colspan="4" class="empty">Nič sa nenašlo.</td></tr>
+            <tr v-for="t in templates" :key="t.code" :class="{ hidden: !t.active }" tabindex="0" @click="edit('template', t)" @keydown.enter="edit('template', t)">
+              <td class="num-acc">{{ t.code }}</td>
+              <td class="name">{{ t.name }} <span v-if="!t.active" class="tag muted">nepoužíva sa</span></td>
+              <td class="type">{{ docLabels[t.doc] ?? t.doc }}</td>
+              <td class="posting">{{ templateSummary(t) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
       <section v-else class="sheet">
         <table class="list">
           <thead><tr><th>Kód</th><th>Zákazka</th><th>Odberateľ</th><th>Obdobie</th></tr></thead>
@@ -236,6 +278,35 @@ const addLabel = computed(() => ({ accounts: 'Analytický účet', centers: 'Str
             <Checkbox v-model="form.nonTax" binary :disabled="!canWrite" />
             <span>Nedaňový {{ form.number.trim()[0] === '5' ? 'náklad' : 'výnos' }} (pre daňové priznanie)</span>
           </label>
+          <label class="check span2">
+            <Checkbox v-model="form.active" binary :disabled="!canWrite" />
+            <span>Používa sa (ponúka sa pri účtovaní)</span>
+          </label>
+        </template>
+        <template v-else-if="kind === 'template'">
+          <FormField label="Kód" :error="errors.code" hint="Napr. FP-SLUZBY">
+            <InputText v-model="form.code" size="small" :disabled="!canWrite" :invalid="!!errors.code" />
+          </FormField>
+          <FormField label="Doklad" :error="errors.doc">
+            <Select v-model="form.doc" :options="docKindOptions" option-label="label" option-value="value" size="small" fluid :disabled="!canWrite" />
+          </FormField>
+          <FormField label="Názov" :span="2" :error="errors.name">
+            <InputText v-model="form.name" size="small" :disabled="!canWrite" :invalid="!!errors.name" />
+          </FormField>
+          <div class="span2 lines">
+            <div class="lines-head"><span>Strana</span><span>Účet</span><span>Suma</span><span /></div>
+            <div v-for="(l, i) in form.lines" :key="i" class="line">
+              <SelectButton v-model="l.side" :options="sideOptions" option-label="label" option-value="value" :allow-empty="false" size="small" :disabled="!canWrite" :aria-label="`Strana riadku ${i + 1}`" />
+              <Select v-model="l.account" :options="accountOptions" option-label="label" option-value="value" filter size="small" fluid
+                :invalid="!!errors[`lines[${i}].account`]" :disabled="!canWrite" placeholder="Účet" :aria-label="`Účet riadku ${i + 1}`" />
+              <Select v-model="l.part" :options="partOptions" option-label="label" option-value="value" size="small" fluid :disabled="!canWrite" :aria-label="`Suma riadku ${i + 1}`" />
+              <Button v-if="canWrite" icon="pi pi-times" text rounded size="small" severity="secondary" :aria-label="`Odstrániť riadok ${i + 1}`" :disabled="form.lines.length <= 2" @click="removeLine(i)" />
+            </div>
+            <small v-if="errors.lines" class="err">{{ errors.lines }}</small>
+            <small v-for="(l, i) in form.lines" v-show="errors[`lines[${i}].account`]" :key="'e' + i" class="err">Riadok {{ i + 1 }}: {{ errors[`lines[${i}].account`] }}</small>
+            <Button v-if="canWrite" label="Riadok" icon="pi pi-plus" text size="small" class="add-line" @click="addLine" />
+            <p class="hint">Neodpočítaná DPH sa bez vlastného riadku pripočíta k základu. Samozdanenie (prenesenie, nadobudnutie z EÚ) účtujte MD aj D 343.</p>
+          </div>
           <label class="check span2">
             <Checkbox v-model="form.active" binary :disabled="!canWrite" />
             <span>Používa sa (ponúka sa pri účtovaní)</span>
@@ -427,6 +498,42 @@ tr.hidden td {
 .span2 {
   grid-column: 1 / -1;
 }
+.posting {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+.lines {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.lines-head,
+.line {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) 160px 30px;
+  gap: 6px;
+  align-items: center;
+}
+.lines-head {
+  font-size: var(--fs-xs);
+  color: var(--ink-faint);
+}
+.line :deep(.p-selectbutton .p-togglebutton) {
+  padding: 4px 8px;
+}
+.add-line {
+  align-self: flex-start;
+}
+.err {
+  color: var(--tone-overdue);
+}
+.hint {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--ink-faint);
+}
 .actions {
   display: flex;
   align-items: center;
@@ -444,11 +551,25 @@ tr.hidden td {
   .type {
     display: none;
   }
+  .posting {
+    white-space: normal;
+  }
+  .lines-head,
+  .line {
+    grid-template-columns: 84px minmax(0, 1fr) 30px;
+  }
+  .lines-head span:nth-child(3),
+  .lines-head span:nth-child(4) {
+    display: none;
+  }
+  .line > :nth-child(3) {
+    grid-column: 2;
+  }
 }
 </style>
 
 <style>
 .p-drawer.p-component.chart-panel {
-  width: min(460px, 100vw);
+  width: min(520px, 100vw);
 }
 </style>

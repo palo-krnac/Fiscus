@@ -479,3 +479,13 @@ export const jobColumns = [
   t('Aktívna', (r) => yes(r.active), 8),
   t('Poznámka', (r) => r.note, 30),
 ]
+
+export const templateColumns = [
+  t('Kód', (r) => r.code, 14),
+  t('Predkontácia', (r) => r.name, 40),
+  t('Doklad', (r) => ({ sale: 'Vydaná faktúra', purchase: 'Prijatá faktúra', bank: 'Banka', cash: 'Pokladňa', internal: 'Interný doklad' })[r.doc] ?? r.doc, 16),
+  t('Má dať', (r) => r.lines.filter((l) => l.side === 'MD').map((l) => l.account).join(', '), 20),
+  t('Dal', (r) => r.lines.filter((l) => l.side === 'D').map((l) => l.account).join(', '), 20),
+  t('Používa sa', (r) => yes(r.active), 9),
+  t('Poznámka', (r) => r.note, 30),
+]

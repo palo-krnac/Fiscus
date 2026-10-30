@@ -100,7 +100,7 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] Podklady pre DP FO typ B (DPFOBv25, VI. oddiel): tabuľka č. 1 r. 2, r. 39–42, tabuľka č. 1a na začiatku a na konci obdobia, zaplatené poistné na kontrolu
 - [ ] Jednoduché účtovníctvo ďalej: elektronické uloženie závierky do RÚZ, XML daňového priznania typu B pre eDane
 - [x] Účtový rozvrh: rámcová účtová osnova pre podnikateľov (syntetické účty, druh, nedaňové náklady), analytické účty firmy, skrytie nepoužívaných, strediská a zákazky
-- [ ] Predkontácie (vzory zaúčtovania) pre faktúry, nákupy, banku a pokladňu
+- [x] Predkontácie (vzory zaúčtovania) pre faktúry, nákupy, banku a pokladňu — 23 predvolených, vlastné, kontrola vyrovnania MD = D
 - [ ] Podvojné účtovníctvo: denník, hlavná kniha, automatické účtovanie podľa predkontácií
 - [ ] Účtovné obdobia, uzávierky, výkazy, uloženie závierky do RÚZ
 - [ ] Daňové priznanie k dani z príjmov (typ A/B pre FO, PO)

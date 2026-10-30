@@ -28,3 +28,24 @@ export function groupAccounts(accounts, classes, { search = '', cls = null, hidd
 
 /** Prázdny účet: analytický k zvolenému syntetickému. */
 export const blankAccount = (synthetic = '') => ({ number: synthetic, name: '', type: 'A', nonTax: false, active: true, note: '' })
+
+export const docLabels = { sale: 'Vydaná faktúra', purchase: 'Prijatá faktúra', bank: 'Banka', cash: 'Pokladňa', internal: 'Interný doklad' }
+export const partLabels = { total: 'suma dokladu', base: 'základ', vat: 'DPH', vatNon: 'neodpočítaná DPH', self: 'samozdanenie DPH' }
+
+/** Strany predkontácie v skratke: „MD 518, 343 / D 321“. */
+export function templateSummary(t) {
+  const side = (s) => [...new Set(t.lines.filter((l) => l.side === s).map((l) => accountDisplay(l.account)))].join(', ')
+  return `MD ${side('MD')} / D ${side('D')}`
+}
+
+/** Predkontácie po hľadaní a druhu dokladu (doc = '' všetky). */
+export function filterTemplates(list, { search = '', doc = '' } = {}) {
+  const terms = searchTerms(search)
+  return list.filter((t) => (!doc || t.doc === doc) && matches(terms, [t.code, t.name, docLabels[t.doc], templateSummary(t), t.note]))
+}
+
+/** Nová predkontácia: dva prázdne riadky. */
+export const blankTemplate = (doc = 'purchase') => ({
+  code: '', name: '', doc, active: true, note: '',
+  lines: [{ side: 'MD', account: '', part: 'base' }, { side: 'D', account: '', part: 'total' }],
+})

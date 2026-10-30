@@ -41,6 +41,30 @@ func TestChart(t *testing.T) {
 	if acc.Name != "Tatra banka – bežný účet" || len(v.Centers) != 1 || len(v.Jobs) != 1 {
 		t.Fatalf("uložené: %+v %+v %+v", acc, v.Centers, v.Jobs)
 	}
+	// predkontácie: predvolené, vlastná, účet v predkontácii sa nedá skryť
+	if len(v.Templates) != len(chart.DefaultTemplates) {
+		t.Fatalf("predkontácie: %d", len(v.Templates))
+	}
+	tp := chart.Template{Code: "b-tatra", Name: "Úhrada dodávateľovi z Tatry", Doc: chart.DocBank, Active: true,
+		Lines: []chart.TemplateLine{{Side: chart.Debit, Account: "321", Part: chart.PartTotal}, {Side: chart.Credit, Account: "221.001", Part: chart.PartTotal}}}
+	if _, err := a.SaveTemplate(ctx, c.ID, "", tp); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.SaveTemplate(ctx, c.ID, "", tp); !fieldErr(err, "code") {
+		t.Errorf("duplicitná predkontácia: %v", err)
+	}
+	if err := a.DeleteAccount(ctx, c.ID, "221001"); !errors.Is(err, chart.ErrInUse) {
+		t.Errorf("účet v predkontácii: %v", err)
+	}
+	if err := a.DeleteTemplate(ctx, c.ID, "B-TATRA"); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.DeleteTemplate(ctx, c.ID, "B-UROKY"); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ = a.Chart(ctx, c.ID); len(v.Templates) != len(chart.DefaultTemplates)-1 {
+		t.Errorf("zmazaná predvolená predkontácia sa vrátila: %d", len(v.Templates))
+	}
 	if err := a.DeleteJob(ctx, c.ID, "Z1"); err != nil {
 		t.Fatal(err)
 	}

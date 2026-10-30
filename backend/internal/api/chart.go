@@ -130,3 +130,37 @@ func failChart(w http.ResponseWriter, err error) {
 	}
 	fail(w, err)
 }
+
+func (s *Server) saveTemplate(w http.ResponseWriter, r *http.Request) {
+	cid, ok := s.company(w, r)
+	if !ok {
+		return
+	}
+	var t chart.Template
+	if !decode(w, r, &t) {
+		return
+	}
+	old := r.PathValue("code")
+	out, err := s.App.SaveTemplate(r.Context(), cid, old, t)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	status := http.StatusOK
+	if old == "" {
+		status = http.StatusCreated
+	}
+	writeJSON(w, status, out)
+}
+
+func (s *Server) deleteTemplate(w http.ResponseWriter, r *http.Request) {
+	cid, ok := s.company(w, r)
+	if !ok {
+		return
+	}
+	if err := s.App.DeleteTemplate(r.Context(), cid, r.PathValue("code")); err != nil {
+		failChart(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

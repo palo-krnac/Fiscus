@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { accountDisplay, groupAccounts, typeLabel } from './chart.js'
+import { blankTemplate, filterTemplates, templateSummary, accountDisplay, groupAccounts, typeLabel } from './chart.js'
 
 const classes = ['Dlhodobý majetok', 'Zásoby', 'Finančné účty', 'Zúčtovacie vzťahy', 'Kapitál', 'Náklady', 'Výnosy', 'Závierka']
 const accounts = [
@@ -24,5 +24,26 @@ describe('účtový rozvrh', () => {
     expect(groupAccounts(accounts, classes, { search: '221.001' })[0].accounts).toHaveLength(1)
     expect(groupAccounts(accounts, classes, { search: 'tatra' })[0].accounts[0].number).toBe('221001')
     expect(groupAccounts(accounts, classes, { cls: 5 })).toHaveLength(1)
+  })
+})
+
+describe('predkontácie', () => {
+  const list = [
+    { code: 'FP-SLUZBY', name: 'Prijatá faktúra — služby', doc: 'purchase', lines: [
+      { side: 'MD', account: '518', part: 'base' }, { side: 'MD', account: '343', part: 'vat' }, { side: 'D', account: '321', part: 'total' }] },
+    { code: 'B-TATRA', name: 'Úhrada z Tatry', doc: 'bank', lines: [{ side: 'MD', account: '321', part: 'total' }, { side: 'D', account: '221001', part: 'total' }] },
+  ]
+  it('skratka strán', () => {
+    expect(templateSummary(list[0])).toBe('MD 518, 343 / D 321')
+    expect(templateSummary(list[1])).toBe('MD 321 / D 221.001')
+  })
+  it('hľadanie a druh dokladu', () => {
+    expect(filterTemplates(list, { search: 'sluzby' })).toHaveLength(1)
+    expect(filterTemplates(list, { search: '221.001' })[0].code).toBe('B-TATRA')
+    expect(filterTemplates(list, { doc: 'bank' })).toHaveLength(1)
+    expect(filterTemplates(list, { search: 'banka' })).toHaveLength(1)
+  })
+  it('nová predkontácia má dva riadky', () => {
+    expect(blankTemplate('cash').lines).toHaveLength(2)
   })
 })
