@@ -12,14 +12,21 @@ on:
       - '.github/workflows/release.yml'
       - 'backend/cmd/fiskus/**'
       - 'backend/internal/desktop/**'
+  # Ručné spustenie: so zadanou značkou (napr. v0.1.0) zverejní vydanie
+  # aj bez inštalátorov pre Windows a macOS, ak sa nezostavia.
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Značka vydania (napr. v0.1.0); prázdna = iba zostaviť'
+        required: false
+        default: ''
 
 permissions:
   contents: write
 
 env:
   # v0.1.0 → 0.1.0; mimo značky 0.0.0-dev
-  VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'v0.0.0-dev' }}
+  VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || inputs.tag || 'v0.0.0-dev' }}
 
 jobs:
   build:
@@ -179,7 +186,12 @@ jobs:
 
   release:
     name: GitHub Release
-    if: startsWith(github.ref, 'refs/tags/v')
+    # vydanie aj keď inštalátor pre Windows alebo macOS zlyhal (binárky
+    # a balíky pre Linux stačia); pri značke v git musia prejsť všetky
+    if: >-
+      always() && needs.build.result == 'success' && needs.linux.result == 'success' &&
+      (startsWith(github.ref, 'refs/tags/v') && needs.windows.result == 'success' && needs.macos.result == 'success' ||
+       github.event_name == 'workflow_dispatch' && startsWith(inputs.tag, 'v'))
     needs: [build, linux, windows, macos]
     runs-on: ubuntu-latest
     steps:
@@ -189,12 +201,16 @@ jobs:
       - name: Súbory na stiahnutie
         run: |
           mkdir -p release
-          cp art/linux/* art/windows/* art/macos/* release/
+          cp art/linux/* release/
+          for d in windows macos; do
+            if [ -d "art/$d" ]; then cp art/$d/* release/; fi
+          done
           # samostatné binárky (server, príkazový riadok) s verziou v názve
           for f in art/bin/fiskus-*; do
             name=$(basename "$f")
             case "$name" in
-              *-app.exe) continue ;;
+              # aplikácia bez okna konzoly: spustí sa dvojklikom aj bez inštalátora
+              *-app.exe) cp "$f" "release/fiskus-${VERSION}-windows-bez-instalacie.exe" ;;
               fiskus-mcp-*) cp "$f" "release/fiskus-mcp-${VERSION}-${name#fiskus-mcp-}" ;;
               *) cp "$f" "release/fiskus-${VERSION}-${name#fiskus-}" ;;
             esac
@@ -202,5 +218,7 @@ jobs:
           ls -la release
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.VERSION }}
+          target_commitish: ${{ github.sha }}
           files: release/*
           generate_release_notes: true
