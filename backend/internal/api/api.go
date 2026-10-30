@@ -256,6 +256,8 @@ func (s *Server) Handler() http.Handler {
 	need("POST /api/companies/{cid}/bank/{id}/ignore", auth.PermBankWrite, s.ignoreBank)
 
 	need("GET /api/companies/{cid}/vat", auth.PermVATRead, s.vatReturn)
+	need("GET /api/companies/{cid}/vat/filings", auth.PermVATRead, s.vatFilings)
+	need("POST /api/companies/{cid}/vat/filings", auth.PermLedgerWrite, s.recordVATFiling)
 	need("GET /api/companies/{cid}/vat/{kind}", auth.PermVATRead, s.vatExport)
 	open("GET /api/audit", s.allAudit)
 	open("GET /api/audit/verify", s.verifyAudit)
