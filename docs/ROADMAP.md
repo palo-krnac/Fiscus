@@ -50,10 +50,12 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] **Priznanie k DPH (DPHv25) a kontrolný výkaz (KVDPHv25)**: výpočet z dokladov, XML pre eDane, mesačne aj štvrťročne
 - [x] Súhrnný výkaz (SVDPHv20): tovar do EÚ (kód 0), služby do EÚ (kód 2); r. 13–15 pre dodanie do EÚ a vývoz; nadobudnutie tovaru z EÚ (r. 05–08) a služby zo zahraničia (r. 09–10)
 - [x] A.2 a tuzemské prenesenie pri dodaní (§ 69 ods. 12) pri položkách: druhy a) až j), kód colného sadzobníka, hranica 5 000 €, XML
-- [ ] Dobropis k A.2 (kód opravy), trojstranný obchod (kód 1), call-off stock, dovoz s DPH na colnici (r. 22–23)
+- [x] Dobropis k A.2: C.1 bez dane a sadzby, pri tovare kód SCS / druh a rozdiel množstva so znamienkom mínus
+- [ ] Trojstranný obchod (kód 1), call-off stock, dovoz s DPH na colnici (r. 22–23)
 - [x] Dobropisy od tuzemských dodávateľov: oprava odpočítanej dane v r. 28 a riadky C.2 (číslo pôvodnej faktúry)
 - [x] Pomerné odpočítanie DPH (§ 50): spoločné nákupy (prijaté faktúry, bloky) s predbežným koeficientom roka, ročný koeficient z plnení vo Fiškuse (alebo ručne), vysporiadanie v poslednom období roka v r. 18–19, prepočet pri zmene koeficientu v nepodaných obdobiach
-- [ ] Dobropisy od zahraničných dodávateľov a pri prenesení daňovej povinnosti
+- [x] Dobropisy pri prenesení daňovej povinnosti (služby zo zahraničia, tuzemské § 69 ods. 12): zníženie samozdanenia v r. 09–10 a odpočtu v r. 18–19, C.2 v období prijatia
+- [ ] Dobropis k nadobudnutiu tovaru z EÚ (oprava v období pôvodného nadobudnutia, dodatočné priznanie)
 - [x] Opravné a dodatočné priznanie k DPH (dátum zistenia, r. 36 rozdiel oproti poslednej známej povinnosti, r. 37), opravný KV, záznam o podaní (posledná známa povinnosť, návrh druhu podľa lehoty)
 - [ ] Dodatočný kontrolný výkaz (iba opravované záznamy)
 - [ ] Podanie priamo na portál finančnej správy (vyžaduje autentifikáciu)

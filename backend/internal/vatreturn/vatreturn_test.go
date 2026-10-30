@@ -421,7 +421,7 @@ func TestDomesticReverseA2(t *testing.T) {
 	for _, w := range ret.Warnings {
 		msgs += w.Message + "\n"
 	}
-	if !strings.Contains(msgs, "rôzne merné jednotky") || !strings.Contains(msgs, "Dobropis k dodaniu s prenesením") {
+	if !strings.Contains(msgs, "rôzne merné jednotky") || !strings.Contains(msgs, "Dobropis bez čísla pôvodnej faktúry — v C.1") {
 		t.Fatalf("upozornenia: %s", msgs)
 	}
 
