@@ -14,6 +14,7 @@ import (
 	"sort"
 
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
+	"github.com/palo-krnac/fiscus/backend/internal/logbook"
 	"github.com/palo-krnac/fiscus/backend/internal/money"
 	"github.com/palo-krnac/fiscus/backend/internal/reminder"
 	"github.com/palo-krnac/fiscus/backend/internal/vat"
@@ -29,6 +30,8 @@ type Params struct {
 	BusinessMargin money.Dec       `json:"businessMargin"` // p. b. nad ECB, podnikatelia
 	ConsumerMargin money.Dec       `json:"consumerMargin"` // p. b. nad ECB, spotrebitelia
 	FlatFee        money.Dec       `json:"flatFee"`        // paušálna náhrada za faktúru
+	// KmRates sú sadzby základnej náhrady za 1 km (kniha jázd, súkromné vozidlo).
+	KmRates []logbook.KmRate `json:"kmRates"`
 	// Seeded sú kľúče predvolených riadkov, ktoré už boli raz doplnené
 	// (aby sa zmazaný riadok nevrátil). Spravuje ich program, nie používateľ.
 	Seeded []string `json:"seeded"`
@@ -43,6 +46,7 @@ func defaults() (Params, []string) {
 		BusinessMargin: law.BusinessMargin,
 		ConsumerMargin: law.ConsumerMargin,
 		FlatFee:        law.FlatFee,
+		KmRates:        append([]logbook.KmRate(nil), logbook.DefaultKmRates...),
 	}
 	keys := []string{"param:businessMargin", "param:consumerMargin", "param:flatFee"}
 	for _, v := range p.VATPeriods {
@@ -50,6 +54,9 @@ func defaults() (Params, []string) {
 	}
 	for _, r := range p.ECB {
 		keys = append(keys, "ecb:"+r.From.String())
+	}
+	for _, r := range p.KmRates {
+		keys = append(keys, "km:"+r.From.String())
 	}
 	return p, keys
 }
@@ -95,6 +102,15 @@ func (p *Params) Seed() bool {
 					}
 				}
 			}
+		case len(k) > 3 && k[:3] == "km:":
+			from := k[3:]
+			if !slices.ContainsFunc(p.KmRates, func(r logbook.KmRate) bool { return r.From.String() == from }) {
+				for _, r := range def.KmRates {
+					if r.From.String() == from {
+						p.KmRates = append(p.KmRates, r)
+					}
+				}
+			}
 		case len(k) > 4 && k[:4] == "ecb:":
 			from := k[4:]
 			if !slices.ContainsFunc(p.ECB, func(r reminder.Rate) bool { return r.From.String() == from }) {
@@ -108,7 +124,12 @@ func (p *Params) Seed() bool {
 		mark(k)
 	}
 	p.ECB = reminder.Sorted(p.ECB)
+	sortKm(p.KmRates)
 	return changed
+}
+
+func sortKm(rs []logbook.KmRate) {
+	sort.Slice(rs, func(i, j int) bool { return rs[i].From.Before(rs[j].From) })
 }
 
 // addVATPeriod vloží nové obdobie z novej verzie programu: ak doteraz
@@ -159,6 +180,21 @@ func (p Params) Validate() error {
 	if p.FlatFee.Sign() < 0 || p.FlatFee.Cmp(money.FromInt(10000)) > 0 {
 		add("flatFee", "Paušálna náhrada musí byť 0 až 10 000 €")
 	}
+	kmSeen := map[string]bool{}
+	for i, r := range p.KmRates {
+		switch {
+		case r.From.IsZero():
+			add(fmt.Sprintf("kmRates[%d].from", i), "Zadajte, odkedy sadzba platí")
+		case kmSeen[r.From.String()]:
+			add(fmt.Sprintf("kmRates[%d].from", i), "Sadzba od "+r.From.Display()+" je zadaná dvakrát")
+		}
+		kmSeen[r.From.String()] = true
+		for f, v := range map[string]money.Dec{"car": r.Car, "moto": r.Moto} {
+			if v.Sign() <= 0 || v.Cmp(money.FromInt(5)) > 0 {
+				add(fmt.Sprintf("kmRates[%d].%s", i, f), "Sadzba za 1 km musí byť 0 až 5 €")
+			}
+		}
+	}
 	if len(fe) > 0 {
 		return &invoice.ValidationError{Fields: fe}
 	}
@@ -168,6 +204,7 @@ func (p Params) Validate() error {
 // Normalize zoradí tabuľky (pred uložením).
 func (p *Params) Normalize() {
 	p.ECB = reminder.Sorted(p.ECB)
+	sortKm(p.KmRates)
 	sort.SliceStable(p.VATPeriods, func(i, j int) bool { return p.VATPeriods[i].From < p.VATPeriods[j].From })
 	for i := range p.VATPeriods {
 		rs := p.VATPeriods[i].Rates

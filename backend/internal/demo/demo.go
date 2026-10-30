@@ -15,6 +15,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/catalog"
 	"github.com/palo-krnac/fiscus/backend/internal/fx"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
+	"github.com/palo-krnac/fiscus/backend/internal/logbook"
 	m "github.com/palo-krnac/fiscus/backend/internal/money"
 	"github.com/palo-krnac/fiscus/backend/internal/purchase"
 	"github.com/palo-krnac/fiscus/backend/internal/quote"
@@ -237,6 +238,9 @@ func Seed(ctx context.Context, a *app.App) (store.Company, error) {
 	}
 	if err := seedAssets(ctx, a, c); err != nil {
 		return c, fmt.Errorf("demo majetok: %w", err)
+	}
+	if err := seedLogbook(ctx, a, c); err != nil {
+		return c, fmt.Errorf("demo kniha jázd: %w", err)
 	}
 	if err := seedQuotes(ctx, a, c, contactIDs); err != nil {
 		return c, fmt.Errorf("demo ponuky: %w", err)
@@ -463,6 +467,77 @@ func seedAssets(ctx context.Context, a *app.App, c store.Company) error {
 		}
 	}
 	return nil
+}
+
+// seedLogbook pripraví knihu jázd: firemnú dodávku z majetku (jazdy za
+// posledné tri mesiace, tankovanie) a súkromné auto s cestovnými náhradami.
+func seedLogbook(ctx context.Context, a *app.App, c store.Company) error {
+	assets, err := a.Store.ListAssets(ctx, c.ID)
+	if err != nil {
+		return err
+	}
+	var transit int64
+	for _, x := range assets {
+		if x.Name == "Dodávka Ford Transit" {
+			transit = x.ID
+		}
+	}
+	today := a.Today()
+	start := invoice.NewDate(today.Year(), time.January, 2) // celý rok, aby sedel odpis na km
+	van, err := a.SaveVehicle(ctx, c.ID, logbook.Vehicle{Name: "Ford Transit", Plate: "ZA-123BC", Fuel: logbook.Diesel, Consumption: m.MustParse("7.9"),
+		Ownership: logbook.Business, Method: logbook.MethodLog, AssetID: transit, Driver: "Pavol Krnáč", Odometer: 48210, OdometerDate: start})
+	if err != nil {
+		return err
+	}
+	car, err := a.SaveVehicle(ctx, c.ID, logbook.Vehicle{Name: "Škoda Fabia", Plate: "BB-482FK", Fuel: logbook.Petrol, Consumption: m.MustParse("5.6"),
+		Ownership: logbook.Private, Method: logbook.MethodLog, Driver: "Pavol Krnáč"})
+	if err != nil {
+		return err
+	}
+	routes := []struct {
+		to, purpose string
+		km          int64
+		private     bool
+	}{
+		{"Zvolen", "Montáž rozvádzača – Hotel Lesná", 42, false},
+		{"Brezno", "Revízia elektroinštalácie – Penzión Pod Chopkom", 78, false},
+		{"Banská Štiavnica", "Obhliadka – rekonštrukcia kotolne", 96, false},
+		{"Žiar nad Hronom", "Nákup materiálu – Elektro Hron", 74, false},
+		{"Tesco Banská Bystrica", "", 9, true},
+		{"Detva", "Servis riadiaceho systému – Podpoľanie a.s.", 88, false},
+		{"Liptovský Mikuláš", "Víkend", 186, true},
+	}
+	odo := int64(48210)
+	for day, i := 0, 0; start.AddDays(day).Before(today); day, i = day+3, i+1 {
+		r := routes[i%len(routes)]
+		kind := logbook.TripBusiness
+		if r.private {
+			kind = logbook.TripPrivate
+		}
+		d := start.AddDays(day)
+		if _, err := a.SaveTrip(ctx, c.ID, logbook.Trip{VehicleID: van.ID, Date: d, Depart: "07:30", Arrive: "15:45", From: "Banská Bystrica", To: r.to + " a späť",
+			Purpose: r.purpose, Kind: kind, OdoStart: odo, OdoEnd: odo + r.km}); err != nil {
+			return err
+		}
+		odo += r.km
+		if i%6 == 5 {
+			if _, err := a.SaveFuel(ctx, c.ID, logbook.Fuel{VehicleID: van.ID, Date: d, Quantity: m.MustParse(fmt.Sprintf("%d.%02d", 38+i%7, (i*17)%100)),
+				Amount: m.MustParse(fmt.Sprintf("%d.%02d", 59+i%9, (i*31)%100)), Odometer: odo, Full: true, Station: "Slovnaft Banská Bystrica"}); err != nil {
+				return err
+			}
+		}
+	}
+	for i, tr := range []logbook.Trip{
+		{To: "Bratislava a späť", Purpose: "Školenie – vyhláška 508/2009", Km: 422},
+		{To: "Košice a späť", Purpose: "Obchodné rokovanie – Východoslovenská energetika", Km: 438},
+	} {
+		tr.VehicleID, tr.Date, tr.From, tr.Kind = car.ID, today.AddDays(-40+i*20), "Banská Bystrica", logbook.TripBusiness
+		if _, err := a.SaveTrip(ctx, c.ID, tr); err != nil {
+			return err
+		}
+	}
+	_, err = a.SaveFuel(ctx, c.ID, logbook.Fuel{VehicleID: car.ID, Date: today.AddDays(-41), Quantity: m.MustParse("38.20"), Amount: m.MustParse("62.65"), Station: "OMV Banská Bystrica"})
+	return err
 }
 
 // seedBank naimportuje ukážkový výpis: dve presné úhrady (spárujú sa samé),

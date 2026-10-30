@@ -5,9 +5,11 @@ import (
 	"errors"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
+	"github.com/palo-krnac/fiscus/backend/internal/logbook"
 	m "github.com/palo-krnac/fiscus/backend/internal/money"
 	"github.com/palo-krnac/fiscus/backend/internal/reminder"
 	"github.com/palo-krnac/fiscus/backend/internal/vat"
@@ -130,5 +132,22 @@ func TestNormalizeAndJSON(t *testing.T) {
 	var back Params
 	if err := json.Unmarshal(b, &back); err != nil || !reflect.DeepEqual(back, p) {
 		t.Fatalf("JSON:\n got %+v\nwant %+v", back, p)
+	}
+}
+
+func TestSeedKmRates(t *testing.T) {
+	// staršia inštalácia bez sadzieb za km: doplnia sa, zmazaná sa nevráti
+	p := Defaults()
+	p.KmRates, p.Seeded = nil, slices.DeleteFunc(p.Seeded, func(k string) bool { return strings.HasPrefix(k, "km:") })
+	if !p.Seed() || len(p.KmRates) != len(logbook.DefaultKmRates) {
+		t.Fatalf("doplnenie: %+v", p.KmRates)
+	}
+	p.KmRates = p.KmRates[1:]
+	if p.Seed() || len(p.KmRates) != len(logbook.DefaultKmRates)-1 {
+		t.Fatalf("zmazaná sadzba sa vrátila: %+v", p.KmRates)
+	}
+	p.KmRates = append(p.KmRates, logbook.KmRate{From: p.KmRates[0].From, Car: p.KmRates[0].Car, Moto: p.KmRates[0].Moto})
+	if err := p.Validate(); err == nil || !strings.Contains(err.Error(), "kmRates") {
+		t.Fatalf("duplicitná sadzba: %v", err)
 	}
 }

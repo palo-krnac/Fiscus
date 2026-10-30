@@ -126,3 +126,13 @@ func TestDivCents(t *testing.T) {
 		}
 	}
 }
+
+func TestCeilCents(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		{"1.0001", "1.01"}, {"1.01", "1.01"}, {"0", "0.00"}, {"-1.0001", "-1.01"}, {"36.6210", "36.63"},
+	} {
+		if got := MustParse(c.in).CeilCents().String(); got != c.want {
+			t.Errorf("%s → %s, chcem %s", c.in, got, c.want)
+		}
+	}
+}

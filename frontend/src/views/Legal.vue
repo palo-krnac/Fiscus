@@ -14,7 +14,7 @@ import { loadCodes } from '../lib/codes.js'
 import DatePicker from 'primevue/datepicker'
 import { formatDate, fromISODate, toISODate } from '../lib/format.js'
 import { matches, searchTerms } from '../lib/search.js'
-import { ecbColumns, vatPeriodColumns } from '../lib/columns.js'
+import { ecbColumns, kmRateColumns, vatPeriodColumns } from '../lib/columns.js'
 import { ecbErrors, formatRates, parseRates } from '../lib/legal.js'
 import ExportButton from '../components/ExportButton.vue'
 import FormField from '../components/FormField.vue'
@@ -37,6 +37,7 @@ function toForm(p) {
     businessMargin: Number(p.businessMargin),
     consumerMargin: Number(p.consumerMargin),
     flatFee: Number(p.flatFee),
+    kmRates: [...(p.kmRates ?? [])].reverse().map((r) => ({ from: r.from, car: Number(r.car), moto: Number(r.moto), _k: ++key })),
   }
 }
 const toAPI = (f) => ({
@@ -45,6 +46,7 @@ const toAPI = (f) => ({
   businessMargin: String(f.businessMargin ?? 0),
   consumerMargin: String(f.consumerMargin ?? 0),
   flatFee: String(f.flatFee ?? 0),
+  kmRates: f.kmRates.map((r) => ({ from: r.from || null, car: String(r.car ?? ''), moto: String(r.moto ?? '') })),
 })
 
 async function load() {
@@ -67,6 +69,19 @@ const ecbErr = computed(() => ecbErrors(errors.value))
 const ecbExport = () => visibleECB.value.map((r) => ({ from: r.from, rate: r.rate }))
 const vatExport = () => form.value.vatPeriods.map((v) => ({ from: v.from, to: v.to, rates: parseRates(v.ratesText) }))
 const latestECB = computed(() => [...(form.value?.ecb ?? [])].filter((r) => r.from).sort((a, b) => b.from.localeCompare(a.from))[0])
+
+// sadzby základnej náhrady za 1 km (kniha jázd)
+const kmSearch = ref('')
+const visibleKm = computed(() => {
+  const terms = searchTerms(kmSearch.value)
+  return (form.value?.kmRates ?? []).map((r, i) => ({ ...r, _i: i })).filter((r) => matches(terms, [formatDate(r.from), r.from, String(r.car), String(r.moto)]))
+})
+const kmErr = (i, f) => errors.value[`kmRates[${i}].${f}`]
+function addKm() {
+  const last = form.value.kmRates[0]
+  form.value.kmRates.unshift({ from: new Date().toISOString().slice(0, 10), car: last?.car ?? 0, moto: last?.moto ?? 0, _k: ++key })
+  touch()
+}
 
 function addECB() {
   form.value.ecb.unshift({ from: new Date().toISOString().slice(0, 10), rate: latestECB.value?.rate ?? 0, _k: ++key })
@@ -107,7 +122,7 @@ async function save() {
 function reset() {
   confirm.require({
     header: 'Obnoviť hodnoty programu',
-    message: 'Všetky sadzby DPH, sadzby ECB a parametre úroku z omeškania sa nahradia hodnotami dodanými s programom. Ručné úpravy sa stratia (zostanú v audite).',
+    message: 'Všetky sadzby DPH, sadzby ECB, náhrady za km a parametre úroku z omeškania sa nahradia hodnotami dodanými s programom. Ručné úpravy sa stratia (zostanú v audite).',
     acceptProps: { label: 'Obnoviť', severity: 'danger', size: 'small' },
     rejectProps: { label: 'Späť', severity: 'secondary', text: true, size: 'small' },
     accept: async () => {
@@ -211,6 +226,41 @@ function reset() {
                 <small v-if="ecbErr[r._i]?.rate" class="err">{{ ecbErr[r._i].rate }}</small>
               </td>
               <td class="act"><Button icon="pi pi-times" text severity="secondary" size="small" aria-label="Odstrániť sadzbu" @click="removeECB(r._i)" /></td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+      <section class="card">
+        <div class="card-head">
+          <h2>Základná náhrada za 1 km <span class="muted">{{ form.kmRates.length }}</span></h2>
+          <div class="spacer" />
+          <IconField class="search">
+            <InputIcon class="pi pi-search" />
+            <InputText v-model="kmSearch" placeholder="Hľadať dátum alebo sadzbu" size="small" aria-label="Hľadať sadzbu za km" />
+          </IconField>
+          <ExportButton name="Sadzby za km" :columns="kmRateColumns" :rows="() => visibleKm" />
+        </div>
+        <p class="hint">Opatrenie MPSVR SR podľa § 7 zákona o cestovných náhradách. Kniha jázd ju použije pri súkromnom vozidle podľa dňa jazdy.</p>
+        <Button label="Pridať sadzbu" icon="pi pi-plus" text size="small" @click="addKm" />
+        <table class="grid ecb">
+          <thead><tr><th>Platí od</th><th>Osobné vozidlo (€/km)</th><th>Jednostopové (€/km)</th><th aria-label="Akcie" /></tr></thead>
+          <tbody>
+            <tr v-if="!visibleKm.length"><td colspan="4" class="muted">Nič sa nenašlo.</td></tr>
+            <tr v-for="r in visibleKm" :key="r._k">
+              <td>
+                <DatePicker :model-value="fromISODate(form.kmRates[r._i].from)" date-format="d. m. yy" size="small" fluid
+                  :invalid="!!kmErr(r._i, 'from')" aria-label="Platí od" @update:model-value="(d) => setDate(form.kmRates[r._i], 'from', d)" />
+                <small v-if="kmErr(r._i, 'from')" class="err">{{ kmErr(r._i, 'from') }}</small>
+              </td>
+              <td>
+                <InputNumber v-model="form.kmRates[r._i].car" :min-fraction-digits="3" :max-fraction-digits="3" locale="sk-SK" size="small"
+                  :invalid="!!kmErr(r._i, 'car')" aria-label="Osobné vozidlo" @input="touch" />
+              </td>
+              <td>
+                <InputNumber v-model="form.kmRates[r._i].moto" :min-fraction-digits="3" :max-fraction-digits="3" locale="sk-SK" size="small"
+                  :invalid="!!kmErr(r._i, 'moto')" aria-label="Jednostopové vozidlo" @input="touch" />
+              </td>
+              <td class="act"><Button icon="pi pi-times" text severity="secondary" size="small" aria-label="Odstrániť sadzbu" @click="form.kmRates.splice(r._i, 1); touch()" /></td>
             </tr>
           </tbody>
         </table>

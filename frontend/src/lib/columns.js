@@ -7,6 +7,7 @@ import { intervalLabel, recurringStatusOf } from './recurring.js'
 import { levelShort } from './reminders.js'
 import { kindLabel } from './advance.js'
 import { assetStatus, disposalOptions, periodLabel } from './assets.js'
+import { tripTime } from './logbook.js'
 import { docKindLabel, emailStatus } from './emails.js'
 import { eurBalance, eurSummary, isForeignCurrency, purchaseEUR, sourceLabel } from './fx.js'
 
@@ -329,6 +330,41 @@ export const overdueColumns = [
 export const ecbColumns = [
   date('Platí od', (r) => r.from),
   { header: 'Sadzba ECB (%)', value: (r) => Number(r.rate), type: 'number', width: 14 },
+]
+
+// Kniha jázd (riadky jázd s nákladmi cost = { fuel, wear, total } zo servera).
+export const tripColumns = [
+  date('Dátum', (r) => r.date),
+  t('Čas', (r) => tripTime(r), 12),
+  t('Odkiaľ', (r) => r.from, 22),
+  t('Kam', (r) => r.to, 22),
+  t('Účel', (r) => r.purpose, 30),
+  t('Druh', (r) => (r.kind === 'private' ? 'súkromná' : 'služobná'), 10),
+  t('Vodič', (r) => r.driver, 18),
+  { header: 'Tachometer začiatok', value: (r) => r.odoStart || '', type: 'number', width: 12 },
+  { header: 'Tachometer koniec', value: (r) => r.odoEnd || '', type: 'number', width: 12 },
+  { header: 'Km', value: (r) => r.km, type: 'number', width: 8 },
+  money('PHM €', (r) => r.cost?.fuel ?? ''),
+  money('Opotrebenie €', (r) => r.cost?.wear ?? ''),
+  money('Náklady spolu €', (r) => r.cost?.total ?? ''),
+  t('Poznámka', (r) => r.note, 24),
+]
+
+export const fuelColumns = [
+  date('Dátum', (r) => r.date),
+  { header: 'Množstvo', value: (r) => Number(r.quantity), type: 'number', width: 10 },
+  money('Cena s DPH €', (r) => r.amount),
+  { header: 'Tachometer', value: (r) => r.odometer || '', type: 'number', width: 12 },
+  t('Plná nádrž', (r) => yes(r.full), 8),
+  t('Čerpacia stanica', (r) => r.station, 22),
+  t('Doklad', (r) => r.docNumber, 16),
+  t('Poznámka', (r) => r.note, 24),
+]
+
+export const kmRateColumns = [
+  date('Platí od', (r) => r.from),
+  { header: 'Osobné vozidlo (€/km)', value: (r) => Number(r.car), type: 'number', width: 14 },
+  { header: 'Jednostopové (€/km)', value: (r) => Number(r.moto), type: 'number', width: 14 },
 ]
 
 export const vatPeriodColumns = [
