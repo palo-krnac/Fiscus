@@ -52,7 +52,6 @@ func TestAdvanceReceipt(t *testing.T) {
 	}{
 		{"bez dátumu platby", func(p *Invoice) { p.PaidDate = Date{} }, ErrAdvanceNotPaid.Error()},
 		{"bežná faktúra", func(p *Invoice) { p.Kind = KindInvoice }, ErrNotAdvance.Error()},
-		{"cudzia mena", func(p *Invoice) { p.Currency = "CZK" }, "cudzej mene"},
 		{"tovar do EÚ", func(p *Invoice) { p.Customer.Country, p.SupplyKind = "DE", SupplyGoods }, "nevyhotovuje"},
 		{"zahraničie bez druhu plnenia", func(p *Invoice) { p.Customer.Country = "DE" }, "tovar alebo službu"},
 		{"prenesenie bez druhu", func(p *Invoice) { p.ReverseCharge = true }, "§ 69 ods. 12"},
@@ -204,11 +203,6 @@ func TestFinalInvoice(t *testing.T) {
 	settled.Advance = &Advance{FinalID: 3}
 	if _, err := NewFinalInvoice(settled, []Invoice{r}, MustDate("2026-10-20"), 14); !errors.Is(err, ErrAlreadySettled) {
 		t.Fatalf("druhé vyúčtovanie: %v", err)
-	}
-	foreign := p
-	foreign.Currency = "CZK"
-	if _, err := NewFinalInvoice(foreign, []Invoice{r}, MustDate("2026-10-20"), 14); err == nil || err.Error() != ErrForeignAdvance.Error() {
-		t.Fatalf("cudzia mena: %v", err)
 	}
 }
 

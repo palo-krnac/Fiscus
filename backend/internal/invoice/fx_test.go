@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/palo-krnac/fiscus/backend/internal/money"
+	"github.com/palo-krnac/fiscus/backend/internal/vat"
 )
 
 func TestForeignCurrency(t *testing.T) {
@@ -88,7 +89,41 @@ func TestForeignCreditAndAdvance(t *testing.T) {
 	}
 	p := sample()
 	p.Kind, p.Currency = KindProforma, "USD"
-	if p.NeedsReceipt() {
-		t.Fatal("záloha v cudzej mene potrebuje doklad k platbe")
+	if !p.NeedsReceipt() {
+		t.Fatal("tuzemská záloha v cudzej mene má doklad k platbe (kurz ku dňu platby)")
+	}
+}
+
+func TestForeignAdvanceSettlement(t *testing.T) {
+	// záloha 1 230 CZK (1 000 + 230 DPH) uhradená pri kurze 25,000 → doklad
+	// k platbe 40,00 + 9,20 €; vyúčtovanie 2 460 CZK pri kurze 24,600 →
+	// celá dodávka 81,30 + 18,70 €, mínus záloha v eurách podľa dokladu
+	p := Invoice{ID: 3, Kind: KindProforma, Number: "ZF1", Status: StatusPaid, PaidDate: MustDate("2026-10-05"), Currency: "CZK",
+		Customer: Party{Name: "Odberateľ", Country: "SK"}, PriceMode: vat.PriceNet,
+		Lines: []Line{{Description: "Práca", Quantity: money.MustParse("1"), UnitPrice: money.MustParse("1000"), Rate: 23}}}
+	_ = p.Recalculate()
+	r, err := NewAdvanceReceipt(p, p.Summary.Total, p.PaidDate, MustDate("2026-10-06"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.ID, r.Number, r.FXRate, r.FXDate = 9, "ZD1", money.MustParse("25"), MustDate("2026-10-04")
+	_ = r.Recalculate()
+	if r.Currency != "CZK" || !r.Local.Base.Equal(money.MustParse("40")) || !r.Local.VAT.Equal(money.MustParse("9.2")) {
+		t.Fatalf("doklad k platbe: %+v", r.Local)
+	}
+	f, err := NewFinalInvoice(p, []Invoice{r}, MustDate("2026-10-20"), 14)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Lines[0].Quantity = money.MustParse("2")
+	f.FXRate = money.MustParse("24.6")
+	_ = f.Recalculate()
+	// v mene: 2 460 − 1 230 = 1 230 CZK na úhradu
+	if !f.Summary.Total.Equal(money.MustParse("1230")) {
+		t.Fatalf("zostatok v CZK: %+v", f.Summary)
+	}
+	// v eurách: 2000/24,6 = 81,30; 460/24,6 = 18,70 → mínus 40 a 9,20
+	if f.Local == nil || !f.Local.Base.Equal(money.MustParse("41.3")) || !f.Local.VAT.Equal(money.MustParse("9.5")) {
+		t.Fatalf("zostatok v eurách: %+v", f.Local)
 	}
 }
