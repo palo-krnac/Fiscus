@@ -306,7 +306,7 @@ func (c *docCache) propose(e journal.Entry, vatPayer bool) []journal.Line {
 			return nil
 		}
 		return journal.SaleLines(e.Amount, journal.Sale{Total: sum.Total, VAT: sum.VAT,
-			Goods: inv.SupplyKind == invoice.SupplyGoods, VATPayer: vatPayer && !inv.NonVATPayer})
+			Goods: inv.SupplyKind.Goods(), VATPayer: vatPayer && !inv.NonVATPayer})
 	case "purchase":
 		p := c.purchase(e.Doc.ID)
 		if p == nil {

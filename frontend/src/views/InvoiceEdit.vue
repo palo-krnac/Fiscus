@@ -11,7 +11,7 @@ import DatePicker from 'primevue/datepicker'
 import Dialog from 'primevue/dialog'
 import SelectButton from 'primevue/selectbutton'
 import Select from 'primevue/select'
-import { codes, ratesOn, supplyKinds, isForeign, supplyHint, domesticRCOptions, needsCommodity } from '../lib/codes.js'
+import { codes, ratesOn, supplyKindsFor, isForeign, supplyHint, domesticRCOptions, needsCommodity } from '../lib/codes.js'
 import Checkbox from 'primevue/checkbox'
 import AutoComplete from 'primevue/autocomplete'
 import IcoInput from '../components/IcoInput.vue'
@@ -1266,7 +1266,7 @@ const customerFields = reactive([
             <span class="supply-label">Druh plnenia</span>
             <SelectButton
               :model-value="inv.supplyKind || null"
-              :options="supplyKinds"
+              :options="supplyKindsFor(inv.customer.country)"
               option-label="label"
               option-value="value"
               :disabled="!editable"

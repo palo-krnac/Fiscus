@@ -269,6 +269,8 @@ func (inv *Invoice) Validate() error {
 		add("supplyKind", "Neznámy druh plnenia")
 	} else if party.Foreign(c.Country) && inv.SupplyKind == "" && !inv.NonVATPayer {
 		add("supplyKind", "Pri zahraničnom odberateľovi vyberte, či ide o tovar alebo službu")
+	} else if inv.SupplyKind == SupplyTriangular && (!party.IsEU(c.Country) || c.ICDPH == "" || inv.NonVATPayer) {
+		add("supplyKind", ErrTriangular)
 	}
 	if len(inv.Lines) == 0 {
 		add("lines", "Faktúra musí mať aspoň jednu položku")
@@ -425,7 +427,19 @@ type SupplyKind string
 const (
 	SupplyGoods    SupplyKind = "goods"    // dodanie tovaru
 	SupplyServices SupplyKind = "services" // poskytnutie služby
+	// SupplyTriangular: tovar v trojstrannom obchode v EÚ (§ 45) — pri predaji
+	// sme prvým odberateľom (súhrnný výkaz kód 1), pri nákupe druhým odberateľom
+	// (r. 11 – 12, KV B.1).
+	SupplyTriangular SupplyKind = "triangular"
 )
 
 // Valid vráti true pre prázdny alebo známy druh.
-func (k SupplyKind) Valid() bool { return k == "" || k == SupplyGoods || k == SupplyServices }
+func (k SupplyKind) Valid() bool {
+	return k == "" || k == SupplyGoods || k == SupplyServices || k == SupplyTriangular
+}
+
+// Goods vráti true pre dodanie tovaru (aj v trojstrannom obchode).
+func (k SupplyKind) Goods() bool { return k == SupplyGoods || k == SupplyTriangular }
+
+// ErrTriangular — trojstranný obchod je iba medzi štátmi EÚ.
+const ErrTriangular = "Trojstranný obchod je iba s partnerom z iného štátu EÚ s IČ DPH"

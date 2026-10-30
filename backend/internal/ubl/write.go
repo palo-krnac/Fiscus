@@ -123,11 +123,13 @@ func taxCategory(inv invoice.Invoice, s Seller, rate vat.Rate, reverse bool) cat
 	case inv.ReverseCharge && party.Foreign(c.Country):
 		eu := party.IsEU(c.Country)
 		switch {
+		case eu && inv.SupplyKind == invoice.SupplyTriangular:
+			return category{ID: "AE", Reason: "Trojstranný obchod (§ 45) – daň platí odberateľ", ReasonCode: "VATEX-EU-AE"}
 		case eu && inv.SupplyKind == invoice.SupplyGoods:
 			return category{ID: "K", Reason: "Dodanie tovaru do iného členského štátu oslobodené od dane (§ 43)", ReasonCode: "VATEX-EU-IC"}
 		case eu:
 			return category{ID: "AE", Reason: "Prenesenie daňovej povinnosti – daň platí príjemca služby", ReasonCode: "VATEX-EU-AE"}
-		case inv.SupplyKind == invoice.SupplyGoods:
+		case inv.SupplyKind.Goods():
 			return category{ID: "G", Reason: "Vývoz tovaru oslobodený od dane (§ 47)", ReasonCode: "VATEX-EU-G"}
 		default:
 			return category{ID: "O", Reason: "Miesto dodania služby je mimo územia SR", ReasonCode: "VATEX-EU-O"}

@@ -2,6 +2,7 @@ package vatreturn
 
 import (
 	"encoding/xml"
+	"errors"
 	"strings"
 	"testing"
 
@@ -137,4 +138,92 @@ func TestSVXML(t *testing.T) {
 	if doc.Strany[1].Zaznam[0].Kod != "0" || doc.Strany[1].Zaznam[1].Kod != "" {
 		t.Errorf("druhá strana: %+v", doc.Strany[1].Zaznam[:2])
 	}
+}
+
+// TestTriangularAndImport: trojstranný obchod (prvý odberateľ: iba SV kód 1;
+// druhý odberateľ: r. 11 – 12, odpočet, KV B.1) a dovoz z tretej krajiny
+// (DPH z rozhodnutia colného úradu: r. 19 a z toho r. 23, bez KV).
+func TestTriangularAndImport(t *testing.T) {
+	p, _ := ParsePeriod("2026-10")
+	sale := foreignInv(1, "FA1", "AT", "ATU12345678", invoice.SupplyTriangular, "2000")
+
+	tri := pur(2, "P2", "2026-10-12", "DE123456789", 23, "500", "115")
+	tri.Supplier.Country, tri.ReverseCharge, tri.SupplyKind = "DE", true, invoice.SupplyTriangular
+	tri.Normalize()
+
+	imp := pur(3, "P3", "2026-10-14", "", 23, "1000", "230")
+	imp.Supplier.Country, imp.SupplyKind = "CN", invoice.SupplyGoods
+	imp.Normalize()
+	if !imp.Import() || imp.Summary.Total.String() != "1000.00" {
+		t.Fatalf("dovoz: dodávateľovi sa platí bez DPH: %+v", imp.Summary)
+	}
+	if err := imp.Validate(); err != nil {
+		t.Fatalf("dovoz bez IČ DPH dodávateľa má byť platný: %v", err)
+	}
+	impRC := pur(4, "P4", "2026-10-15", "", 23, "100", "23")
+	impRC.Supplier.Country, impRC.SupplyKind, impRC.ReverseCharge = "US", invoice.SupplyGoods, true
+
+	ret := Compute(Input{Period: p, Invoices: []invoice.Invoice{sale}, Purchases: []purchase.Purchase{tri, imp, impRC}})
+	want := map[string]string{"r11b": "500.00", "r12b": "115.00", "r17": "115.00", "r19": "345.00", "r23": "230.00"}
+	for row, v := range want {
+		if ret.Rows[row].String() != v {
+			t.Errorf("%s = %s, chcem %s", row, ret.Rows[row], v)
+		}
+	}
+	for _, row := range []string{"r13", "r14", "r15", "r07", "r08", "r21"} {
+		if !ret.Rows[row].IsZero() {
+			t.Errorf("%s má byť prázdny: %s", row, ret.Rows[row])
+		}
+	}
+	if len(ret.SV) != 1 || ret.SV[0].Code != SVTriangular || ret.SV[0].Value.String() != "2000.00" || ret.SV[0].Country != "AT" {
+		t.Fatalf("SV: %+v", ret.SV)
+	}
+	if len(ret.KV.B1) != 1 || ret.KV.B1[0].Partner != "DE123456789" || ret.KV.B1[0].Deducted.String() != "115.00" || len(ret.KV.B2) != 0 || len(ret.KV.A1) != 0 {
+		t.Fatalf("KV: B1 %+v B2 %+v A1 %+v", ret.KV.B1, ret.KV.B2, ret.KV.A1)
+	}
+	if len(ret.Warnings) != 1 || !strings.Contains(ret.Warnings[0].Message, "§ 84a") {
+		t.Fatalf("upozornenia: %+v", ret.Warnings)
+	}
+}
+
+func TestTriangularValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		country string
+		icdph   string
+		ok      bool
+	}{
+		{"EÚ s IČ DPH", "AT", "ATU12345678", true},
+		{"EÚ bez IČ DPH", "AT", "", false},
+		{"mimo EÚ", "US", "US1", false},
+	}
+	for _, tt := range tests {
+		i := foreignInv(1, "FA1", tt.country, tt.icdph, invoice.SupplyTriangular, "100")
+		i.ReverseCharge = true
+		err := i.Validate()
+		has := err != nil && strings.Contains(err.Error()+fieldsOf(err), "Trojstranný")
+		if has == tt.ok {
+			t.Errorf("%s: %v", tt.name, err)
+		}
+	}
+	if n := invoice.ExemptionNote(true, invoice.Party{Country: "AT"}, invoice.SupplyTriangular); !strings.Contains(n, "§ 45") {
+		t.Errorf("text na faktúre: %q", n)
+	}
+	p := pur(1, "P1", "2026-10-12", "US1", 23, "100", "23")
+	p.Supplier.Country, p.ReverseCharge, p.SupplyKind = "US", true, invoice.SupplyTriangular
+	if err := p.Validate(); err == nil || !strings.Contains(fieldsOf(err), "Trojstranný") {
+		t.Errorf("nákup mimo EÚ: %v", err)
+	}
+}
+
+func fieldsOf(err error) string {
+	var ve *invoice.ValidationError
+	if !errors.As(err, &ve) {
+		return ""
+	}
+	s := ""
+	for _, f := range ve.Fields {
+		s += f.Message + "\n"
+	}
+	return s
 }

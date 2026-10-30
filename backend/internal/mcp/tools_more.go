@@ -48,7 +48,7 @@ func (s *Server) moreTools() []Tool {
 				"currency":       map[string]any{"type": "string", "description": "Mena dokladu (predvolene EUR)"},
 				"payment_method": map[string]any{"type": "string", "enum": []string{"transfer", "cash", "card"}},
 				"reverse_charge": map[string]any{"type": "boolean", "description": "Prenesenie daňovej povinnosti (dodávateľ fakturuje bez DPH)"},
-				"supply_kind":    map[string]any{"type": "string", "enum": []string{"goods", "services"}, "description": "Pri zahraničnom dodávateľovi: tovar alebo služba"},
+				"supply_kind":    map[string]any{"type": "string", "enum": []string{"goods", "services", "triangular"}, "description": "Pri zahraničnom dodávateľovi: tovar, služba alebo trojstranný obchod (EÚ)"},
 				"no_deduction":   map[string]any{"type": "boolean", "description": "DPH sa neodpočítava (reprezentácia, súkromná spotreba)"},
 				"note":           map[string]any{"type": "string"},
 			},

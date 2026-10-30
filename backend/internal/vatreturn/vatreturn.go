@@ -217,6 +217,8 @@ var (
 	outputRows      = map[vat.Rate]rowPair{19: {"r01", "r02"}, 5: {"r01a", "r02a"}, 23: {"r03", "r04"}}
 	acquisitionRows = map[vat.Rate]rowPair{19: {"r05", "r06"}, 5: {"r05a", "r06a"}, 23: {"r07", "r08"}}
 	reverseRows     = map[vat.Rate]rowPair{19: {"r09", "r10"}, 5: {"r09a", "r10a"}, 23: {"r09b", "r10b"}}
+	triangularRows  = map[vat.Rate]rowPair{19: {"r11", "r12"}, 5: {"r11a", "r12a"}, 23: {"r11b", "r12b"}}
+	importRow       = map[vat.Rate]string{19: "r22", 5: "r22a", 23: "r23"}
 	deductRows      = map[vat.Rate]string{19: "r18", 5: "r18a", 23: "r19"}
 	domesticRow     = map[vat.Rate]string{19: "r20", 5: "r20a", 23: "r21"}
 	taxRows         = []string{"r02", "r02a", "r04", "r06", "r06a", "r08", "r10", "r10a", "r10b", "r12", "r12a", "r12b", "r12c", "r12d", "r12e", "r16"}
@@ -361,14 +363,21 @@ func Compute(in Input) Return {
 				ret.Purchase++
 			}
 			continue
+		case foreign(s.Country) && p.SupplyKind == invoice.SupplyGoods && !party.IsEU(s.Country):
+			if p.ReverseCharge {
+				warn(doc, "purchase", p.ID, "Dovoz s uplatnením dane v priznaní (§ 84a ods. 3, r. 11c – 12e) zatiaľ nie je podporovaný — doplňte ručne")
+			} else if ret.addImport(p, tax, add) {
+				ret.Purchase++
+			}
+			continue
 		case foreign(s.Country) && !p.ReverseCharge:
 			warn(doc, "purchase", p.ID, "Zahraničná faktúra bez prenesenia daňovej povinnosti — zahraničnú DPH nemožno odpočítať v SR. Ak daň platíte vy, označte prenesenie.")
 			continue
 		case foreign(s.Country) && p.SupplyKind == "":
 			warn(doc, "purchase", p.ID, "Pri zahraničnom dodávateľovi vyberte, či ide o tovar alebo službu")
 			continue
-		case foreign(s.Country) && p.SupplyKind == invoice.SupplyGoods && !party.IsEU(s.Country):
-			warn(doc, "purchase", p.ID, "Dovoz tovaru z tretej krajiny (DPH platená colnému úradu, r. 22–23) zatiaľ nie je podporovaný — doplňte ručne")
+		case p.SupplyKind == invoice.SupplyTriangular && !party.IsEU(s.Country):
+			warn(doc, "purchase", p.ID, "Trojstranný obchod je iba s dodávateľom z iného štátu EÚ")
 			continue
 		case p.NoDeduction && !p.ReverseCharge:
 			continue // bez odpočtu: neuvádza sa ani v KV
@@ -387,6 +396,9 @@ func Compute(in Input) Return {
 				table := reverseRows // služby zo zahraničia, tuzemské prenesenie (§ 69)
 				if foreign(s.Country) && p.SupplyKind == invoice.SupplyGoods {
 					table = acquisitionRows // nadobudnutie tovaru z EÚ (§ 11)
+				}
+				if p.SupplyKind == invoice.SupplyTriangular {
+					table = triangularRows // trojstranný obchod — sme druhý odberateľ (§ 45, § 69 ods. 7)
 				}
 				rows, ok := table[r.Rate]
 				if !ok {
@@ -495,6 +507,12 @@ func (ret *Return) addForeignSale(inv invoice.Invoice) string {
 		add("r13")
 		add("r14")
 		ret.addSV(c, SVGoods, base)
+	case invoice.SupplyTriangular:
+		// prvý odberateľ: dodanie sa neuvádza v priznaní ani v KV, iba v SV (kód 1)
+		if !eu || c.ICDPH == "" {
+			return "Trojstranný obchod je iba s odberateľom z iného štátu EÚ s IČ DPH"
+		}
+		ret.addSV(c, SVTriangular, base)
 	case invoice.SupplyServices:
 		if !eu {
 			return "" // služba mimo EÚ: miesto dodania v zahraničí, do priznania sa neuvádza
@@ -690,6 +708,35 @@ func (ret *Return) addA2Credit(inv invoice.Invoice, warn func(doc, kind string, 
 	}
 }
 
+// addImport zaradí dovoz tovaru z tretej krajiny: DPH zaplatená colnému
+// úradu (podľa rozhodnutia colného úradu) sa odpočíta v r. 18 – 19 a zároveň
+// v r. 22 – 23 („z toho pri dovoze“). Do kontrolného výkazu sa neuvádza.
+func (ret *Return) addImport(p purchase.Purchase, tax purchase.Amounts, add func(string, money.Dec)) bool {
+	if p.NoDeduction {
+		return false
+	}
+	any := false
+	for _, r := range tax.Rates {
+		if r.Rate == 0 || r.VAT.IsZero() {
+			continue
+		}
+		row, ok := deductRows[r.Rate]
+		if !ok {
+			ret.Warnings = append(ret.Warnings, Warning{p.Number, "purchase", p.ID, fmt.Sprintf("Sadzba %d %% nepatrí do tlačiva DPHv25", r.Rate)})
+			continue
+		}
+		deducted := p.DeductOf(r.VAT)
+		add(row, deducted)
+		add(importRow[r.Rate], deducted)
+		any = true
+	}
+	if !any {
+		ret.Warnings = append(ret.Warnings, Warning{p.Number, "purchase", p.ID,
+			"Dovoz z tretej krajiny: zadajte základ a DPH z rozhodnutia colného úradu (inak sa nič neodpočíta)"})
+	}
+	return any
+}
+
 // addReverseCredit zaradí dobropis k nákupu, pri ktorom daň platí príjemca
 // (služby zo zahraničia, tuzemské prenesenie § 69 ods. 12): zníži sa
 // samozdanený základ a daň v tých istých riadkoch (r. 09–10) aj odpočet
@@ -699,7 +746,7 @@ func (ret *Return) addReverseCredit(p purchase.Purchase, tax purchase.Amounts) s
 	switch {
 	case foreign(s.Country) && p.SupplyKind == "":
 		return "Pri zahraničnom dodávateľovi vyberte, či ide o tovar alebo službu"
-	case foreign(s.Country) && p.SupplyKind == invoice.SupplyGoods:
+	case foreign(s.Country) && p.SupplyKind.Goods():
 		return "Dobropis k nadobudnutiu tovaru z EÚ opravuje obdobie pôvodného nadobudnutia (r. 05–08, dodatočné priznanie) — doplňte ručne"
 	case strings.TrimSpace(p.CorrectsNumber) == "":
 		return "Dobropis bez čísla pôvodnej faktúry dodávateľa — v C.2 ho doplňte ručne"

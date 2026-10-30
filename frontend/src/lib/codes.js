@@ -66,6 +66,11 @@ export const supplyKinds = [
   { label: 'Služba', value: 'services' },
 ]
 
+/** Druhy plnenia pre krajinu partnera: trojstranný obchod iba v EÚ. */
+export function supplyKindsFor(country) {
+  return EU.has(country) && country !== 'SK' ? [...supplyKinds, { label: 'Trojstranný obchod', value: 'triangular' }] : supplyKinds
+}
+
 /** Je partner zo zahraničia? (prázdna krajina = Slovensko) */
 export const isForeign = (country) => !!country && country !== 'SK'
 
@@ -76,11 +81,17 @@ export const isForeign = (country) => !!country && country !== 'SK'
 export function supplyHint(side, country, kind) {
   if (!isForeign(country) || !kind) return ''
   const eu = EU.has(country)
+  if (kind === 'triangular') {
+    if (!eu) return 'Trojstranný obchod je iba s partnerom z iného štátu EÚ.'
+    return side === 'sale'
+      ? 'Trojstranný obchod (§ 45): ste prvý odberateľ — faktúra bez DPH, do priznania sa neuvádza, súhrnný výkaz – kód 1. Odberateľ musí mať IČ DPH.'
+      : 'Trojstranný obchod (§ 45): ste druhý odberateľ — daň priznávate a odpočítavate vy (r. 11–12, KV B.1). Označte prenesenie.'
+  }
   if (side === 'sale') {
     if (kind === 'goods') return eu ? 'Dodanie tovaru do EÚ: oslobodené (§ 43), r. 14 a súhrnný výkaz – kód 0. Odberateľ musí mať IČ DPH.' : 'Vývoz tovaru: oslobodené (§ 47), r. 15.'
     return eu ? 'Služba do EÚ: daň platí odberateľ, súhrnný výkaz – kód 2. Odberateľ musí mať IČ DPH.' : 'Služba mimo EÚ: miesto dodania v zahraničí, do priznania sa neuvádza.'
   }
-  if (kind === 'goods') return eu ? 'Nadobudnutie tovaru z EÚ: daň priznávate a odpočítavate vy (r. 07–08, KV B.1).' : 'Dovoz tovaru: DPH platená na colnici sa zatiaľ eviduje ručne.'
+  if (kind === 'goods') return eu ? 'Nadobudnutie tovaru z EÚ: daň priznávate a odpočítavate vy (r. 07–08, KV B.1).' : 'Dovoz tovaru: do rekapitulácie zadajte základ a DPH z rozhodnutia colného úradu — odpočet v r. 19, z toho r. 23 (do KV sa neuvádza). Prenesenie neoznačujte.'
   return 'Služba zo zahraničia: daň priznávate a odpočítavate vy (§ 69 ods. 3, r. 09–10, KV B.1).'
 }
 
@@ -90,6 +101,7 @@ export function vatExemptionNote(inv) {
   const country = inv.customer?.country
   if (!isForeign(country)) return 'Prenesenie daňovej povinnosti podľa § 69 ods. 12 zákona o DPH. Daň odvedie odberateľ.'
   const eu = EU.has(country)
+  if (inv.supplyKind === 'triangular') return 'Trojstranný obchod podľa § 45 zákona o DPH (čl. 141 smernice 2006/112/ES) – daň platí odberateľ (čl. 197).'
   if (inv.supplyKind === 'goods') {
     return eu
       ? 'Dodanie tovaru do iného členského štátu oslobodené od dane podľa § 43 zákona o DPH (čl. 138 smernice 2006/112/ES).'
