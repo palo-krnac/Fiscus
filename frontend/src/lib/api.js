@@ -141,6 +141,11 @@ export const api = {
   statements: (cid, year) => request('GET', `/api/companies/${cid}/statements` + query({ year })),
   setStatementInputs: (cid, year, inputs) => request('PUT', `/api/companies/${cid}/statements/${year}`, inputs),
   openItems: (cid, date) => request('GET', `/api/companies/${cid}/open-items` + query({ date })),
+  assets: (cid, year) => request('GET', `/api/companies/${cid}/assets` + query({ year })),
+  saveAsset: (cid, a) =>
+    a.id ? request('PUT', `/api/companies/${cid}/assets/${a.id}`, a) : request('POST', `/api/companies/${cid}/assets`, a),
+  deleteAsset: (cid, id) => request('DELETE', `/api/companies/${cid}/assets/${id}`),
+  postDepreciation: (cid, year) => request('POST', `/api/companies/${cid}/assets/depreciation/${year}`),
   resetJournal: (cid, key) => request('DELETE', `/api/companies/${cid}/journal/${encodeURIComponent(key)}`),
   cashBook: (cid, year) => request('GET', `/api/companies/${cid}/cash` + query({ year })),
   cash: (cid, id) => request('GET', `/api/companies/${cid}/cash/${id}`),

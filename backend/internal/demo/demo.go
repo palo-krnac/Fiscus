@@ -5,13 +5,14 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
-	"github.com/palo-krnac/fiscus/backend/internal/catalog"
 	"strings"
 	"time"
 
 	"github.com/palo-krnac/fiscus/backend/internal/app"
+	"github.com/palo-krnac/fiscus/backend/internal/asset"
 	"github.com/palo-krnac/fiscus/backend/internal/auth"
 	"github.com/palo-krnac/fiscus/backend/internal/cash"
+	"github.com/palo-krnac/fiscus/backend/internal/catalog"
 	"github.com/palo-krnac/fiscus/backend/internal/fx"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	m "github.com/palo-krnac/fiscus/backend/internal/money"
@@ -234,6 +235,9 @@ func Seed(ctx context.Context, a *app.App) (store.Company, error) {
 	if err := seedBank(ctx, a, c); err != nil {
 		return c, fmt.Errorf("demo výpis: %w", err)
 	}
+	if err := seedAssets(ctx, a, c); err != nil {
+		return c, fmt.Errorf("demo majetok: %w", err)
+	}
 	if err := seedQuotes(ctx, a, c, contactIDs); err != nil {
 		return c, fmt.Errorf("demo ponuky: %w", err)
 	}
@@ -422,6 +426,25 @@ func seedQuotes(ctx context.Context, a *app.App, c store.Company, contactIDs []i
 	}
 	_, err := a.InvoiceQuote(ctx, c.ID, first)
 	return err
+}
+
+// seedAssets zaradí ukážkový majetok: dodávku, meracie prístroje (zrýchlene),
+// softvér a vyradený starý počítač.
+func seedAssets(ctx context.Context, a *app.App, c store.Company) error {
+	y := a.Today().Year()
+	date := func(dy int, md string) invoice.Date { return invoice.MustDate(fmt.Sprintf("%d-%s", y+dy, md)) }
+	for _, x := range []asset.Asset{
+		{Name: "Dodávka Ford Transit", Group: 1, Acquired: date(-2, "04-12"), Cost: m.MustParse("28490"), Share: 90, Note: "ZA-123BC, 10 % súkromne"},
+		{Name: "Revízny merací prístroj", Group: 2, Method: asset.Accelerated, Acquired: date(-1, "09-03"), Cost: m.MustParse("3850")},
+		{Name: "Projekčný softvér", Kind: asset.Intangible, Years: 3, Acquired: date(0, "02-01"), Cost: m.MustParse("2990")},
+		{Name: "Počítač s monitorom", Group: 1, Acquired: date(-3, "11-20"), Cost: m.MustParse("1890"),
+			Disposed: date(0, "03-31"), DisposalKind: asset.DisposalLiquidation},
+	} {
+		if _, err := a.SaveAsset(ctx, c.ID, x); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // seedBank naimportuje ukážkový výpis: dve presné úhrady (spárujú sa samé),
