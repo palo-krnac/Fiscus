@@ -21,7 +21,7 @@ import LedgerLines from '../components/LedgerLines.vue'
 import { api, ApiError } from '../lib/api.js'
 import { can, session } from '../lib/session.js'
 import { formatAmount, formatDate, formatMoney, fromISODate, toISODate } from '../lib/format.js'
-import { postingColumns, turnoverColumns } from '../lib/columns.js'
+import { ledgerStatementColumns, postingColumns, turnoverColumns } from '../lib/columns.js'
 import { accountDisplay, docLabels } from '../lib/chart.js'
 import { accountLines, apiLines, editLines, filterPostings, filterTurnovers, openingLines, parseAmount, postingFilters, postingRows, sideOf } from '../lib/ledger.js'
 
@@ -36,7 +36,29 @@ const tab = ref('journal')
 const tabs = [
   { value: 'journal', label: 'Denník' },
   { value: 'book', label: 'Hlavná kniha' },
+  { value: 'balance', label: 'Súvaha' },
+  { value: 'income', label: 'Výsledovka' },
 ]
+const heading = computed(() => ({ journal: 'Účtovný denník', book: 'Hlavná kniha', balance: 'Súvaha', income: 'Výkaz ziskov a strát' })[tab.value])
+const statementTab = computed(() => tab.value === 'balance' || tab.value === 'income')
+const st = ref(null)
+async function loadStatements() {
+  if (!statementTab.value) return
+  try {
+    st.value = await api.ledgerStatements(session.companyId, year.value)
+  } catch (e) {
+    toast.add({ severity: 'error', summary: 'Závierka sa nenačítala', detail: e.message, life: 6000 })
+  }
+}
+// celé eurá: 1 234,00 → 1 234
+const euro = (v) => formatAmount(v).replace(/,00$/, '')
+// riadok bez sumy ostane prázdny ako vo formulári; súčtové riadky ukazujú aj nulu
+const cell = (r, v) => (r.sum || Number(v) ? euro(v) : '')
+const statementRows = () =>
+  tab.value === 'balance'
+    ? [...st.value.assets.map((r) => ({ ...r, statement: 'Súvaha – aktíva' })), ...st.value.liabilities.map((r) => ({ ...r, statement: 'Súvaha – pasíva' }))]
+    : st.value.income.map((r) => ({ ...r, statement: 'Výkaz ziskov a strát' }))
+const grandRows = ['01', '24']
 const book = ref(null)
 const accounts = ref([])
 const search = ref('')
@@ -60,7 +82,11 @@ async function load() {
 }
 onMounted(load)
 watch([year, () => session.companyId], load)
-watch(tab, () => (search.value = ''))
+watch(tab, () => {
+  search.value = ''
+  loadStatements()
+})
+watch(book, loadStatements)
 
 const postings = computed(() => (book.value ? filterPostings(book.value.postings, { search: search.value, filter: filter.value, month: month.value }) : []))
 const exportPostings = () => postingRows(postings.value)
@@ -163,6 +189,20 @@ async function save() {
   }
 }
 
+// počiatočné stavy z konečných stavov minulého roka (výsledok na 431)
+async function takeOpening() {
+  busy.value = true
+  try {
+    const ls = await api.openingProposal(session.companyId, year.value)
+    if (!ls.length) toast.add({ severity: 'info', summary: `Rok ${year.value - 1} nemá v programe zostatky`, life: 4000 })
+    else lines.value = editLines(ls)
+  } catch (e) {
+    toast.add({ severity: 'error', summary: 'Nepodarilo sa', detail: e.message, life: 6000 })
+  } finally {
+    busy.value = false
+  }
+}
+
 async function resetPosting() {
   try {
     await api.setPosting(session.companyId, year.value, current.value.key, {})
@@ -197,7 +237,7 @@ function removeInternal() {
 <template>
   <div class="page">
     <header class="head">
-      <h1>Účtovný denník</h1>
+      <h1>{{ heading }}</h1>
       <SelectButton v-model="tab" :options="tabs" option-label="label" option-value="value" :allow-empty="false" size="small" aria-label="Zobrazenie" />
       <Select v-model="year" :options="years" option-label="label" option-value="value" size="small" aria-label="Rok" />
       <div class="spacer" />
@@ -231,7 +271,7 @@ function removeInternal() {
         </div>
       </section>
 
-      <div class="toolbar">
+      <div v-if="!statementTab" class="toolbar">
         <IconField class="search">
           <InputIcon class="pi pi-search" />
           <InputText v-model="search" :placeholder="tab === 'journal' ? 'Hľadať doklad, partnera, účet' : 'Hľadať účet'" size="small" aria-label="Hľadať" />
@@ -246,7 +286,68 @@ function removeInternal() {
         <ExportButton v-else :name="`Hlavná kniha ${year}`" :columns="turnoverColumns" :rows="turnovers" />
       </div>
 
-      <section v-if="tab === 'journal'" class="sheet journal">
+      <template v-if="statementTab">
+        <div v-if="st" class="st-notes">
+          <p v-if="st.unposted" class="warn">{{ st.unposted }} dokladov nie je zaúčtovaných — závierka z nich nevychádza.</p>
+          <p v-if="!st.balanced" class="warn">Hlavná kniha nie je vyrovnaná (MD ≠ D alebo počiatočné stavy).</p>
+          <p v-if="tab === 'balance' && Number(st.difference)" class="warn">Aktíva a pasíva sa líšia o {{ euro(st.difference) }} € (zaokrúhlenie alebo nevyrovnané počiatočné stavy).</p>
+          <p v-if="st.unmapped.length" class="warn">
+            Účty so zostatkom, ktoré nepatria do žiadneho riadku:
+            {{ st.unmapped.map((u) => `${accountDisplay(u.account)} ${u.name} (${formatAmount(u.closing)})`).join(', ') }}
+          </p>
+          <p class="hint">
+            Mikro účtovná jednotka, vzory Úč MÚJ 1-01 a 2-01, v celých eurách. Väzbu riadkov na účty nechajte overiť účtovníkovi.
+            <template v-if="st.previousEmpty">Predchádzajúce obdobie nemá v programe zápisy.</template>
+          </p>
+          <div class="toolbar">
+            <div class="spacer" />
+            <ExportButton :name="`${tab === 'balance' ? 'Súvaha' : 'Výkaz ziskov a strát'} ${year}`" :columns="ledgerStatementColumns(tab === 'balance', st.previousEmpty)" :rows="statementRows" />
+          </div>
+        </div>
+        <section v-if="st && tab === 'balance'" class="sheet scroll">
+          <table class="list statement">
+            <caption>Aktíva</caption>
+            <thead><tr><th>r.</th><th>Položka</th><th class="num bk">Brutto</th><th class="num bk">Korekcia</th><th class="num">Netto</th><th v-if="!st.previousEmpty" class="num">Minulé obdobie</th></tr></thead>
+            <tbody>
+              <tr v-for="r in st.assets" :key="r.code" :class="{ sum: r.sum }" :title="r.accounts">
+                <td class="code">{{ r.code }}</td>
+                <td>{{ r.label }}</td>
+                <td class="num bk">{{ cell(r, r.brutto) }}</td>
+                <td class="num bk">{{ cell(r, r.korekcia) }}</td>
+                <td class="num"><span :class="{ grand: grandRows.includes(r.code) }">{{ cell(r, r.netto) }}</span></td>
+                <td v-if="!st.previousEmpty" class="num">{{ r.sum || Number(r.previous) ? euro(r.previous) : '' }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <table class="list statement">
+            <caption>Pasíva</caption>
+            <thead><tr><th>r.</th><th>Položka</th><th class="num">Bežné obdobie</th><th v-if="!st.previousEmpty" class="num">Minulé obdobie</th></tr></thead>
+            <tbody>
+              <tr v-for="r in st.liabilities" :key="r.code" :class="{ sum: r.sum }" :title="r.accounts">
+                <td class="code">{{ r.code }}</td>
+                <td>{{ r.label }}</td>
+                <td class="num"><span :class="{ grand: grandRows.includes(r.code) }">{{ cell(r, r.netto) }}</span></td>
+                <td v-if="!st.previousEmpty" class="num">{{ r.sum || Number(r.previous) ? euro(r.previous) : '' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+        <section v-else-if="st" class="sheet scroll">
+          <table class="list statement">
+            <thead><tr><th>r.</th><th>Položka</th><th class="num">Bežné obdobie</th><th v-if="!st.previousEmpty" class="num">Minulé obdobie</th></tr></thead>
+            <tbody>
+              <tr v-for="r in st.income" :key="r.code" :class="{ sum: r.sum }" :title="r.accounts">
+                <td class="code">{{ r.code }}</td>
+                <td>{{ r.label }}</td>
+                <td class="num"><span :class="{ grand: r.code === '38' }">{{ cell(r, r.netto) }}</span></td>
+                <td v-if="!st.previousEmpty" class="num">{{ r.sum || Number(r.previous) ? euro(r.previous) : '' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+      </template>
+
+      <section v-else-if="tab === 'journal'" class="sheet journal">
         <div class="jhead" aria-hidden="true"><span>Účet</span><span class="num">MD</span><span class="num">D</span></div>
         <p v-if="!postings.length" class="empty">{{ book.postings.length ? 'Nič sa nenašlo.' : `V roku ${year} zatiaľ nie sú žiadne doklady.` }}</p>
         <article v-for="p in postings" :key="p.key" class="post" :class="{ problem: p.problem }" tabindex="0"
@@ -372,6 +473,8 @@ function removeInternal() {
       <!-- počiatočné stavy -->
       <form v-else-if="mode === 'opening'" class="dform" @submit.prevent="save">
         <p class="hint">Zostatky súvahových účtov k 1. 1. {{ year }} (z konečnej súvahy minulého roka). Strana MD sa musí rovnať strane D.</p>
+        <Button :label="`Prevziať konečné stavy ${year - 1}`" icon="pi pi-download" size="small" severity="secondary" outlined class="take"
+          :loading="busy" @click="takeOpening" />
         <LedgerLines v-model="lines" :accounts="accountOptions" />
         <small v-if="errors.lines" class="err">{{ errors.lines }}</small>
         <div class="actions">
@@ -619,6 +722,46 @@ function removeInternal() {
   border-bottom: 0;
   padding-top: 6px;
 }
+.st-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.st-notes p {
+  margin: 0;
+}
+.warn {
+  color: var(--tone-overdue);
+  font-size: var(--fs-sm);
+}
+.statement caption {
+  text-align: left;
+  font-weight: 600;
+  padding: 8px 8px 4px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--rule);
+}
+.statement + .statement {
+  border-top: 2px solid var(--ink);
+}
+.statement tbody tr {
+  cursor: default;
+}
+.statement .code {
+  width: 34px;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+.statement tr.sum td {
+  font-weight: 600;
+}
+.statement td.num {
+  white-space: nowrap;
+  width: 110px;
+}
+.take {
+  align-self: flex-start;
+}
 .grand {
   border-bottom: 3px double currentColor;
   line-height: 1.15;
@@ -753,8 +896,12 @@ function removeInternal() {
   .post-problem {
     margin-left: 0;
   }
-  .ps {
+  .ps,
+  .bk {
     display: none;
+  }
+  .statement td.num {
+    width: 76px;
   }
   .list {
     font-size: var(--fs-sm);
