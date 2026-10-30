@@ -20,6 +20,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/cash"
 	"github.com/palo-krnac/fiscus/backend/internal/fx"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
+	"github.com/palo-krnac/fiscus/backend/internal/logbook"
 	m "github.com/palo-krnac/fiscus/backend/internal/money"
 	"github.com/palo-krnac/fiscus/backend/internal/purchase"
 	"github.com/palo-krnac/fiscus/backend/internal/quote"
@@ -480,6 +481,88 @@ func Run(t *testing.T, newStore Factory) {
 		}
 		if _, err := s.GetAsset(ctx, a.ID, car.ID); !errors.Is(err, store.ErrNotFound) {
 			t.Fatal("zmazaný majetok")
+		}
+	})
+
+	t.Run("kniha jázd", func(t *testing.T) {
+		s := newStore(t)
+		a, _ := s.CreateCompany(ctx, store.Company{Name: "Alfa"})
+		b, _ := s.CreateCompany(ctx, store.Company{Name: "Beta"})
+		car := logbook.Vehicle{Name: "Octavia", Plate: "BB123AB", Fuel: logbook.Diesel, Consumption: m.MustParse("5.2"),
+			Ownership: logbook.Business, Method: logbook.MethodLog, AssetID: 4, Odometer: 12000, OdometerDate: invoice.MustDate("2026-01-01")}
+		van := logbook.Vehicle{Name: "Transit", Plate: "BB456CD", Fuel: logbook.Diesel, Ownership: logbook.Private, Method: logbook.MethodFlat}
+		for _, v := range []*logbook.Vehicle{&car, &van} {
+			if err := s.SaveVehicle(ctx, a.ID, v); err != nil || v.ID == 0 {
+				t.Fatalf("vozidlo: %v", err)
+			}
+		}
+		if got, err := s.GetVehicle(ctx, a.ID, car.ID); err != nil || !reflect.DeepEqual(got, car) {
+			t.Fatalf("načítanie vozidla:\n got %+v\nwant %+v", got, car)
+		}
+		if _, err := s.GetVehicle(ctx, b.ID, car.ID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("vozidlo inej firmy")
+		}
+		if list, _ := s.ListVehicles(ctx, a.ID); len(list) != 2 {
+			t.Fatalf("vozidlá: %+v", list)
+		}
+		trips := []logbook.Trip{
+			{VehicleID: car.ID, Date: invoice.MustDate("2026-10-02"), Depart: "07:30", Arrive: "08:10", From: "Banská Bystrica", To: "Zvolen",
+				Purpose: "Montáž", Kind: logbook.TripBusiness, Driver: "Pavol", OdoStart: 12000, OdoEnd: 12025, Km: 25},
+			{VehicleID: car.ID, Date: invoice.MustDate("2026-10-01"), From: "BB", To: "BB", Kind: logbook.TripPrivate, Km: 10},
+			{VehicleID: van.ID, Date: invoice.MustDate("2025-12-30"), From: "BB", To: "Brno", Purpose: "Nákup", Kind: logbook.TripBusiness, Km: 300},
+		}
+		for i := range trips {
+			if err := s.SaveTrip(ctx, a.ID, &trips[i]); err != nil || trips[i].ID == 0 {
+				t.Fatalf("jazda: %v", err)
+			}
+		}
+		if got, err := s.GetTrip(ctx, a.ID, trips[0].ID); err != nil || !reflect.DeepEqual(got, trips[0]) {
+			t.Fatalf("načítanie jazdy:\n got %+v\nwant %+v", got, trips[0])
+		}
+		if list, _ := s.ListTrips(ctx, a.ID, car.ID, 2026); len(list) != 2 || list[0].ID != trips[1].ID {
+			t.Fatalf("jazdy auta podľa dátumu: %+v", list)
+		}
+		if list, _ := s.ListTrips(ctx, a.ID, 0, 0); len(list) != 3 {
+			t.Fatalf("všetky jazdy: %+v", list)
+		}
+		if list, _ := s.ListTrips(ctx, b.ID, 0, 0); len(list) != 0 {
+			t.Fatal("jazdy inej firmy")
+		}
+		f := logbook.Fuel{VehicleID: car.ID, Date: invoice.MustDate("2026-10-03"), Quantity: m.MustParse("41.5"), Amount: m.MustParse("63.90"),
+			Odometer: 12030, Full: true, Station: "Slovnaft", DocKind: "cash", DocID: 7, DocNumber: "VPD20260007"}
+		if err := s.SaveFuel(ctx, a.ID, &f); err != nil || f.ID == 0 {
+			t.Fatalf("tankovanie: %v", err)
+		}
+		if got, err := s.GetFuel(ctx, a.ID, f.ID); err != nil || !reflect.DeepEqual(got, f) {
+			t.Fatalf("načítanie tankovania:\n got %+v\nwant %+v", got, f)
+		}
+		if _, err := s.GetTrip(ctx, a.ID, f.ID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("tankovanie načítané ako jazda")
+		}
+		if list, _ := s.ListFuel(ctx, a.ID, car.ID, 2026); len(list) != 1 {
+			t.Fatalf("tankovania: %+v", list)
+		}
+		trips[0].Km, trips[0].OdoEnd = 30, 12030
+		if err := s.SaveTrip(ctx, a.ID, &trips[0]); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.SaveTrip(ctx, b.ID, &trips[0]); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("úprava jazdy inej firmy")
+		}
+		for _, del := range []func() error{
+			func() error { return s.DeleteTrip(ctx, b.ID, trips[0].ID) },
+			func() error { return s.DeleteFuel(ctx, b.ID, f.ID) },
+			func() error { return s.DeleteVehicle(ctx, b.ID, car.ID) },
+		} {
+			if err := del(); !errors.Is(err, store.ErrNotFound) {
+				t.Fatal("zmazanie v inej firme")
+			}
+		}
+		if s.DeleteTrip(ctx, a.ID, trips[0].ID) != nil || s.DeleteFuel(ctx, a.ID, f.ID) != nil || s.DeleteVehicle(ctx, a.ID, van.ID) != nil {
+			t.Fatal("zmazanie")
+		}
+		if list, _ := s.ListTrips(ctx, a.ID, car.ID, 0); len(list) != 1 {
+			t.Fatalf("po zmazaní: %+v", list)
 		}
 	})
 

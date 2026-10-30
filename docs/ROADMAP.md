@@ -102,7 +102,8 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] Register dlhodobého majetku s daňovými odpismi (§ 22 – 29 ZDP): skupiny 0 – 6, rovnomerné a zrýchlené odpisovanie, pomerná časť v roku zaradenia, podiel na podnikaní, vyradenie (ZC do výdavkov), odpisový plán, väzba na prijatú faktúru, hľadanie a export
 - [x] Odpisy z registra jedným tlačidlom do uzávierky roka (stĺpec e6); zostatkové ceny do výkazu o majetku a záväzkoch (r. 01, 02) a tabuľky 1a DP typ B
 - [ ] Účtovné odpisy, technické zhodnotenie, prerušenie odpisovania, prenájom (§ 27 ods. 2)
-- [ ] Kniha jázd
+- [x] Kniha jázd: vozidlá (v obchodnom majetku, prenajaté, súkromné), jazdy so stavom tachometra, účelom a vodičom, tankovanie z pokladničných blokov a prijatých faktúr; vyúčtovanie za rok — PHM podľa knihy jázd s limitom spotreby z TP (nadspotreba, súkromné jazdy), paušál 80 % / 50 %, cestovné náhrady za súkromné auto (základná náhrada za km podľa dňa jazdy + PHM), odpis z registra majetku, náklady na každú jazdu a na km; zaúčtovanie do uzávierky; sadzby za km v Legislatíve
+- [ ] Kniha jázd: pomerný odpočet DPH z PHM a nájomného podľa služobných km, tlač knihy jázd, import z GPS
 
 ## Etapa 4 — mzdy (samostatný návrh)
 - [ ] Sociálna poisťovňa, zdravotné poisťovne, preddavky na daň, ročné zúčtovanie

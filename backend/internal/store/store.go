@@ -20,6 +20,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/fx"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/journal"
+	"github.com/palo-krnac/fiscus/backend/internal/logbook"
 	"github.com/palo-krnac/fiscus/backend/internal/purchase"
 	"github.com/palo-krnac/fiscus/backend/internal/quote"
 	"github.com/palo-krnac/fiscus/backend/internal/recurring"
@@ -257,6 +258,21 @@ type Store interface {
 	// SaveAsset vloží (ID == 0) alebo prepíše položku majetku. Nastaví ID.
 	SaveAsset(ctx context.Context, companyID int64, a *asset.Asset) error
 	DeleteAsset(ctx context.Context, companyID, id int64) error
+
+	// Kniha jázd: vozidlá, jazdy a tankovania (vehicleID 0 = všetky vozidlá,
+	// year 0 = všetky roky), zoradené podľa dátumu.
+	ListVehicles(ctx context.Context, companyID int64) ([]logbook.Vehicle, error)
+	GetVehicle(ctx context.Context, companyID, id int64) (logbook.Vehicle, error)
+	SaveVehicle(ctx context.Context, companyID int64, v *logbook.Vehicle) error
+	DeleteVehicle(ctx context.Context, companyID, id int64) error
+	ListTrips(ctx context.Context, companyID, vehicleID int64, year int) ([]logbook.Trip, error)
+	GetTrip(ctx context.Context, companyID, id int64) (logbook.Trip, error)
+	SaveTrip(ctx context.Context, companyID int64, t *logbook.Trip) error
+	DeleteTrip(ctx context.Context, companyID, id int64) error
+	ListFuel(ctx context.Context, companyID, vehicleID int64, year int) ([]logbook.Fuel, error)
+	GetFuel(ctx context.Context, companyID, id int64) (logbook.Fuel, error)
+	SaveFuel(ctx context.Context, companyID int64, f *logbook.Fuel) error
+	DeleteFuel(ctx context.Context, companyID, id int64) error
 
 	// ListRecurring vráti šablóny pravidelnej fakturácie firmy zoradené podľa ID.
 	ListRecurring(ctx context.Context, companyID int64) ([]recurring.Template, error)

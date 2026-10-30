@@ -3,6 +3,7 @@ import InvoiceList from './views/InvoiceList.vue'
 import InvoiceEdit from './views/InvoiceEdit.vue'
 import OAuthConsent from './views/OAuthConsent.vue'
 import Assets from './views/Assets.vue'
+import Logbook from './views/Logbook.vue'
 import JournalBook from './views/JournalBook.vue'
 import OpenItems from './views/OpenItems.vue'
 import Statements from './views/Statements.vue'
@@ -70,7 +71,8 @@ export const modules = [
       { path: '/pohladavky-zavazky', label: 'Pohľadávky a záväzky', icon: 'pi-list', ready: true, perm: 'ledger.read' },
       { path: '/vykazy-ju', label: 'Výkazy (závierka)', icon: 'pi-file', ready: true, perm: 'ledger.read' },
       { path: '/hlavna-kniha', label: 'Hlavná kniha', icon: 'pi-table', stage: 2, perm: 'purchases.read' },
-      { path: '/majetok', label: 'Majetok', icon: 'pi-car', ready: true, perm: 'ledger.read' },
+      { path: '/majetok', label: 'Majetok', icon: 'pi-briefcase', ready: true, perm: 'ledger.read' },
+      { path: '/kniha-jazd', label: 'Kniha jázd', icon: 'pi-car', ready: true, perm: 'ledger.read' },
       { path: '/sklad', label: 'Sklad', icon: 'pi-box', stage: 3, perm: 'purchases.read' },
     ],
   },
@@ -126,6 +128,7 @@ export const router = createRouter({
     { path: '/vykazy-ju', component: Statements, meta: { title: 'Výkazy jednoduchého účtovníctva', perm: 'ledger.read' } },
     { path: '/pohladavky-zavazky', component: OpenItems, meta: { title: 'Pohľadávky a záväzky', perm: 'ledger.read' } },
     { path: '/dennik', component: JournalBook, meta: { title: 'Peňažný denník', perm: 'ledger.read' } },
+    { path: '/kniha-jazd', component: Logbook, meta: { title: 'Kniha jázd', perm: 'ledger.read' } },
     { path: '/majetok', component: Assets, meta: { title: 'Majetok', perm: 'ledger.read' } },
     { path: '/majetok/:id(\\d+|novy)', component: Assets, props: true, meta: { title: 'Majetok', perm: 'ledger.read' } },
     { path: '/prijate/nova', component: PurchaseEdit, meta: { title: 'Nová prijatá faktúra', perm: 'purchases.write' } },

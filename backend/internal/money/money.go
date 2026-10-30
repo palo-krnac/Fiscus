@@ -125,6 +125,19 @@ func (d Dec) RoundCents() Dec {
 	return Dec{roundHalfAway(big.NewInt(d.v), big.NewInt(step)).Int64() * step}
 }
 
+// CeilCents zaokrúhli nahor na centy (smerom od nuly), napr. cestovné
+// náhrady sa zaokrúhľujú na cent nahor (0.0001 → 0.01).
+func (d Dec) CeilCents() Dec {
+	const step = unit / 100
+	q, r := d.v/step, d.v%step
+	if r > 0 {
+		q++
+	} else if r < 0 {
+		q--
+	}
+	return Dec{q * step}
+}
+
 // RoundTo zaokrúhli na zadaný počet desatinných miest (0–4).
 func (d Dec) RoundTo(places int) Dec {
 	if places >= Scale {

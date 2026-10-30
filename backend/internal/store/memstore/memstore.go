@@ -16,6 +16,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/bank"
 	"github.com/palo-krnac/fiscus/backend/internal/cash"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
+	"github.com/palo-krnac/fiscus/backend/internal/logbook"
 	"github.com/palo-krnac/fiscus/backend/internal/purchase"
 	"github.com/palo-krnac/fiscus/backend/internal/quote"
 	"github.com/palo-krnac/fiscus/backend/internal/recurring"
@@ -42,6 +43,9 @@ type Store struct {
 	cashDocs  map[int64]cash.Document
 	quotes    map[int64]quote.Quote
 	assets    map[int64]asset.Asset
+	vehicles  map[int64]logbook.Vehicle
+	trips     map[int64]logbook.Trip
+	fuel      map[int64]logbook.Fuel
 	recurring map[int64]recurring.Template
 	reminders map[int64]reminder.Reminder
 	settings  map[string]string
