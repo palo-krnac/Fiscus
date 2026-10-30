@@ -15,6 +15,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/mail"
 	"github.com/palo-krnac/fiscus/backend/internal/money"
 	"github.com/palo-krnac/fiscus/backend/internal/printout"
+	"github.com/palo-krnac/fiscus/backend/internal/quote"
 	"github.com/palo-krnac/fiscus/backend/internal/reminder"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 )
@@ -277,6 +278,10 @@ func (a *App) mailDoc(ctx context.Context, companyID int64, kind string, id int6
 		vars["Doklad"], vars["doklad"] = "Cenová ponuka", "cenovú ponuku"
 		vars["cislo"], vars["suma"] = q.Number, money2(q.Summary.Total, q.Currency)
 		vars["platna_do"], vars["datum"] = q.ValidUntil.Display(), q.IssueDate.Display()
+		vars["prijatie"] = ""
+		if u := a.QuoteURL(q); u != "" && q.Status == quote.StatusIssued {
+			vars["prijatie"] = "Ponuku si môžete pozrieť a prijať alebo odmietnuť aj online: " + u + "\n\n"
+		}
 		vars["odberatel"] = q.Customer.Name
 		return mailDoc{kind: kind, id: id, number: q.Number, file: printout.FileName("Ponuka", q.Number), to: a.contactEmail(ctx, companyID, q.Customer, q.ContactID),
 			sendable: q.Status != "" && q.Status != "draft", vars: vars,

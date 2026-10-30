@@ -49,6 +49,8 @@ type Quote struct {
 	// pri čítaní (koncept faktúry číslo ešte nemá).
 	InvoiceID     int64  `json:"invoiceId"`
 	InvoiceNumber string `json:"invoiceNumber"`
+	// Share je odkaz pre zákazníka (prijatie ponuky online); nil = nezdieľaná.
+	Share *Share `json:"share,omitempty"`
 }
 
 var (
@@ -171,6 +173,9 @@ func (q *Quote) ToInvoice(today invoice.Date, dueDays int) invoice.Invoice {
 	inv.Note = q.Note
 	if q.Number != "" {
 		ref := "Podľa cenovej ponuky " + q.Number + "."
+		if q.Share != nil && q.Share.Response != nil && q.Share.Response.Accepted && q.Share.Response.Order != "" {
+			ref = "Podľa cenovej ponuky " + q.Number + " a objednávky " + q.Share.Response.Order + "."
+		}
 		if inv.Note == "" {
 			inv.Note = ref
 		} else {
@@ -183,7 +188,7 @@ func (q *Quote) ToInvoice(today invoice.Date, dueDays int) invoice.Invoice {
 // Copy vytvorí nový koncept s rovnakým obsahom a dnešným dátumom.
 func (q *Quote) Copy(today invoice.Date, validDays int) Quote {
 	c := *q
-	c.ID, c.Number, c.Status, c.InvoiceID, c.InvoiceNumber = 0, "", StatusDraft, 0, ""
+	c.ID, c.Number, c.Status, c.InvoiceID, c.InvoiceNumber, c.Share = 0, "", StatusDraft, 0, "", nil
 	c.IssueDate, c.ValidUntil = today, today.AddDays(validDays)
 	c.Lines = append([]invoice.Line(nil), q.Lines...)
 	return c

@@ -224,6 +224,11 @@ export const api = {
       : request('POST', `/api/companies/${cid}/quotes`, q),
   previewQuote: (cid, q) => request('POST', `/api/companies/${cid}/quotes/preview`, q),
   quoteAction: (cid, id, action) => request('POST', `/api/companies/${cid}/quotes/${id}/${action}`),
+  unshareQuote: (cid, id) => request('DELETE', `/api/companies/${cid}/quotes/${id}/share`),
+  // ponuka pre zákazníka cez odkaz (bez prihlásenia)
+  publicQuote: (token) => request('GET', `/api/public/quotes/${encodeURIComponent(token)}`),
+  respondQuote: (token, body) => request('POST', `/api/public/quotes/${encodeURIComponent(token)}/respond`, body),
+  publicQuotePDF: (token) => `/api/public/quotes/${encodeURIComponent(token)}/pdf`,
   recurringList: (cid) => request('GET', `/api/companies/${cid}/recurring`),
   recurringDrafts: (cid) => request('GET', `/api/companies/${cid}/recurring/drafts`),
   recurring: (cid, id) => request('GET', `/api/companies/${cid}/recurring/${id}`),
