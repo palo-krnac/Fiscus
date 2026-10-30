@@ -667,3 +667,43 @@ func (a *App) SetLedgerOpening(ctx context.Context, companyID int64, year int, l
 		return fmt.Sprintf("Počiatočné stavy účtov k 1. 1. %d (%d účtov)", year, len(out)), nil
 	})
 }
+
+// LedgerStatements je účtovná závierka mikro účtovnej jednotky (súvaha
+// a výkaz ziskov a strát) z hlavnej knihy.
+type LedgerStatements struct {
+	Year int `json:"year"`
+	ledger.Statements
+	// PreviousEmpty: predchádzajúce obdobie nemá v programe zápisy.
+	PreviousEmpty bool `json:"previousEmpty"`
+	// Unposted a Balanced sú z hlavnej knihy bežného roka (závierka je
+	// spoľahlivá iba pri úplne zaúčtovanom a vyrovnanom denníku).
+	Unposted int  `json:"unposted"`
+	Balanced bool `json:"balanced"`
+}
+
+// LedgerStatementsFor zostaví súvahu a výkaz ziskov a strát za rok.
+func (a *App) LedgerStatementsFor(ctx context.Context, companyID int64, year int) (LedgerStatements, error) {
+	cur, err := a.Ledger(ctx, companyID, year)
+	if err != nil {
+		return LedgerStatements{}, err
+	}
+	prev, err := a.Ledger(ctx, companyID, cur.Year-1)
+	if err != nil {
+		return LedgerStatements{}, err
+	}
+	return LedgerStatements{Year: cur.Year, Statements: ledger.BuildStatements(cur.Accounts, prev.Accounts),
+		PreviousEmpty: len(prev.Accounts) == 0, Unposted: cur.Unposted, Balanced: cur.Totals.Balanced}, nil
+}
+
+// OpeningProposal navrhne počiatočné stavy roka z konečných stavov
+// predchádzajúceho roka (výsledok hospodárenia na účet 431).
+func (a *App) OpeningProposal(ctx context.Context, companyID int64, year int) ([]ledger.Line, error) {
+	if year < 2001 || year > 2100 {
+		return nil, mfaFieldErr("year", "Neplatný rok")
+	}
+	prev, err := a.Ledger(ctx, companyID, year-1)
+	if err != nil {
+		return nil, err
+	}
+	return ledger.OpeningFromClosing(prev.Accounts), nil
+}

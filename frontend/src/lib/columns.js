@@ -522,3 +522,14 @@ export const turnoverColumns = [
   money('KS MD', (r) => side(r.closing, 1)),
   money('KS D', (r) => side(r.closing, -1)),
 ]
+
+/** Súvaha a výkaz ziskov a strát (podvojné, celé eurá). */
+export function ledgerStatementColumns(balance = true, previousEmpty = false) {
+  const n = (header, value) => ({ header, value, type: 'number', width: 14 })
+  const cols = [t('Výkaz', (r) => r.statement, 22), t('Riadok', (r) => r.code, 6), t('Položka', (r) => r.label, 60)]
+  if (balance) cols.push(n('Brutto', (r) => (r.statement.endsWith('aktíva') ? Number(r.brutto) : '')), n('Korekcia', (r) => (r.statement.endsWith('aktíva') ? Number(r.korekcia) : '')))
+  cols.push(n('Bežné obdobie', (r) => Number(r.netto)))
+  if (!previousEmpty) cols.push(n('Minulé obdobie', (r) => Number(r.previous)))
+  cols.push(t('Účty', (r) => r.accounts, 40))
+  return cols
+}

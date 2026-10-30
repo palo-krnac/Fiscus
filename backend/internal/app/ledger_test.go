@@ -172,3 +172,40 @@ func TestLedger(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestLedgerStatements(t *testing.T) {
+	a, c := newApp(t, edition.Desktop)
+	d, _ := a.SaveDraft(ctx, c.ID, validDraft())
+	if _, err := a.Issue(ctx, c.ID, d.ID); err != nil {
+		t.Fatal(err)
+	}
+	st, err := a.LedgerStatementsFor(ctx, c.ID, 2026)
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := func(rs []ledger.StatementRow, code string) string {
+		for _, r := range rs {
+			if r.Code == code {
+				return r.Netto.String()
+			}
+		}
+		return "?"
+	}
+	if row(st.Income, "03") != "400.00" || row(st.Income, "38") != "400.00" || row(st.Assets, "18") != "492.00" ||
+		row(st.Liabilities, "41") != "92.00" || row(st.Liabilities, "33") != "400.00" || !st.Difference.IsZero() || !st.PreviousEmpty || !st.Balanced {
+		t.Fatalf("závierka: %+v", st)
+	}
+	lines, err := a.OpeningProposal(ctx, c.ID, 2027)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lineStr(lines) != "311 MD 492.00, 343 D 92.00, 431 D 400.00" {
+		t.Errorf("počiatočné stavy 2027: %s", lineStr(lines))
+	}
+	if err := a.SetLedgerOpening(ctx, c.ID, 2027, lines); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ = a.LedgerStatementsFor(ctx, c.ID, 2027); row(st.Liabilities, "32") != "400.00" || row(st.Assets, "18") != "492.00" || row(st.Assets, "01") != row(st.Liabilities, "24") {
+		t.Errorf("2027: %+v", st)
+	}
+}
