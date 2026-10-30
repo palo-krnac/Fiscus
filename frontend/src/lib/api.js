@@ -207,6 +207,8 @@ export const api = {
   cancel: (cid, id) => request('POST', `${inv(cid)}/${id}/cancel`),
   creditNote: (cid, id) => request('POST', `${inv(cid)}/${id}/credit-note`),
   settleAdvance: (cid, id) => request('POST', `${inv(cid)}/${id}/settle`),
+  // dodatočné daňové doklady k platbám zálohy (dodanie do 15 dní sa nestihlo)
+  issueReceipts: (cid, id) => request('POST', `${inv(cid)}/${id}/receipts`),
   advanceCandidates: (cid, id) => request('GET', `${inv(cid)}/${id}/advances`),
   addAdvance: (cid, id, pid) => request('POST', `${inv(cid)}/${id}/advances/${pid}`),
   removeAdvance: (cid, id, pid) => request('DELETE', `${inv(cid)}/${id}/advances/${pid}`),

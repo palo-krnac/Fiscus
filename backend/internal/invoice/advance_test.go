@@ -48,17 +48,19 @@ func TestAdvanceReceipt(t *testing.T) {
 	cases := []struct {
 		name string
 		edit func(*Invoice)
-		want error
+		want string
 	}{
-		{"bez dátumu platby", func(p *Invoice) { p.PaidDate = Date{} }, ErrAdvanceNotPaid},
-		{"bežná faktúra", func(p *Invoice) { p.Kind = KindInvoice }, ErrNotAdvance},
-		{"zahraničie", func(p *Invoice) { p.Customer.Country = "DE" }, ErrForeignAdvance},
-		{"prenesenie", func(p *Invoice) { p.ReverseCharge = true }, ErrForeignAdvance},
+		{"bez dátumu platby", func(p *Invoice) { p.PaidDate = Date{} }, ErrAdvanceNotPaid.Error()},
+		{"bežná faktúra", func(p *Invoice) { p.Kind = KindInvoice }, ErrNotAdvance.Error()},
+		{"cudzia mena", func(p *Invoice) { p.Currency = "CZK" }, "cudzej mene"},
+		{"tovar do EÚ", func(p *Invoice) { p.Customer.Country, p.SupplyKind = "DE", SupplyGoods }, "nevyhotovuje"},
+		{"zahraničie bez druhu plnenia", func(p *Invoice) { p.Customer.Country = "DE" }, "tovar alebo službu"},
+		{"prenesenie bez druhu", func(p *Invoice) { p.ReverseCharge = true }, "§ 69 ods. 12"},
 	}
 	for _, c := range cases {
 		x := p
 		c.edit(&x)
-		if _, err := NewAdvanceReceipt(x, x.Summary.Total, x.PaidDate, MustDate("2026-10-12")); !errors.Is(err, c.want) {
+		if _, err := NewAdvanceReceipt(x, x.Summary.Total, x.PaidDate, MustDate("2026-10-12")); err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: %v", c.name, err)
 		}
 	}
@@ -204,9 +206,9 @@ func TestFinalInvoice(t *testing.T) {
 		t.Fatalf("druhé vyúčtovanie: %v", err)
 	}
 	foreign := p
-	foreign.Customer.Country = "CZ"
-	if _, err := NewFinalInvoice(foreign, []Invoice{r}, MustDate("2026-10-20"), 14); !errors.Is(err, ErrForeignAdvance) {
-		t.Fatalf("zahraničie: %v", err)
+	foreign.Currency = "CZK"
+	if _, err := NewFinalInvoice(foreign, []Invoice{r}, MustDate("2026-10-20"), 14); err == nil || err.Error() != ErrForeignAdvance.Error() {
+		t.Fatalf("cudzia mena: %v", err)
 	}
 }
 

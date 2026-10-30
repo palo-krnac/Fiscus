@@ -41,6 +41,14 @@ func ParsePeriod(s string) (Period, error) {
 	return Period{Year: year, Month: m}, nil
 }
 
+// PeriodOf vráti zdaňovacie obdobie, do ktorého patrí deň.
+func PeriodOf(d invoice.Date, quarterly bool) Period {
+	if quarterly {
+		return Period{Year: d.Year(), Quarter: (d.Month()-1)/3 + 1}
+	}
+	return Period{Year: d.Year(), Month: d.Month()}
+}
+
 func (p Period) String() string {
 	if p.Quarter > 0 {
 		return fmt.Sprintf("%d-Q%d", p.Year, p.Quarter)

@@ -459,6 +459,9 @@ func (a *App) Issue(ctx context.Context, companyID, id int64) (invoice.Invoice, 
 	if err != nil {
 		return inv, err
 	}
+	if err := within15Check(inv, company); err != nil {
+		return inv, err
+	}
 	year, month := inv.IssueDate.Year(), inv.IssueDate.Month()
 	seq, err := a.Store.NextSequence(ctx, companyID, invoice.SequenceKey(inv.Kind), year)
 	if err != nil {
@@ -486,7 +489,10 @@ func (a *App) Issue(ctx context.Context, companyID, id int64) (invoice.Invoice, 
 		if err := a.linkFinal(ctx, companyID, inv); err != nil {
 			return inv, err
 		}
-		if inv.Summary.Total.IsZero() {
+		if err := a.payFromAdvances(ctx, companyID, &inv); err != nil {
+			return inv, err
+		}
+		if inv.Summary.Total.IsZero() && inv.Status == invoice.StatusIssued {
 			// celé plnenie uhradené zálohou
 			return a.MarkPaid(ctx, companyID, inv.ID, inv.IssueDate)
 		}

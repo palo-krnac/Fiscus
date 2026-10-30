@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canCredit, canSettle, editorTitle, hasDeductions, kindBadge, kindLabel, receiptsOf, settledAdvances } from './advance.js'
+import { canCredit, canSettle, editorTitle, hasDeductions, kindBadge, kindLabel, receiptsOf, settledAdvances, advanceModeText, canChooseWithin15, within15Deadline } from './advance.js'
 
 describe('zálohy', () => {
   it.each([
@@ -58,4 +58,27 @@ describe('zálohy', () => {
     expect(got.map((a) => [a.id, a.number, a.total, a.docs.length])).toEqual([[7, 'ZF1', 150, 2], [8, 'ZF2', 20, 1]])
     expect(settledAdvances({})).toEqual([])
   })
+})
+
+describe('režimy zálohy', () => {
+  it.each([
+    [{ advanceMode: 'receipt' }, 'daňový doklad k prijatej platbe'],
+    [{ advanceMode: 'receipt', lines: [{ reverse: 'construction' }] }, 'prenesením'],
+    [{ advanceMode: 'within15' }, '15. deň'],
+    [{ advanceMode: 'untaxed' }, 'nezakladá'],
+    [{ advanceMode: 'manual', advanceNote: 'Zálohu v cudzej mene zatiaľ vyúčtujte ručne' }, 'cudzej mene zatiaľ vyúčtujte ručne.'],
+    [{ advanceMode: 'nonvat' }, 'Po úhrade'],
+  ])('text %#', (inv, part) => expect(advanceModeText(inv)).toContain(part))
+
+  it('voľba dodania do 15 dní', () => {
+    expect(canChooseWithin15({ kind: 'proforma', advanceMode: 'receipt' })).toBe(true)
+    expect(canChooseWithin15({ kind: 'proforma', advanceMode: 'untaxed' })).toBe(false)
+    expect(canChooseWithin15({ kind: 'invoice', advanceMode: 'receipt' })).toBe(false)
+  })
+
+  it.each([
+    ['2026-10-10', '2026-10-25'],
+    ['2026-10-25', '2026-11-09'],
+    ['2026-12-20', '2027-01-04'],
+  ])('lehota od %s', (paid, want) => expect(within15Deadline(paid)).toBe(want))
 })
