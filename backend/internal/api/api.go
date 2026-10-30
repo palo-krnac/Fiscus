@@ -117,6 +117,7 @@ func (s *Server) Handler() http.Handler {
 	open("GET /api/legal", s.getLegal)
 	open("PUT /api/legal", s.setLegal)
 	open("POST /api/legal/reset", s.resetLegal)
+	open("POST /api/legal/ecb", s.updateECBRates)
 	open("GET /api/rates", s.listRates)
 	open("PUT /api/rates", s.setRate)
 	open("POST /api/rates/update", s.updateRates)

@@ -35,6 +35,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/fx"
 	"github.com/palo-krnac/fiscus/backend/internal/mcp"
 	"github.com/palo-krnac/fiscus/backend/internal/registry"
+	"github.com/palo-krnac/fiscus/backend/internal/reminder"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 	"github.com/palo-krnac/fiscus/backend/internal/store/memstore"
 	"github.com/palo-krnac/fiscus/backend/internal/tray"
@@ -66,6 +67,7 @@ func main() {
 	rpoURL := flag.String("rpo-url", registry.DefaultBaseURL, "adresa API Registra právnických osôb; prázdne = vypnuté")
 	viesURL := flag.String("vies-url", registry.VIESBaseURL, "adresa VIES na overenie IČ DPH; prázdne = vypnuté")
 	ruzURL := flag.String("ruz-url", registry.RUZBaseURL, "adresa API Registra účtovných závierok (záloha RPO, DIČ); prázdne = vypnuté")
+	ecbRateURL := flag.String("ecb-rate-url", reminder.ECBDataURL, "adresa základnej úrokovej sadzby ECB (CSV) pre úrok z omeškania; prázdne = vypnuté")
 	ecbURL := flag.String("ecb-url", fx.ECB90, "adresa kurzov ECB (posledných 90 dní); prázdne = vypnuté, kurzy sa zadávajú ručne")
 	claudeURL := flag.String("claude-url", "", "adresa Claude API na čítanie dokladov (prázdne = api.anthropic.com)")
 	restoreFile := flag.String("restore", "", "pred spustením obnoviť databázu zo zálohy (.fbk); pôvodná sa premenuje na .pred-obnovou")
@@ -151,6 +153,9 @@ func main() {
 	a := app.New(st, caps)
 	a.PublicURL = *publicURL
 	a.ECBURL = *ecbURL
+	if *ecbURL != "" {
+		a.ECBRateURL = *ecbRateURL
+	}
 	a.AIBaseURL = *claudeURL
 	a.Backups, a.BackupsOff, a.BackupSetup = backups, backupsOff, backupSetup
 	if err := a.LoadLegal(context.Background()); err != nil {
@@ -312,6 +317,13 @@ func ratesLoop(ctx context.Context, a *app.App) {
 				log.Printf("kurzy ECB: %v", err)
 			} else {
 				log.Printf("kurzy ECB: %d kurzov, posledné k %s", res.Count, res.Latest)
+			}
+			if a.ECBRateURL != "" {
+				if res, err := a.UpdateECBRates(ctx); err != nil {
+					log.Printf("sadzba ECB: %v", err)
+				} else if len(res.Added) > 0 {
+					log.Printf("sadzba ECB: nová sadzba %s %% od %s", res.Latest.Rate.Display(), res.Latest.From.Display())
+				}
 			}
 			t.Reset(6 * time.Hour)
 		}
