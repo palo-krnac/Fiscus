@@ -102,6 +102,12 @@ func TestValidate(t *testing.T) {
 		{"neznáma mena", func(p *Purchase) { p.Currency, p.FXRate = "XYZ", m.MustParse("2") }, "currency"},
 		{"cudzia mena bez kurzu", func(p *Purchase) { p.Currency = "CZK" }, "fxRate"},
 		{"cudzia mena s kurzom", func(p *Purchase) { p.Currency, p.FXRate = "CZK", m.MustParse("24.5") }, ""},
+		{"dobropis bez pôvodnej faktúry", func(p *Purchase) { p.Rates[0].Base = p.Rates[0].Base.Neg() }, "correctsNumber"},
+		{"dobropis", func(p *Purchase) { p.Rates[0].Base, p.CorrectsNumber = p.Rates[0].Base.Neg(), "FV-1" }, ""},
+		{"dobropis bez odpočtu", func(p *Purchase) { p.Rates[0].Base, p.NoDeduction = p.Rates[0].Base.Neg(), true }, ""},
+		{"zmiešané znamienka", func(p *Purchase) {
+			p.Rates = append(p.Rates, RateRow{Rate: 5, Base: m.MustParse("-10")})
+		}, "rates"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
