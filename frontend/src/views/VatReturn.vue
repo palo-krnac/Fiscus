@@ -384,8 +384,10 @@ async function downloadXML(which) {
                     <td class="num">{{ l.quantity ? `${formatQuantity(l.quantity)} ${l.unit}` : '—' }}</td>
                   </template>
                   <template v-else>
-                    <td class="num">{{ formatAmount(l.vat ?? l.vatDiff) }}</td>
-                    <td class="num">{{ l.rate }}</td>
+                    <td v-if="l.a2" class="num muted" title="Opravná faktúra k A.2 — daň priznáva odberateľ">prenesenie</td>
+                    <td v-else class="num">{{ formatAmount(l.vat ?? l.vatDiff) }}</td>
+                    <td v-if="l.a2" class="num">{{ [l.code || l.goods, l.quantity ? `${formatQuantity(l.quantity)} ${l.unit}` : ''].filter(Boolean).join(' · ') || '—' }}</td>
+                    <td v-else class="num">{{ l.rate }}</td>
                   </template>
                   <td v-if="s.kind === 'purchase'" class="num">{{ formatAmount(s.code === 'C.2' ? l.deductedDiff : l.deducted) }}</td>
                 </tr>

@@ -201,8 +201,22 @@ func KVXML(r Return, tp Taxpayer) []byte {
 			attr("O", amountReq(l.Deducted)) + "/>")
 	}
 	for _, c := range r.KV.C1 {
-		w.raw("<C1" + attr("Odb", c.Partner) + attr("FO", c.Number) + attr("FP", c.Original) +
-			attr("ZR", amountReq(c.BaseDiff)) + attr("DR", amountReq(c.VATDiff)) + attr("S", strconv.Itoa(int(c.Rate))) + "/>")
+		el := "<C1" + attr("Odb", c.Partner) + attr("FO", c.Number) + attr("FP", c.Original) + attr("ZR", amountReq(c.BaseDiff))
+		if c.A2 {
+			// opravná faktúra k A.2: bez rozdielu dane a sadzby, pri tovare kód a rozdiel množstva
+			if c.Code != "" {
+				el += attr("TK", c.Code)
+			}
+			if c.Goods != "" {
+				el += attr("TD", c.Goods)
+			}
+			if c.Quantity != nil {
+				el += attr("Mn", amountReq(*c.Quantity)) + attr("MJ", c.Unit)
+			}
+		} else {
+			el += attr("DR", amountReq(c.VATDiff)) + attr("S", strconv.Itoa(int(c.Rate)))
+		}
+		w.raw(el + "/>")
 	}
 	for _, c := range r.KV.C2 {
 		w.raw("<C2" + attr("Dod", c.Partner) + attr("FO", c.Number) + attr("FP", c.Original) +

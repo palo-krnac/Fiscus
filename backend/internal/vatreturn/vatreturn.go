@@ -66,7 +66,14 @@ type KVCorrection struct {
 	VATDiff      money.Dec `json:"vatDiff"`
 	Rate         vat.Rate  `json:"rate"`
 	DeductedDiff money.Dec `json:"deductedDiff"` // iba C.2
-	ID           int64     `json:"id"`
+	// Opravná faktúra k A.2 (tuzemské prenesenie): bez dane a sadzby, pri
+	// tovare kód SCS alebo druh tovaru a rozdiel množstva.
+	A2       bool       `json:"a2,omitempty"`
+	Code     string     `json:"code,omitempty"`
+	Goods    string     `json:"goods,omitempty"`
+	Quantity *money.Dec `json:"quantity,omitempty"`
+	Unit     string     `json:"unit,omitempty"`
+	ID       int64      `json:"id"`
 }
 
 // KVSum je súhrnný riadok D.2: základná sadzba a znížené sadzby spolu.
@@ -271,7 +278,7 @@ func Compute(in Input) Return {
 		}
 		if inv.DomesticReverse() {
 			if credit {
-				warn(inv.Number, "invoice", inv.ID, "Dobropis k dodaniu s prenesením daňovej povinnosti (A.2, kód opravy) zatiaľ nie je podporovaný — doplňte ručne")
+				ret.addA2Credit(inv, warn)
 			} else {
 				ret.addA2(inv, when, warn)
 			}
@@ -617,6 +624,108 @@ func (ret *Return) addA2(inv invoice.Invoice, when invoice.Date, warn func(doc, 
 	}
 }
 
+// addA2Credit zaradí dobropis k dodaniu s tuzemským prenesením do C.1:
+// rozdiel základu po riadkoch A.2 (druh, kód tovaru), bez dane a sadzby,
+// pri tovare rozdiel množstva so znamienkom mínus (poučenie ku KV, C.1).
+func (ret *Return) addA2Credit(inv invoice.Invoice, warn func(doc, kind string, id int64, msg string)) {
+	orig := ""
+	if inv.Correction != nil {
+		orig = inv.Correction.OriginalNumber
+	}
+	if orig == "" {
+		warn(inv.Number, "invoice", inv.ID, "Dobropis bez čísla pôvodnej faktúry — v C.1 ho doplňte ručne")
+	}
+	type group struct {
+		line   KVCorrection
+		goods  bool
+		qty    money.Dec
+		hasQty bool
+	}
+	var order []string
+	groups := map[string]*group{}
+	for _, l := range inv.Lines {
+		k := l.Reverse
+		if !k.Reported() {
+			continue
+		}
+		key := invoice.A2Key(k, l.Commodity)
+		g, ok := groups[key]
+		if !ok {
+			code := ""
+			if k.NeedsCode() {
+				code = invoice.CommodityCode(l.Commodity)
+			}
+			g = &group{goods: k.Goods(), line: KVCorrection{Partner: noSpaces(strings.ToUpper(inv.Customer.ICDPH)), Name: inv.Customer.Name,
+				Number: noSpaces(inv.Number), Original: noSpaces(orig), A2: true, Code: code, Goods: k.KVKind(), ID: inv.ID}}
+			groups[key] = g
+			order = append(order, key)
+		}
+		g.line.BaseDiff = g.line.BaseDiff.Add(l.Amount)
+		if g.goods {
+			unit := invoice.KVUnit(l.Unit)
+			if g.hasQty && unit != g.line.Unit {
+				warn(inv.Number, "invoice", inv.ID, fmt.Sprintf("%s: rôzne merné jednotky (%s, %s) — v C.1 prepočítajte množstvo na jednu", k.Label(), g.line.Unit, unit))
+				continue
+			}
+			g.qty, g.line.Unit, g.hasQty = g.qty.Add(l.Quantity), unit, true
+		}
+	}
+	for _, key := range order {
+		g := groups[key]
+		if inv.Foreign() {
+			g.line.BaseDiff = g.line.BaseDiff.DivCents(inv.FXRate)
+		}
+		g.line.BaseDiff = g.line.BaseDiff.RoundCents()
+		if g.goods && g.hasQty {
+			// dobropis znižuje dodávku: množstvo so znamienkom mínus
+			q := g.qty.RoundCents()
+			if q.Sign() > 0 && g.line.BaseDiff.Sign() < 0 {
+				q = q.Neg()
+			}
+			g.line.Quantity = &q
+		} else {
+			g.line.Unit = ""
+		}
+		ret.KV.C1 = append(ret.KV.C1, g.line)
+	}
+}
+
+// addReverseCredit zaradí dobropis k nákupu, pri ktorom daň platí príjemca
+// (služby zo zahraničia, tuzemské prenesenie § 69 ods. 12): zníži sa
+// samozdanený základ a daň v tých istých riadkoch (r. 09–10) aj odpočet
+// (r. 18–19); v KV ide do C.2 v období prijatia dobropisu.
+func (ret *Return) addReverseCredit(p purchase.Purchase, tax purchase.Amounts) string {
+	s := p.Supplier
+	switch {
+	case foreign(s.Country) && p.SupplyKind == "":
+		return "Pri zahraničnom dodávateľovi vyberte, či ide o tovar alebo službu"
+	case foreign(s.Country) && p.SupplyKind == invoice.SupplyGoods:
+		return "Dobropis k nadobudnutiu tovaru z EÚ opravuje obdobie pôvodného nadobudnutia (r. 05–08, dodatočné priznanie) — doplňte ručne"
+	case strings.TrimSpace(p.CorrectsNumber) == "":
+		return "Dobropis bez čísla pôvodnej faktúry dodávateľa — v C.2 ho doplňte ručne"
+	}
+	for _, r := range tax.Rates {
+		if _, ok := reverseRows[r.Rate]; r.Rate != 0 && !ok {
+			return fmt.Sprintf("Sadzba %d %% nepatrí do tlačiva DPHv25", r.Rate)
+		}
+	}
+	for _, r := range tax.Rates {
+		if r.Rate == 0 || r.VAT.IsZero() && r.Base.IsZero() {
+			continue
+		}
+		rows := reverseRows[r.Rate]
+		deducted := p.DeductOf(r.VAT)
+		ret.Rows[rows.base] = ret.Rows[rows.base].Add(r.Base)
+		ret.Rows[rows.tax] = ret.Rows[rows.tax].Add(r.VAT)
+		if !deducted.IsZero() {
+			ret.Rows[deductRows[r.Rate]] = ret.Rows[deductRows[r.Rate]].Add(deducted)
+		}
+		ret.KV.C2 = append(ret.KV.C2, KVCorrection{Partner: noSpaces(strings.ToUpper(s.ICDPH)), Name: s.Name, Number: noSpaces(p.SupplierNumber),
+			Original: noSpaces(p.CorrectsNumber), BaseDiff: r.Base, VATDiff: r.VAT, Rate: r.Rate, DeductedDiff: deducted, ID: p.ID})
+	}
+	return ""
+}
+
 // addPurchaseCredit zaradí dobropis od tuzemského platiteľa: zníženie
 // odpočítanej dane do r. 28 (§ 53 ods. 1, kladná suma zvyšuje daň na úhradu)
 // a riadky C.2 so zápornými rozdielmi. Obdobie = doručenie dobropisu.
@@ -624,10 +733,12 @@ func (ret *Return) addA2(inv invoice.Invoice, when invoice.Date, warn func(doc, 
 func (ret *Return) addPurchaseCredit(p purchase.Purchase, tax purchase.Amounts) string {
 	s := p.Supplier
 	switch {
+	case p.ReverseCharge:
+		return ret.addReverseCredit(p, tax)
+	case foreign(s.Country):
+		return "" // zahraničnú DPH nemožno odpočítať — nie je čo opravovať
 	case p.NoDeduction:
 		return "" // odpočet sa neuplatnil — nie je čo opravovať
-	case foreign(s.Country) || p.ReverseCharge:
-		return "Dobropis od zahraničného dodávateľa alebo pri prenesení daňovej povinnosti zatiaľ nie je podporovaný — doplňte ručne"
 	case !isSKPayer(s.ICDPH):
 		return "Dobropis od dodávateľa bez slovenského IČ DPH — opravu odpočtu doplňte ručne"
 	case strings.TrimSpace(p.CorrectsNumber) == "":

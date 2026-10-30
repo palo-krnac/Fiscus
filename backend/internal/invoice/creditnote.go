@@ -87,6 +87,7 @@ func NewCreditNote(orig Invoice, issueDate Date) (Invoice, error) {
 	}
 	for _, l := range orig.Lines {
 		l.Quantity = l.Quantity.Neg()
+		l.A2 = nil // množstvo pre KV sa pri dobropise berie z položky (rozdiel)
 		cn.Lines = append(cn.Lines, l)
 	}
 	if err := cn.Recalculate(); err != nil {
