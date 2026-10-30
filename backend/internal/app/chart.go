@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/palo-krnac/fiscus/backend/internal/audit"
 	"github.com/palo-krnac/fiscus/backend/internal/auth"
@@ -22,6 +23,9 @@ type ChartBook struct {
 	// (aby ich nová verzia programu nedoplnila znova).
 	Templates        []chart.Template `json:"templates"`
 	DeletedTemplates []string         `json:"deletedTemplates,omitempty"`
+	// Money priraďuje bankovým účtom (bank:IBAN) a pokladniciam (cash:ID)
+	// analytické účty, napr. 221001 a 211001.
+	Money map[string]string `json:"money,omitempty"`
 }
 
 // ChartView je účtový rozvrh na zobrazenie s číselníkmi.
@@ -256,5 +260,41 @@ func (a *App) DeleteTemplate(ctx context.Context, companyID int64, code string) 
 			}
 		}
 		return "", chart.ErrNotFound
+	})
+}
+
+// SetMoneyAccounts priradí bankovým účtom a pokladniciam analytické účty
+// (kľúč bank:IBAN alebo cash:ID pokladnice, hodnota číslo účtu; prázdna
+// hodnota priradenie zruší).
+func (a *App) SetMoneyAccounts(ctx context.Context, companyID int64, m map[string]string) error {
+	return a.editChart(ctx, companyID, func(b *ChartBook) (string, error) {
+		c := chart.Chart{Accounts: b.Accounts}
+		out := map[string]string{}
+		for k, v := range m {
+			kind, id, _ := strings.Cut(k, ":")
+			v = chart.NormalizeNumber(v)
+			if v == "" {
+				continue
+			}
+			prefix := map[string]string{"bank": "22", "cash": "21"}[kind]
+			if prefix == "" || id == "" {
+				return "", mfaFieldErr("money", "Neznámy peňažný účet "+k)
+			}
+			if kind == "bank" {
+				id = normIBAN(id)
+			}
+			acc, ok := c.Find(v)
+			switch {
+			case !ok:
+				return "", mfaFieldErr("money", "Účet "+chart.Display(v)+" nie je v rozvrhu")
+			case !acc.Active:
+				return "", mfaFieldErr("money", "Účet "+chart.Display(v)+" je skrytý")
+			case !strings.HasPrefix(v, prefix):
+				return "", mfaFieldErr("money", "Pre "+map[string]string{"bank": "bankový účet", "cash": "pokladnicu"}[kind]+" vyberte účet "+prefix+"x")
+			}
+			out[kind+":"+id] = v
+		}
+		b.Money = out
+		return fmt.Sprintf("Účty bánk a pokladníc (%d)", len(out)), nil
 	})
 }

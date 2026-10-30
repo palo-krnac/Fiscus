@@ -272,6 +272,7 @@ func (s *Server) Handler() http.Handler {
 	need("PUT /api/companies/{cid}/chart/jobs/{code}", auth.PermLedgerWrite, s.saveJob)
 	need("DELETE /api/companies/{cid}/chart/jobs/{code}", auth.PermLedgerWrite, s.deleteJob)
 	need("GET /api/companies/{cid}/ledger", auth.PermLedgerRead, s.getLedger)
+	need("PUT /api/companies/{cid}/chart/money", auth.PermLedgerWrite, s.setMoneyAccounts)
 	need("PUT /api/companies/{cid}/ledger/{year}/postings/{key}", auth.PermLedgerWrite, s.setPosting)
 	need("PUT /api/companies/{cid}/ledger/{year}/opening", auth.PermLedgerWrite, s.setLedgerOpening)
 	need("GET /api/companies/{cid}/ledger/{year}/opening-proposal", auth.PermLedgerRead, s.openingProposal)

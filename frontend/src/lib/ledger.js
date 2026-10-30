@@ -20,7 +20,7 @@ export function filterPostings(list, { search = '', filter = 'all', month = 0 } 
     if (docLabels[filter] && p.doc !== filter) return false
     if (month && Number(p.date.slice(5, 7)) !== month) return false
     const accs = p.lines.flatMap((l) => [l.account, accountDisplay(l.account), l.name])
-    return matches(terms, [p.number, p.partner, p.text, p.template, p.note, p.amount, docLabels[p.doc], ...accs])
+    return matches(terms, [p.number, p.partner, p.text, p.template, p.note, p.amount, p.center, p.job, docLabels[p.doc], ...accs])
   })
 }
 

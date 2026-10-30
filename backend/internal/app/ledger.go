@@ -37,6 +37,8 @@ type LedgerData struct {
 	// Opening sú počiatočné stavy účtov (kladný = MD, záporný = D).
 	Opening map[string]money.Dec `json:"opening,omitempty"`
 	NextID  int64                `json:"nextId,omitempty"`
+	// Dims sú stredisko a zákazka dokladu (náklady a výnosy).
+	Dims map[string]ledger.Dims `json:"dims,omitempty"`
 }
 
 // ManualPosting sú ručné riadky dokladu.
@@ -54,6 +56,7 @@ type InternalDoc struct {
 	Template string        `json:"template,omitempty"`
 	Amount   money.Dec     `json:"amount"`
 	Lines    []ledger.Line `json:"lines,omitempty"`
+	ledger.Dims
 }
 
 // LedgerBook je účtovný denník a hlavná kniha za rok.
@@ -68,6 +71,17 @@ type LedgerBook struct {
 	Opening   map[string]money.Dec `json:"opening"`
 	Templates []TemplateRef        `json:"templates"`
 	Internal  []InternalDoc        `json:"internal"`
+	// DimTurnovers sú náklady a výnosy po strediskách a zákazkách.
+	DimTurnovers []ledger.DimTurnover `json:"dimTurnovers"`
+	// MoneySources sú bankové účty a pokladnice s priradeným účtom.
+	MoneySources []MoneySource `json:"moneySources"`
+}
+
+// MoneySource je bankový účet alebo pokladnica a jej analytický účet.
+type MoneySource struct {
+	Key     string `json:"key"` // bank:IBAN | cash:ID
+	Label   string `json:"label"`
+	Account string `json:"account"` // priradený účet ("" = syntetický z predkontácie)
 }
 
 // TemplateRef je predkontácia na výber.
@@ -145,7 +159,7 @@ func (a *App) Ledger(ctx context.Context, companyID int64, year int) (LedgerBook
 		return LedgerBook{}, err
 	}
 	c := chart.Chart{Accounts: cb.Accounts}
-	p := poster{tpl: map[string]chart.Template{}, vatPayer: company.VATPayer}
+	p := poster{tpl: map[string]chart.Template{}, vatPayer: company.VATPayer, moneyMap: cb.Money}
 	for _, t := range cb.Templates {
 		if t.Active {
 			p.tpl[t.Code] = t
@@ -157,24 +171,28 @@ func (a *App) Ledger(ctx context.Context, companyID int64, year int) (LedgerBook
 	}
 	for i := range ps {
 		post := &ps[i]
+		post.Dims = d.Dims[post.Key]
 		if m, ok := d.Manual[post.Key]; ok {
-			post.Lines, post.Note, post.Manual, post.Template, post.Problem = m.Lines, m.Note, true, "", ""
-			continue
+			post.Lines, post.Note, post.Manual, post.Template, post.Problem = append([]ledger.Line(nil), m.Lines...), m.Note, true, "", ""
+		} else {
+			if code, ok := d.Assign[post.Key]; ok {
+				post.Template = code
+			}
+			p.post(post)
 		}
-		if code, ok := d.Assign[post.Key]; ok {
-			post.Template = code
-		}
-		p.post(post)
+		ledger.ApplyDims(post.Lines, post.Dims)
 	}
 	for _, doc := range d.Internal {
 		post := ledger.Posting{Key: "internal:" + strconv.FormatInt(doc.ID, 10), Date: doc.Date, Doc: chart.DocInternal,
 			Number: doc.Number, Text: doc.Text, Amount: doc.Amount, Template: doc.Template, Link: ""}
 		if doc.Template == "" {
-			post.Lines, post.Manual = doc.Lines, true
+			post.Lines, post.Manual = append([]ledger.Line(nil), doc.Lines...), true
 			_, post.Amount = ledger.Sums(doc.Lines)
 		} else {
 			p.apply(&post, chart.Amounts{Total: doc.Amount})
 		}
+		post.Dims = doc.Dims
+		ledger.ApplyDims(post.Lines, post.Dims)
 		ps = append(ps, post)
 	}
 	ledger.Sort(ps)
@@ -211,8 +229,16 @@ func (a *App) Ledger(ctx context.Context, companyID int64, year int) (LedgerBook
 	if internal == nil {
 		internal = []InternalDoc{}
 	}
+	names := map[string]string{}
+	for _, x := range cb.Centers {
+		names["center:"+x.Code] = x.Name
+	}
+	for _, x := range cb.Jobs {
+		names["job:"+x.Code] = x.Name
+	}
 	return LedgerBook{Year: year, Postings: ps, Accounts: accs, Synthetic: syn, Totals: tot, Unposted: unposted,
-		Opening: opening, Templates: refs, Internal: internal}, nil
+		Opening: opening, Templates: refs, Internal: internal, DimTurnovers: ledger.DimBook(ps, names),
+		MoneySources: a.moneySources(ctx, companyID, company.IBAN, cb.Money)}, nil
 }
 
 // poster zaúčtuje doklad podľa predkontácie.
@@ -225,6 +251,22 @@ type poster struct {
 	reverse map[string]money.Dec
 	// moneyDir je smer peňazí pri banke a pokladni (+1 príjem, −1 výdavok).
 	moneyDir map[string]int
+	// moneyMap sú analytické účty bánk a pokladníc (bank:IBAN, cash:ID),
+	// money je zdroj peňazí dokladu (kľúč do moneyMap).
+	moneyMap map[string]string
+	money    map[string]string
+	// fx je suma dokladu v eurách pri úhrade faktúry v cudzej mene
+	// (rozdiel oproti úhrade je kurzový zisk 663 alebo strata 563).
+	fx map[string]money.Dec
+	// deduct sú odpočítané zálohy vyúčtovacej faktúry.
+	deduct map[string][]invoice.Deduction
+}
+
+func (p *poster) note(m *map[string]string, key, v string) {
+	if *m == nil {
+		*m = map[string]string{}
+	}
+	(*m)[key] = v
 }
 
 func (p *poster) set(key string, a chart.Amounts) {
@@ -232,6 +274,13 @@ func (p *poster) set(key string, a chart.Amounts) {
 		p.amounts = map[string]chart.Amounts{}
 	}
 	p.amounts[key] = a
+}
+
+func (p *poster) setFX(key string, v money.Dec) {
+	if p.fx == nil {
+		p.fx = map[string]money.Dec{}
+	}
+	p.fx[key] = v
 }
 
 func (p *poster) dir(key string, d int) {
@@ -286,7 +335,113 @@ func (p *poster) apply(post *ledger.Posting, a chart.Amounts) {
 			lines = append(lines, ledger.Line{Account: acc, Debit: non}, ledger.Line{Account: "343", Credit: non})
 		}
 	}
+	if deds := p.deduct[post.Key]; len(deds) > 0 {
+		lines = append(lines, deductionLines(t, deds)...)
+	}
+	if docEUR, ok := p.fx[post.Key]; ok {
+		lines = fxLines(lines, t, docEUR)
+	}
+	if acc := p.moneyMap[p.money[post.Key]]; acc != "" {
+		for i := range lines {
+			if ledger.IsMoney(lines[i].Account, t.Doc) && strings.HasPrefix(acc, lines[i].Account) {
+				lines[i].Account = acc
+			}
+		}
+	}
 	post.Lines = lines
+}
+
+// deductionLines zúčtuje odpočítané zálohy vo vyúčtovacej faktúre: záloha
+// bez DPH MD 324, DPH zo zálohy MD 343, spolu D účet odberateľa (311).
+func deductionLines(t chart.Template, deds []invoice.Deduction) []ledger.Line {
+	acc := "311"
+	for _, l := range t.Lines {
+		if l.Side == chart.Debit && l.Part == chart.PartTotal {
+			acc = l.Account
+			break
+		}
+	}
+	var out []ledger.Line
+	for _, d := range deds {
+		var base, tax money.Dec
+		for _, r := range d.Rates {
+			base, tax = base.Add(r.Base), tax.Add(r.VAT)
+		}
+		if d.ReceiptID == 0 {
+			base, tax = d.Total, money.Zero // bez dokladu k platbe (neplatiteľ): celá záloha
+		}
+		out = append(out, ledger.Line{Account: "324", Debit: base})
+		if !tax.IsZero() {
+			out = append(out, ledger.Line{Account: "343", Debit: tax})
+		}
+		out = append(out, ledger.Line{Account: acc, Credit: base.Add(tax)})
+	}
+	return out
+}
+
+// fxLines upraví úhradu faktúry v cudzej mene: účet odberateľa alebo
+// dodávateľa sa vyrovná sumou faktúry v eurách, rozdiel je kurzový zisk
+// (663) alebo strata (563).
+func fxLines(lines []ledger.Line, t chart.Template, docEUR money.Dec) []ledger.Line {
+	for i := range lines {
+		l := &lines[i]
+		if ledger.IsMoney(l.Account, t.Doc) {
+			continue
+		}
+		if !l.Credit.IsZero() { // 311 D: prijatá úhrada
+			delta := docEUR.Sub(l.Credit)
+			l.Credit = docEUR
+			if delta.Sign() > 0 {
+				return append(lines, ledger.Line{Account: "563", Debit: delta})
+			} else if delta.Sign() < 0 {
+				return append(lines, ledger.Line{Account: "663", Credit: delta.Neg()})
+			}
+		} else { // 321 MD: úhrada dodávateľovi
+			delta := docEUR.Sub(l.Debit)
+			l.Debit = docEUR
+			if delta.Sign() > 0 {
+				return append(lines, ledger.Line{Account: "663", Credit: delta})
+			} else if delta.Sign() < 0 {
+				return append(lines, ledger.Line{Account: "563", Debit: delta.Neg()})
+			}
+		}
+		return lines
+	}
+	return lines
+}
+
+// moneySources vráti bankové účty (firmy a z výpisov) a pokladnice.
+func (a *App) moneySources(ctx context.Context, companyID int64, iban string, m map[string]string) []MoneySource {
+	out := []MoneySource{}
+	seen := map[string]bool{}
+	addBank := func(i string) {
+		i = normIBAN(i)
+		if i == "" || seen[i] {
+			return
+		}
+		seen[i] = true
+		out = append(out, MoneySource{Key: "bank:" + i, Label: "Banka " + i, Account: m["bank:"+i]})
+	}
+	addBank(iban)
+	if txs, err := a.Store.ListBankTransactions(ctx, companyID, store.BankFilter{}); err == nil {
+		for _, t := range txs {
+			addBank(t.Account)
+		}
+	}
+	if regs, err := a.cashRegisters(ctx, companyID); err == nil {
+		for _, r := range regs {
+			k := "cash:" + strconv.FormatInt(r.ID, 10)
+			label := r.Name
+			if !strings.Contains(strings.ToLower(r.Name), "poklad") {
+				label = "Pokladnica " + r.Name
+			}
+			if r.Currency != "" && r.Currency != "EUR" {
+				label += " (" + r.Currency + ")"
+			}
+			out = append(out, MoneySource{Key: k, Label: label, Account: m[k]})
+		}
+	}
+	return out
 }
 
 var (
@@ -334,9 +489,27 @@ func (a *App) ledgerSources(ctx context.Context, companyID int64, year int, p *p
 			switch {
 			case !ok:
 				post.Problem = "Faktúra v mene " + inv.Currency + " nemá kurz"
-			case inv.Kind == invoice.KindAdvanceReceipt || (inv.Advance != nil && len(inv.Advance.Deductions) > 0):
-				post.Amount = sum.Total
-				post.Problem = "Doklad so zálohou — zaúčtujte ho ručne (napr. 324 / 343, zúčtovanie zálohy 324 / 311)"
+			case inv.Kind == invoice.KindAdvanceReceipt:
+				// daňový doklad k prijatej platbe: DPH zo zálohy 324 / 343
+				post.Amount, post.Text = sum.Total, "Daňový doklad k prijatej platbe"
+				p.set(key, chart.Amounts{Total: sum.Total, Base: sum.Base, VAT: sum.VAT})
+				post.Template = "FV-ZALOHA"
+			case inv.Advance != nil && len(inv.Advance.Deductions) > 0:
+				post.Amount, post.Text = sum.Total, "Vyúčtovacia faktúra"
+				if inv.Foreign() || inv.Advance.Supply == nil {
+					post.Problem = "Vyúčtovanie zálohy v cudzej mene — zaúčtujte ručne"
+					break
+				}
+				full := *inv.Advance.Supply
+				p.set(key, chart.Amounts{Total: full.Total, Base: full.Base, VAT: full.VAT})
+				if p.deduct == nil {
+					p.deduct = map[string][]invoice.Deduction{}
+				}
+				p.deduct[key] = inv.Advance.Deductions
+				post.Template = "FV-SLUZBY"
+				if inv.SupplyKind.Goods() {
+					post.Template = "FV-TOVAR"
+				}
 			default:
 				post.Amount = sum.Total
 				p.set(key, chart.Amounts{Total: sum.Total, Base: sum.Base, VAT: sum.VAT})
@@ -408,8 +581,36 @@ func (a *App) ledgerSources(ctx context.Context, companyID int64, year int, p *p
 	if err != nil {
 		return nil, err
 	}
+	// počet úhrad dokladu: kurzový rozdiel iba pri úhrade jednou platbou
+	pays := map[string]int{}
+	for _, t := range txs {
+		if t.Status == bank.StatusMatched && t.Match != nil {
+			pays[t.Match.Kind+":"+strconv.FormatInt(t.Match.ID, 10)]++
+		}
+	}
+	getInv := func(id int64) *invoice.Invoice {
+		if inv := invs[id]; inv != nil {
+			return inv
+		}
+		if got, err := a.Store.GetInvoice(ctx, companyID, id); err == nil {
+			invs[id] = &got
+			return &got
+		}
+		return nil
+	}
+	getPur := func(id int64) *purchase.Purchase {
+		if pu := purs[id]; pu != nil {
+			return pu
+		}
+		if got, err := a.Store.GetPurchase(ctx, companyID, id); err == nil {
+			purs[id] = &got
+			return &got
+		}
+		return nil
+	}
 	for _, t := range txs {
 		key := "bank:" + strconv.FormatInt(t.ID, 10)
+		p.note(&p.money, key, "bank:"+normIBAN(t.Account))
 		signed := t.Signed()
 		post := ledger.Posting{Key: key, Date: t.Date, Doc: chart.DocBank, Number: t.BankRef, Partner: t.CounterName,
 			Text: strings.TrimSpace(t.Message), Amount: signed, Link: "/banka"}
@@ -422,18 +623,27 @@ func (a *App) ledgerSources(ctx context.Context, companyID int64, year int, p *p
 		p.dir(key, signed.Sign())
 		if t.Status == bank.StatusMatched && t.Match != nil {
 			post.Number = t.Match.Number
+			single := pays[t.Match.Kind+":"+strconv.FormatInt(t.Match.ID, 10)] == 1
 			switch t.Match.Kind {
 			case "invoice":
 				post.Template = "B-ODBERATEL"
-				if inv := invs[t.Match.ID]; inv != nil && inv.Kind == invoice.KindProforma {
+				inv := getInv(t.Match.ID)
+				switch {
+				case inv == nil:
+				case inv.Kind == invoice.KindProforma:
 					post.Template = "B-ZALOHA"
-				} else if inv == nil {
-					if got, err := a.Store.GetInvoice(ctx, companyID, t.Match.ID); err == nil && got.Kind == invoice.KindProforma {
-						post.Template = "B-ZALOHA"
+				case inv.Foreign() && single && inv.Status == invoice.StatusPaid:
+					if s, ok := inv.TaxSummary(); ok {
+						p.setFX(key, s.Total)
 					}
 				}
 			case "purchase":
 				post.Template = "B-DODAVATEL"
+				if pu := getPur(t.Match.ID); pu != nil && pu.Foreign() && single && pu.Status == purchase.StatusPaid {
+					if tx, ok := pu.Tax(); ok {
+						p.setFX(key, tx.Summary.Total)
+					}
+				}
 			}
 		} else {
 			text := t.Message + " " + t.CounterName + " " + t.Note
@@ -457,6 +667,7 @@ func (a *App) ledgerSources(ctx context.Context, companyID int64, year int, p *p
 			continue
 		}
 		key := "cash:" + strconv.FormatInt(d.ID, 10)
+		p.note(&p.money, key, "cash:"+strconv.FormatInt(d.RegisterID, 10))
 		post := ledger.Posting{Key: key, Date: d.Date, Doc: chart.DocCash, Number: d.Number, Partner: d.Partner,
 			Text: d.Purpose, Amount: d.SignedEUR(), Link: "/pokladna"}
 		dir := 1
@@ -538,14 +749,24 @@ func postingDoc(key string) (chart.DocKind, bool) {
 
 // SetPosting zmení zaúčtovanie dokladu: zvolí predkontáciu (template),
 // zadá riadky ručne (lines), alebo vráti návrh Fiškusa (oboje prázdne).
-func (a *App) SetPosting(ctx context.Context, companyID int64, year int, key, template string, lines []ledger.Line, note string) error {
+func (a *App) SetPosting(ctx context.Context, companyID int64, year int, key, template string, lines []ledger.Line, note string, dims ledger.Dims) error {
 	doc, ok := postingDoc(key)
 	if !ok {
 		return store.ErrNotFound
 	}
+	if err := a.checkDims(ctx, companyID, &dims); err != nil {
+		return err
+	}
 	return a.editLedger(ctx, companyID, year, func(d *LedgerData, c chart.Chart, tpls []chart.Template) (string, error) {
 		delete(d.Assign, key)
 		delete(d.Manual, key)
+		delete(d.Dims, key)
+		if !dims.Empty() {
+			if d.Dims == nil {
+				d.Dims = map[string]ledger.Dims{}
+			}
+			d.Dims[key] = dims
+		}
 		switch {
 		case len(lines) > 0:
 			if err := ledger.CheckLines(lines, c); err != nil {
@@ -570,6 +791,37 @@ func (a *App) SetPosting(ctx context.Context, companyID int64, year int, key, te
 	})
 }
 
+// checkDims overí stredisko a zákazku voči číselníkom firmy.
+func (a *App) checkDims(ctx context.Context, companyID int64, d *ledger.Dims) error {
+	d.Center, d.Job = strings.TrimSpace(d.Center), strings.TrimSpace(d.Job)
+	if d.Empty() {
+		return nil
+	}
+	cb, err := a.loadChart(ctx, companyID)
+	if err != nil {
+		return err
+	}
+	if d.Center != "" {
+		ok := false
+		for _, c := range cb.Centers {
+			ok = ok || (c.Code == d.Center && c.Active)
+		}
+		if !ok {
+			return mfaFieldErr("center", "Stredisko "+d.Center+" neexistuje alebo nie je aktívne")
+		}
+	}
+	if d.Job != "" {
+		ok := false
+		for _, j := range cb.Jobs {
+			ok = ok || (j.Code == d.Job && j.Active)
+		}
+		if !ok {
+			return mfaFieldErr("job", "Zákazka "+d.Job+" neexistuje alebo nie je aktívna")
+		}
+	}
+	return nil
+}
+
 func checkTemplate(tpls []chart.Template, code string, doc chart.DocKind) error {
 	for _, t := range tpls {
 		if t.Code == code {
@@ -587,6 +839,9 @@ func checkTemplate(tpls []chart.Template, code string, doc chart.DocKind) error 
 
 // SaveInternal pridá (doc.ID = 0) alebo upraví interný doklad.
 func (a *App) SaveInternal(ctx context.Context, companyID int64, year int, doc InternalDoc) (InternalDoc, error) {
+	if err := a.checkDims(ctx, companyID, &doc.Dims); err != nil {
+		return doc, err
+	}
 	err := a.editLedger(ctx, companyID, year, func(d *LedgerData, c chart.Chart, tpls []chart.Template) (string, error) {
 		doc.Text = strings.TrimSpace(doc.Text)
 		switch {

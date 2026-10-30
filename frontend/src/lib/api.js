@@ -168,6 +168,7 @@ export const api = {
   deleteJob: (cid, code) => request('DELETE', `/api/companies/${cid}/chart/jobs/${encodeURIComponent(code)}`),
   ledger: (cid, year) => request('GET', `/api/companies/${cid}/ledger` + query({ year })),
   setPosting: (cid, year, key, body) => request('PUT', `/api/companies/${cid}/ledger/${year}/postings/${encodeURIComponent(key)}`, body),
+  setMoneyAccounts: (cid, m) => request('PUT', `/api/companies/${cid}/chart/money`, m),
   ledgerStatements: (cid, year) => request('GET', `/api/companies/${cid}/ledger/${year}/statements`),
   openingProposal: (cid, year) => request('GET', `/api/companies/${cid}/ledger/${year}/opening-proposal`),
   setLedgerOpening: (cid, year, lines) => request('PUT', `/api/companies/${cid}/ledger/${year}/opening`, { lines }),

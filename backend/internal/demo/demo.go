@@ -14,8 +14,10 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/calendar"
 	"github.com/palo-krnac/fiscus/backend/internal/cash"
 	"github.com/palo-krnac/fiscus/backend/internal/catalog"
+	"github.com/palo-krnac/fiscus/backend/internal/chart"
 	"github.com/palo-krnac/fiscus/backend/internal/fx"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
+	"github.com/palo-krnac/fiscus/backend/internal/ledger"
 	"github.com/palo-krnac/fiscus/backend/internal/logbook"
 	m "github.com/palo-krnac/fiscus/backend/internal/money"
 	"github.com/palo-krnac/fiscus/backend/internal/purchase"
@@ -261,6 +263,9 @@ func Seed(ctx context.Context, a *app.App) (store.Company, error) {
 	}
 	if err := seedRecurring(ctx, a, c, contactIDs); err != nil {
 		return c, fmt.Errorf("demo pravidelná fakturácia: %w", err)
+	}
+	if err := seedLedger(ctx, a, c); err != nil {
+		return c, fmt.Errorf("demo účtovníctvo: %w", err)
 	}
 	// upomienka najväčšiemu dlžníkovi (ostatní čakajú na prvú upomienku)
 	if groups, err := a.Overdue(ctx, c.ID); err == nil && len(groups) > 0 {
@@ -702,4 +707,64 @@ func demoExpense(what string) purchase.ExpenseKind {
 		return purchase.ExpenseOther
 	}
 	return purchase.ExpenseServices
+}
+
+// seedLedger pridá analytické účty banky a pokladníc, strediská a zákazku
+// a priradí ich niekoľkým dokladom v účtovnom denníku.
+func seedLedger(ctx context.Context, a *app.App, c store.Company) error {
+	for _, acc := range []chart.Account{
+		{Number: "221001", Name: "Tatra banka – bežný účet", Active: true},
+		{Number: "211001", Name: "Pokladnica EUR", Active: true},
+		{Number: "211002", Name: "Pokladnica CZK", Active: true},
+	} {
+		if _, err := a.SaveAccount(ctx, c.ID, "", acc); err != nil {
+			return err
+		}
+	}
+	money := map[string]string{"bank:" + c.IBAN: "221001"}
+	regs, err := a.CashRegisters(ctx, c.ID)
+	if err != nil {
+		return err
+	}
+	for _, r := range regs {
+		acc := "211001"
+		if r.Currency != "" && r.Currency != "EUR" {
+			acc = "211002"
+		}
+		money[fmt.Sprintf("cash:%d", r.ID)] = acc
+	}
+	if err := a.SetMoneyAccounts(ctx, c.ID, money); err != nil {
+		return err
+	}
+	for _, x := range []chart.Center{{Code: "BB", Name: "Banská Bystrica – dielňa", Active: true}, {Code: "ZV", Name: "Zvolen – montáže", Active: true}} {
+		if _, err := a.SaveCenter(ctx, c.ID, "", x); err != nil {
+			return err
+		}
+	}
+	if _, err := a.SaveJob(ctx, c.ID, "", chart.Job{Code: "Z-2026-01", Name: "Rozvádzače Mlyn Brezno", Customer: "Mlyn Brezno s.r.o.", Active: true}); err != nil {
+		return err
+	}
+	year := a.Today().Year()
+	book, err := a.Ledger(ctx, c.ID, year)
+	if err != nil {
+		return err
+	}
+	n := 0
+	for _, p := range book.Postings {
+		if p.Problem != "" || (p.Doc != chart.DocSale && p.Doc != chart.DocPurchase) {
+			continue
+		}
+		d := ledger.Dims{Center: "BB"}
+		if n%3 == 1 {
+			d.Center = "ZV"
+		}
+		if strings.Contains(p.Partner, "Mlyn Brezno") {
+			d.Job = "Z-2026-01"
+		}
+		if err := a.SetPosting(ctx, c.ID, year, p.Key, "", nil, "", d); err != nil {
+			return err
+		}
+		n++
+	}
+	return nil
 }

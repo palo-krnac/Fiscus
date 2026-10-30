@@ -232,6 +232,8 @@ var DefaultTemplates = []Template{
 		{Debit, "311", PartTotal}, {Credit, "604", PartBase}, {Credit, "343", PartVAT}}},
 	{Code: "FV-VYROBKY", Name: "Vydaná faktúra – vlastné výrobky", Doc: DocSale, Lines: []TemplateLine{
 		{Debit, "311", PartTotal}, {Credit, "601", PartBase}, {Credit, "343", PartVAT}}},
+	{Code: "FV-ZALOHA", Name: "Daňový doklad k prijatej platbe – DPH zo zálohy", Doc: DocSale, Lines: []TemplateLine{
+		{Debit, "324", PartVAT}, {Credit, "343", PartVAT}}},
 	{Code: "FP-SLUZBY", Name: "Prijatá faktúra – služby", Doc: DocPurchase, Lines: []TemplateLine{
 		{Debit, "518", PartBase}, {Debit, "518", PartVATNon}, {Debit, "343", PartVAT}, {Credit, "321", PartTotal},
 		{Debit, "343", PartSelf}, {Credit, "343", PartSelf}}},

@@ -21,7 +21,8 @@ import LedgerLines from '../components/LedgerLines.vue'
 import { api, ApiError } from '../lib/api.js'
 import { can, session } from '../lib/session.js'
 import { formatAmount, formatDate, formatMoney, fromISODate, toISODate } from '../lib/format.js'
-import { ledgerStatementColumns, postingColumns, turnoverColumns } from '../lib/columns.js'
+import { dimColumns, ledgerStatementColumns, postingColumns, turnoverColumns } from '../lib/columns.js'
+import { matches, searchTerms } from '../lib/search.js'
 import { accountDisplay, docLabels } from '../lib/chart.js'
 import { accountLines, apiLines, editLines, filterPostings, filterTurnovers, openingLines, parseAmount, postingFilters, postingRows, sideOf } from '../lib/ledger.js'
 
@@ -61,6 +62,8 @@ const statementRows = () =>
 const grandRows = ['01', '24']
 const book = ref(null)
 const accounts = ref([])
+const centers = ref([])
+const jobs = ref([])
 const search = ref('')
 const filter = ref('all')
 const month = ref(0)
@@ -69,13 +72,24 @@ const level = ref('synthetic')
 const levels = [
   { value: 'synthetic', label: 'Syntetické' },
   { value: 'analytic', label: 'Analytické' },
+  { value: 'dims', label: 'Strediská a zákazky' },
 ]
+const dimRows = computed(() => {
+  if (!book.value) return []
+  const terms = searchTerms(search.value)
+  return book.value.dimTurnovers.filter((d) => matches(terms, [d.code, d.name, d.kind === 'center' ? 'stredisko' : 'zákazka']))
+})
+const centerOptions = computed(() => [{ value: '', label: 'Bez strediska' }, ...centers.value.map((c) => ({ value: c.code, label: `${c.code} – ${c.name}` }))])
+const jobOptions = computed(() => [{ value: '', label: 'Bez zákazky' }, ...jobs.value.map((j) => ({ value: j.code, label: `${j.code} – ${j.name}` }))])
+const hasDims = computed(() => centers.value.length + jobs.value.length > 0)
 
 async function load() {
   try {
     const [b, c] = await Promise.all([api.ledger(session.companyId, year.value), api.chart(session.companyId)])
     book.value = b
     accounts.value = c.accounts
+    centers.value = c.centers.filter((x) => x.active)
+    jobs.value = c.jobs.filter((x) => x.active)
   } catch (e) {
     toast.add({ severity: 'error', summary: 'Denník sa nenačítal', detail: e.message, life: 6000 })
   }
@@ -113,6 +127,7 @@ const templateOptions = computed(() => {
 })
 const drawerTitle = computed(() => {
   if (mode.value === 'opening') return `Počiatočné stavy k 1. 1. ${year.value}`
+  if (mode.value === 'money') return 'Účty bánk a pokladníc'
   if (mode.value === 'account') return `Účet ${accountDisplay(current.value?.account)}`
   if (mode.value === 'internal') return current.value?.id ? `Interný doklad ${current.value.number}` : 'Nový interný doklad'
   return `Zaúčtovanie ${current.value?.number || 'dokladu'}`
@@ -132,7 +147,7 @@ function openPosting(p) {
     return openInternal(doc)
   }
   how.value = p.manual ? 'manual' : 'template'
-  form.value = { template: p.template || null, note: p.note || '' }
+  form.value = { template: p.template || null, note: p.note || '', center: p.center || '', job: p.job || '' }
   lines.value = editLines(p.manual ? p.lines : [])
   show('posting', p)
 }
@@ -140,10 +155,21 @@ function openPosting(p) {
 function openInternal(doc) {
   const d = doc ?? { id: 0, number: '', date: `${year.value}-12-31`, text: '', template: '', amount: '', lines: [] }
   how.value = d.template || !d.id ? 'template' : 'manual'
-  form.value = { date: fromISODate(d.date), text: d.text, number: d.number, template: d.template || null, amount: Number(d.amount) ? String(d.amount) : '' }
+  form.value = { date: fromISODate(d.date), text: d.text, number: d.number, template: d.template || null, amount: Number(d.amount) ? String(d.amount) : '', center: d.center || '', job: d.job || '' }
   lines.value = editLines(d.lines)
   show('internal', d)
 }
+
+// analytické účty bánk a pokladníc
+const moneyForm = ref([])
+function openMoney() {
+  moneyForm.value = book.value.moneySources.map((m) => ({ ...m }))
+  show('money', null)
+}
+const moneyOptions = (key) => [
+  { value: '', label: 'Podľa predkontácie (syntetický účet)' },
+  ...accountOptions.value.filter((o) => o.value.startsWith(key.startsWith('bank:') ? '22' : '21') && o.value.length > 3),
+]
 
 function openOpening() {
   lines.value = openingLines(book.value.opening)
@@ -160,7 +186,8 @@ async function save() {
   const cid = session.companyId
   try {
     if (mode.value === 'posting') {
-      const body = how.value === 'manual' ? { lines: apiLines(lines.value), note: form.value.note } : { template: form.value.template ?? '' }
+      const dims = { center: form.value.center || '', job: form.value.job || '' }
+      const body = how.value === 'manual' ? { lines: apiLines(lines.value), note: form.value.note, ...dims } : { template: form.value.template ?? '', ...dims }
       if (how.value === 'template' && !body.template) {
         errors.value = { template: 'Vyberte predkontáciu' }
         return
@@ -168,7 +195,7 @@ async function save() {
       await api.setPosting(cid, year.value, current.value.key, body)
     } else if (mode.value === 'internal') {
       const f = form.value
-      const doc = { id: current.value.id, number: f.number, date: toISODate(f.date), text: f.text }
+      const doc = { id: current.value.id, number: f.number, date: toISODate(f.date), text: f.text, center: f.center || '', job: f.job || '' }
       if (how.value === 'template') Object.assign(doc, { template: f.template ?? '', amount: parseAmount(f.amount) || '0' })
       else doc.lines = apiLines(lines.value)
       if (how.value === 'template' && !doc.template) {
@@ -176,6 +203,8 @@ async function save() {
         return
       }
       await api.saveInternal(cid, year.value, doc)
+    } else if (mode.value === 'money') {
+      await api.setMoneyAccounts(cid, Object.fromEntries(moneyForm.value.map((m) => [m.key, m.account || ''])))
     } else if (mode.value === 'opening') {
       await api.setLedgerOpening(cid, year.value, apiLines(lines.value))
     }
@@ -205,7 +234,7 @@ async function takeOpening() {
 
 async function resetPosting() {
   try {
-    await api.setPosting(session.companyId, year.value, current.value.key, {})
+    await api.setPosting(session.companyId, year.value, current.value.key, { center: form.value.center || '', job: form.value.job || '' })
     open.value = false
     await load()
   } catch (e) {
@@ -242,6 +271,7 @@ function removeInternal() {
       <Select v-model="year" :options="years" option-label="label" option-value="value" size="small" aria-label="Rok" />
       <div class="spacer" />
       <template v-if="canWrite && book">
+        <Button label="Banky a pokladnice" icon="pi pi-wallet" size="small" severity="secondary" outlined @click="openMoney" />
         <Button label="Počiatočné stavy" icon="pi pi-flag" size="small" severity="secondary" outlined @click="openOpening" />
         <Button label="Interný doklad" icon="pi pi-plus" size="small" @click="openInternal(null)" />
       </template>
@@ -283,6 +313,7 @@ function removeInternal() {
         <SelectButton v-else v-model="level" :options="levels" option-label="label" option-value="value" :allow-empty="false" size="small" aria-label="Úroveň účtov" />
         <div class="spacer" />
         <ExportButton v-if="tab === 'journal'" :name="`Účtovný denník ${year}`" :columns="postingColumns" :rows="exportPostings" />
+        <ExportButton v-else-if="level === 'dims'" :name="`Strediská a zákazky ${year}`" :columns="dimColumns" :rows="dimRows" />
         <ExportButton v-else :name="`Hlavná kniha ${year}`" :columns="turnoverColumns" :rows="turnovers" />
       </div>
 
@@ -356,7 +387,11 @@ function removeInternal() {
             <span class="date">{{ formatDate(p.date) }}</span>
             <span class="doc"><strong>{{ p.number || '—' }}</strong> <span class="kind">{{ docLabels[p.doc] }}</span></span>
             <span class="text">{{ [p.partner, p.text].filter(Boolean).join(' · ') }}</span>
-            <span class="tag" :class="{ muted: !p.manual }">{{ p.manual ? 'ručne' : p.template }}</span>
+            <span class="tags">
+              <span v-if="p.center" class="tag dim" title="Stredisko">{{ p.center }}</span>
+              <span v-if="p.job" class="tag dim" title="Zákazka">{{ p.job }}</span>
+              <span class="tag" :class="{ muted: !p.manual }">{{ p.manual ? 'ručne' : p.template }}</span>
+            </span>
           </div>
           <p v-if="p.problem" class="post-problem">{{ p.problem }} <span class="amount">{{ formatMoney(p.amount) }}</span></p>
           <div v-for="(l, i) in p.lines" :key="i" class="post-line" :class="{ credit: Number(l.credit) }">
@@ -365,6 +400,25 @@ function removeInternal() {
             <span class="num">{{ amt(l.credit) }}</span>
           </div>
         </article>
+      </section>
+
+      <section v-else-if="level === 'dims'" class="sheet scroll">
+        <table class="list">
+          <thead><tr><th>Stredisko / zákazka</th><th class="num">Náklady</th><th class="num">Výnosy</th><th class="num">Výsledok</th></tr></thead>
+          <tbody>
+            <tr v-if="!dimRows.length">
+              <td colspan="4" class="empty">
+                {{ book.dimTurnovers.length ? 'Nič sa nenašlo.' : 'Zatiaľ žiadne zápisy so strediskom alebo zákazkou — priraďte ich pri zaúčtovaní dokladu.' }}
+              </td>
+            </tr>
+            <tr v-for="d in dimRows" :key="d.kind + d.code" class="static">
+              <td class="acc"><b>{{ d.code }}</b> <span class="name">{{ d.name }} · {{ d.kind === 'center' ? 'stredisko' : 'zákazka' }}</span></td>
+              <td class="num">{{ amt(d.costs) }}</td>
+              <td class="num">{{ amt(d.revenues) }}</td>
+              <td class="num" :class="{ loss: Number(d.result) < 0 }">{{ formatAmount(d.result) }}</td>
+            </tr>
+          </tbody>
+        </table>
       </section>
 
       <section v-else class="sheet scroll">
@@ -430,6 +484,14 @@ function removeInternal() {
             <Textarea v-model="form.note" rows="2" auto-resize />
           </FormField>
         </template>
+        <div v-if="hasDims" class="grid2">
+          <FormField label="Stredisko" :error="errors.center">
+            <Select v-model="form.center" :options="centerOptions" option-label="label" option-value="value" size="small" fluid placeholder="Bez strediska" />
+          </FormField>
+          <FormField label="Zákazka" :error="errors.job">
+            <Select v-model="form.job" :options="jobOptions" option-label="label" option-value="value" size="small" fluid filter placeholder="Bez zákazky" />
+          </FormField>
+        </div>
         <div class="actions">
           <Button label="Návrh Fiškusa" severity="secondary" text size="small" icon="pi pi-replay" @click="resetPosting" />
           <span class="spacer" />
@@ -463,8 +525,33 @@ function removeInternal() {
           <LedgerLines v-model="lines" :accounts="accountOptions" />
           <small v-if="errors.lines" class="err">{{ errors.lines }}</small>
         </template>
+        <div v-if="hasDims" class="grid2">
+          <FormField label="Stredisko" :error="errors.center">
+            <Select v-model="form.center" :options="centerOptions" option-label="label" option-value="value" size="small" fluid placeholder="Bez strediska" />
+          </FormField>
+          <FormField label="Zákazka" :error="errors.job">
+            <Select v-model="form.job" :options="jobOptions" option-label="label" option-value="value" size="small" fluid filter placeholder="Bez zákazky" />
+          </FormField>
+        </div>
         <div class="actions">
           <Button v-if="current?.id" label="Zmazať" severity="danger" text size="small" @click="removeInternal" />
+          <span class="spacer" />
+          <Button type="submit" label="Uložiť" icon="pi pi-check" size="small" :loading="busy" />
+        </div>
+      </form>
+
+      <!-- účty bánk a pokladníc -->
+      <form v-else-if="mode === 'money'" class="dform" @submit.prevent="save">
+        <p class="hint">
+          Každému bankovému účtu a pokladnici môžete priradiť analytický účet (napr. 221.001 Tatra banka, 211.001 Pokladnica EUR).
+          Analytické účty pridáte v účtovom rozvrhu. Bez priradenia sa účtuje na 221 alebo 211 podľa predkontácie.
+        </p>
+        <p v-if="!moneyForm.length" class="hint">Zatiaľ žiadne bankové účty ani pokladnice.</p>
+        <FormField v-for="m in moneyForm" :key="m.key" :label="m.label" :error="errors.money">
+          <Select v-model="m.account" :options="moneyOptions(m.key)" option-label="label" option-value="value" size="small" fluid />
+        </FormField>
+        <RouterLink to="/uctovy-rozvrh" class="doclink"><i class="pi pi-sitemap" /> Účtový rozvrh</RouterLink>
+        <div class="actions">
           <span class="spacer" />
           <Button type="submit" label="Uložiť" icon="pi pi-check" size="small" :loading="busy" />
         </div>
@@ -674,6 +761,20 @@ function removeInternal() {
   padding: 0 4px;
   border-radius: 2px;
   white-space: nowrap;
+}
+.tags {
+  display: inline-flex;
+  gap: 4px;
+}
+.tag.dim {
+  border-color: var(--tone-draft);
+  color: var(--tone-draft);
+}
+.list tr.static {
+  cursor: default;
+}
+.loss {
+  color: var(--tone-overdue);
 }
 .tag.muted {
   border-color: var(--rule);
