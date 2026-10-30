@@ -11,6 +11,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/app"
 	"github.com/palo-krnac/fiscus/backend/internal/asset"
 	"github.com/palo-krnac/fiscus/backend/internal/auth"
+	"github.com/palo-krnac/fiscus/backend/internal/calendar"
 	"github.com/palo-krnac/fiscus/backend/internal/cash"
 	"github.com/palo-krnac/fiscus/backend/internal/catalog"
 	"github.com/palo-krnac/fiscus/backend/internal/fx"
@@ -23,6 +24,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/reminder"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 	"github.com/palo-krnac/fiscus/backend/internal/vat"
+	"github.com/palo-krnac/fiscus/backend/internal/vatreturn"
 )
 
 // ico doplní k 7 číslicam platnú kontrolnú číslicu.
@@ -239,6 +241,9 @@ func Seed(ctx context.Context, a *app.App) (store.Company, error) {
 	if err := seedAssets(ctx, a, c); err != nil {
 		return c, fmt.Errorf("demo majetok: %w", err)
 	}
+	if err := seedCalendar(ctx, a, c); err != nil {
+		return c, fmt.Errorf("demo kalendár: %w", err)
+	}
 	if err := seedLogbook(ctx, a, c); err != nil {
 		return c, fmt.Errorf("demo kniha jázd: %w", err)
 	}
@@ -448,6 +453,46 @@ func seedQuotes(ctx context.Context, a *app.App, c store.Company, contactIDs []i
 	}
 	_, err := a.InvoiceQuote(ctx, c.ID, first)
 	return err
+}
+
+// seedCalendar pridá vlastné termíny živnostníka: odvody a preddavky.
+func seedCalendar(ctx context.Context, a *app.App, c store.Company) error {
+	y := a.Today().Year()
+	date := func(md string) invoice.Date { return invoice.MustDate(fmt.Sprintf("%d-%s", y, md)) }
+	for _, o := range []calendar.Own{
+		{Title: "Odvody do Sociálnej poisťovne", Note: "Preddavok SZČO za predchádzajúci mesiac", Date: date("01-08"), Repeat: calendar.RepeatMonthly, Workday: true},
+		{Title: "Preddavok na zdravotné poistenie", Date: date("01-08"), Repeat: calendar.RepeatMonthly, Workday: true},
+		{Title: "Preddavok na daň z príjmov", Note: "Štvrťročne podľa poslednej známej daňovej povinnosti", Date: date("03-31"), Repeat: calendar.RepeatQuarterly, Workday: true},
+		{Title: "STK a emisná kontrola – Ford Transit", Date: date("12-03")},
+	} {
+		saved, err := a.SaveOwnEvent(ctx, c.ID, o)
+		if err != nil {
+			return err
+		}
+		// odvody do Sociálnej poisťovne za minulý mesiac sú zaplatené, zdravotné nie
+		if saved.ID == 1 {
+			prev := invoice.NewDate(y, time.Month(a.Today().Month()), 8)
+			if !prev.Before(a.Today()) {
+				prev = prev.AddMonths(-1)
+			}
+			if saved.Occurs(prev) {
+				if _, err := a.MarkOwnEvent(ctx, c.ID, saved.ID, prev, true); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	// priznanie k DPH za minulý mesiac je podané (v kalendári so značkou)
+	if c.VATPayer {
+		p := vatreturn.PeriodOf(a.Today().AddMonths(-1), c.VATPeriod == store.VATPeriodQuarter)
+		filed := p.Deadline().AddDays(-5)
+		if p.Supported() && !filed.After(a.Today()) {
+			if _, err := a.RecordVATFiling(ctx, c.ID, p.String(), m.Zero, vatreturn.Options{}, filed); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // seedAssets zaradí ukážkový majetok: dodávku, meracie prístroje (zrýchlene),

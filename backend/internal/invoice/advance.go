@@ -88,6 +88,9 @@ type Deduction struct {
 	Date           Date              `json:"date"`                // deň prijatia platby
 	Rates          []vat.RateSummary `json:"rates"`
 	Total          money.Dec         `json:"total"`
+	// Local je odpočet v eurách podľa dokladu k platbe v cudzej mene (kurz
+	// ku dňu prijatia platby) — vyúčtovanie odpočíta presne tieto sumy.
+	Local []vat.RateSummary `json:"local,omitempty"`
 	// Untaxed: k platbe sa nevyhotovil daňový doklad — odpočíta sa iba
 	// z úhrady, DPH je z celej dodávky (UntaxedForeign, UntaxedWithin15).
 	Untaxed string `json:"untaxed,omitempty"`
@@ -153,8 +156,6 @@ var (
 	ErrAdvanceNotPaid = errors.New("zálohová faktúra ešte nie je uhradená")
 	// ErrAlreadySettled — záloha už bola vyúčtovaná.
 	ErrAlreadySettled = errors.New("zálohová faktúra už je vyúčtovaná")
-	// ErrForeignAdvance — zálohu v cudzej mene zatiaľ treba vyúčtovať ručne.
-	ErrForeignAdvance = errors.New("zálohu v cudzej mene zatiaľ vyúčtujte ručne")
 )
 
 // AdvanceMode určuje, čo sa stane s prijatou platbou zálohy.
@@ -183,9 +184,6 @@ const (
 func (inv *Invoice) AdvanceMode() (AdvanceMode, string) {
 	if inv.NonVATPayer {
 		return AdvanceNonVAT, ""
-	}
-	if inv.Foreign() {
-		return AdvanceManual, ErrForeignAdvance.Error()
 	}
 	mode := AdvanceReceipt
 	if party.Foreign(inv.Customer.Country) {
@@ -460,8 +458,12 @@ func advanceDeductions(proforma Invoice, receipts []Invoice) ([]Deduction, error
 	var deductions []Deduction
 	var covered money.Dec
 	for _, r := range receipts {
-		deductions = append(deductions, Deduction{ProformaID: proforma.ID, ProformaNumber: proforma.Number, ReceiptID: r.ID, Number: r.Number, Date: r.DeliveryDate,
-			Rates: append([]vat.RateSummary(nil), r.Summary.Rates...), Total: r.Summary.Total, A2: a2Parts(r)})
+		d := Deduction{ProformaID: proforma.ID, ProformaNumber: proforma.Number, ReceiptID: r.ID, Number: r.Number, Date: r.DeliveryDate,
+			Rates: append([]vat.RateSummary(nil), r.Summary.Rates...), Total: r.Summary.Total, A2: a2Parts(r)}
+		if r.Foreign() && r.Local != nil {
+			d.Local = append([]vat.RateSummary(nil), r.Local.Rates...)
+		}
+		deductions = append(deductions, d)
 		covered = covered.Add(r.Summary.Total)
 	}
 	switch mode {
@@ -666,6 +668,51 @@ func (inv *Invoice) applyDeductions() {
 		s.Base, s.VAT, s.Total = s.Base.Add(r.Base), s.VAT.Add(r.VAT), s.Total.Add(r.Total)
 	}
 	inv.Summary = s
+}
+
+// localSummary prepočíta rekapituláciu na eurá. Vyúčtovanie v cudzej mene:
+// celá dodávka kurzom vyúčtovania mínus zálohy v eurách presne podľa
+// dokladov k platbám (ich kurz ku dňu prijatia platby, § 26 ods. 1).
+func (inv *Invoice) localSummary() vat.Summary {
+	if inv.Advance == nil || inv.Advance.Supply == nil {
+		return ToEUR(inv.Summary, inv.FXRate)
+	}
+	full := ToEUR(*inv.Advance.Supply, inv.FXRate)
+	byRate := map[vat.Key]vat.RateSummary{}
+	order := []vat.Key{}
+	for _, r := range full.Rates {
+		byRate[r.Key()] = r
+		order = append(order, r.Key())
+	}
+	for _, d := range inv.Advance.Deductions {
+		if d.Untaxed != "" {
+			continue
+		}
+		rates := d.Local
+		if len(rates) == 0 {
+			rates = ToEUR(vat.Summary{Rates: d.Rates}, inv.FXRate).Rates // doklad bez kurzu (nemá nastať)
+		}
+		for _, r := range rates {
+			cur, ok := byRate[r.Key()]
+			if !ok {
+				order = append(order, r.Key())
+				cur.Rate, cur.Reverse = r.Rate, r.Reverse
+			}
+			cur.Base, cur.VAT, cur.Total = cur.Base.Sub(r.Base), cur.VAT.Sub(r.VAT), cur.Total.Sub(r.Total)
+			byRate[r.Key()] = cur
+		}
+	}
+	out := vat.Summary{Rates: []vat.RateSummary{}}
+	for _, k := range order {
+		r := byRate[k]
+		if r.Base.IsZero() && r.VAT.IsZero() {
+			continue
+		}
+		out.Rates = append(out.Rates, r)
+		out.Base, out.VAT = out.Base.Add(r.Base), out.VAT.Add(r.VAT)
+	}
+	out.Total = out.Base.Add(out.VAT)
+	return out
 }
 
 // validateAdvance skontroluje väzby záloh.

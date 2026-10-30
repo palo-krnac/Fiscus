@@ -34,8 +34,8 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] Zálohy do zahraničia: tovar do EÚ, vývoz a služba mimo EÚ bez dokladu k platbe (záloha znižuje iba úhradu, DPH a súhrnný výkaz z vyúčtovania); služba do EÚ s dokladom k platbe s prenesením (súhrnný výkaz v období platby)
 - [x] Zálohy s tuzemským prenesením pri službách (stavebné práce): doklad k platbe bez DPH v KV A.2, vyúčtovanie iba so zostatkom
 - [x] Zálohy: dodanie do 15 dní od platby bez dokladu k platbe — kontrola lehoty a obdobia DPH pri vyúčtovaní, dodatočný doklad k platbe jedným klikom
+- [x] Zálohy v cudzej mene: doklad k platbe v mene zálohy kurzom ECB ku dňu prijatia platby, vyúčtovanie v eurách = celá dodávka kurzom vyúčtovania mínus zálohy v eurách presne podľa dokladov k platbám
 - [x] Zálohy s tuzemským prenesením pri tovare (telefóny, obvody, plodiny, kovy): doklad k prvej platbe uvedie v A.2 celé množstvo dodávky, ďalšie doklady a vyúčtovanie iba základ; viac druhov prenesenia na jednej zálohe
-- [ ] Zálohy v cudzej mene
 - [x] Cenová ponuka: prijatie alebo odmietnutie zákazníkom cez tajný odkaz (server s verejnou adresou), číslo objednávky zákazníka do faktúry, upozornenie e-mailom
 - [x] Prijaté faktúry: evidencia z rekapitulácie DPH dodávateľa, odpočet / bez odpočtu, prenesenie, kontrola duplicít, úhrady
 - [x] AI vyťaženie prijatých faktúr z PDF a fotky (Claude API; AI iba navrhuje, používateľ skontroluje)
@@ -62,7 +62,7 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [ ] Ďalšie zákonné hodnoty do Legislatívy podľa potreby (limity, sadzby pre mzdy a odvody v etape 4)
 - [x] Obrazovka Zálohy: stav, ručná záloha, stiahnutie, obnova naplánovaná na ďalšie spustenie, `-restore` zo súboru
 - [x] Nastavenie priečinka a hesla záloh priamo v rozhraní, návrh priečinka synchronizovaného do cloudu (OneDrive, Dropbox, Google Disk, iCloud)
-- [ ] Záloha priamo do cloudového úložiska (S3, WebDAV)
+- [x] Záloha priamo do cloudového úložiska (S3, WebDAV) — kópia po každej zálohe s rovnakou rotáciou, overenie spojenia skúšobným súborom, stav poslednej kópie, stiahnutie zálohy z cloudu na novom počítači
 - [x] Inštalačky: Inno Setup (Windows), DMG s Fiškus.app (macOS), .deb a .rpm (Linux); aplikácia s dátami v priečinku používateľa, otvorí prehliadač, skončí po zatvorení okna
 - [ ] Podpísané inštalačky (Authenticode, notarizácia Apple), automatická aktualizácia, AppImage
 - [x] Licencia pre serverovú verziu s viacerými firmami (offline overenie podpisu Ed25519)
@@ -114,3 +114,9 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 
 ## Odlíšenie od konkurencie
 Slovenské špecifiká, ktoré MyÚčto nemá: RÚZ, tri identifikátory (IČO / DIČ / IČ DPH), 2 % dane pre neziskovky, slovenská e-fakturácia, PAY by square.
+
+## Kalendár termínov
+- [x] Kalendár (mesiac aj zoznam): priznanie k DPH a KV, SV (ak sú dodania do EÚ), daň z príjmov, daň z motorových vozidiel — lehoty posunuté na pracovný deň podľa dní pracovného pokoja (upraviteľné v Legislatíve); splatnosti vydaných a prijatých faktúr, pravidelné faktúry, koniec platnosti ponúk; zmeškané termíny; podané priznanie označené
+- [x] Vlastné opakované termíny (odvody, preddavky, STK, poistky) s rýchlym výberom a označením „splnené“
+- [x] Odber do mobilu a kalendára (iCalendar, tajný odkaz iba na čítanie, pripomienky 3 dni a 1 deň vopred), súbor .ics, odznak v menu
+- [ ] Upozornenie e-mailom pred lehotou, termíny miezd (etapa 4)

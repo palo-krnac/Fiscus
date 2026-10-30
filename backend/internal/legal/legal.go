@@ -12,7 +12,10 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"strconv"
+	"strings"
 
+	"github.com/palo-krnac/fiscus/backend/internal/calendar"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/logbook"
 	"github.com/palo-krnac/fiscus/backend/internal/money"
@@ -32,6 +35,8 @@ type Params struct {
 	FlatFee        money.Dec       `json:"flatFee"`        // paušálna náhrada za faktúru
 	// KmRates sú sadzby základnej náhrady za 1 km (kniha jázd, súkromné vozidlo).
 	KmRates []logbook.KmRate `json:"kmRates"`
+	// Holidays sú dni pracovného pokoja — posun lehôt v kalendári termínov.
+	Holidays []calendar.Holiday `json:"holidays"`
 	// Seeded sú kľúče predvolených riadkov, ktoré už boli raz doplnené
 	// (aby sa zmazaný riadok nevrátil). Spravuje ich program, nie používateľ.
 	Seeded []string `json:"seeded"`
@@ -47,6 +52,7 @@ func defaults() (Params, []string) {
 		ConsumerMargin: law.ConsumerMargin,
 		FlatFee:        law.FlatFee,
 		KmRates:        append([]logbook.KmRate(nil), logbook.DefaultKmRates...),
+		Holidays:       append([]calendar.Holiday(nil), calendar.DefaultHolidays...),
 	}
 	keys := []string{"param:businessMargin", "param:consumerMargin", "param:flatFee"}
 	for _, v := range p.VATPeriods {
@@ -57,6 +63,9 @@ func defaults() (Params, []string) {
 	}
 	for _, r := range p.KmRates {
 		keys = append(keys, "km:"+r.From.String())
+	}
+	for _, h := range p.Holidays {
+		keys = append(keys, h.Key())
 	}
 	return p, keys
 }
@@ -111,6 +120,14 @@ func (p *Params) Seed() bool {
 					}
 				}
 			}
+		case len(k) > 4 && k[:4] == "hol:":
+			if !slices.ContainsFunc(p.Holidays, func(h calendar.Holiday) bool { return h.Key() == k }) {
+				for _, h := range def.Holidays {
+					if h.Key() == k {
+						p.Holidays = append(p.Holidays, h)
+					}
+				}
+			}
 		case len(k) > 4 && k[:4] == "ecb:":
 			from := k[4:]
 			if !slices.ContainsFunc(p.ECB, func(r reminder.Rate) bool { return r.From.String() == from }) {
@@ -125,7 +142,25 @@ func (p *Params) Seed() bool {
 	}
 	p.ECB = reminder.Sorted(p.ECB)
 	sortKm(p.KmRates)
+	sortHolidays(p.Holidays)
 	return changed
+}
+
+func sortHolidays(hs []calendar.Holiday) {
+	// Veľká noc sa radí medzi marec a máj, Veľký piatok pred pondelkom
+	key := func(h calendar.Holiday) string {
+		if off, ok := strings.CutPrefix(h.Day, "easter"); ok {
+			n, _ := strconv.Atoi(off)
+			return fmt.Sprintf("04-00 %03d", n+100)
+		}
+		return h.Day
+	}
+	sort.SliceStable(hs, func(i, j int) bool {
+		if a, b := key(hs[i]), key(hs[j]); a != b {
+			return a < b
+		}
+		return hs[i].From < hs[j].From
+	})
 }
 
 func sortKm(rs []logbook.KmRate) {
@@ -195,6 +230,15 @@ func (p Params) Validate() error {
 			}
 		}
 	}
+	holSeen := map[string]bool{}
+	for i, h := range p.Holidays {
+		if err := h.Validate(); err != nil {
+			add(fmt.Sprintf("holidays[%d].day", i), "Sviatky: "+err.Error())
+		} else if holSeen[h.Key()] {
+			add(fmt.Sprintf("holidays[%d].day", i), "Sviatok "+h.Day+" je zadaný dvakrát s rovnakým rokom od")
+		}
+		holSeen[h.Key()] = true
+	}
 	if len(fe) > 0 {
 		return &invoice.ValidationError{Fields: fe}
 	}
@@ -205,6 +249,7 @@ func (p Params) Validate() error {
 func (p *Params) Normalize() {
 	p.ECB = reminder.Sorted(p.ECB)
 	sortKm(p.KmRates)
+	sortHolidays(p.Holidays)
 	sort.SliceStable(p.VATPeriods, func(i, j int) bool { return p.VATPeriods[i].From < p.VATPeriods[j].From })
 	for i := range p.VATPeriods {
 		rs := p.VATPeriods[i].Rates
