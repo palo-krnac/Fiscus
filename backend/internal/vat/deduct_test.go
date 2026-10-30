@@ -20,7 +20,6 @@ func TestDeductPart(t *testing.T) {
 	}
 }
 
-
 func TestCoefPercent(t *testing.T) {
 	m := money.MustParse
 	tests := []struct {
