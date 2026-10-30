@@ -281,9 +281,19 @@ type Balance struct {
 	Closing money.Dec `json:"closing"`
 }
 
-// Balances spočíta stavy: pokladnica (počiatočný stav cash) a každý bankový
-// účet z pohybov alebo zo zoznamu accounts (počiatočné stavy bank).
-func Balances(entries []Entry, cash money.Dec, bank map[string]money.Dec, accounts []string) []Balance {
+// CashOpening je počiatočný stav jednej pokladnice (v eurách).
+type CashOpening struct {
+	Account string
+	Amount  money.Dec
+}
+
+// Balances spočíta stavy: pokladnice (počiatočné stavy cash, v poradí) a
+// každý bankový účet z pohybov alebo zo zoznamu accounts (počiatočné stavy bank).
+func Balances(entries []Entry, cash []CashOpening, bank map[string]money.Dec, accounts []string) []Balance {
+	cashOpen := map[string]money.Dec{}
+	for _, c := range cash {
+		cashOpen[c.Account] = c.Amount
+	}
 	byAcc := map[string]*Balance{}
 	var order []string
 	get := func(means Means, acc string) *Balance {
@@ -293,7 +303,7 @@ func Balances(entries []Entry, cash money.Dec, bank map[string]money.Dec, accoun
 		}
 		b := &Balance{Means: means, Account: acc}
 		if means == Cash {
-			b.Opening = cash
+			b.Opening = cashOpen[acc]
 		} else {
 			b.Opening = bank[acc]
 		}
@@ -301,7 +311,9 @@ func Balances(entries []Entry, cash money.Dec, bank map[string]money.Dec, accoun
 		order = append(order, k)
 		return b
 	}
-	get(Cash, "Pokladnica")
+	for _, c := range cash {
+		get(Cash, c.Account)
+	}
 	for _, a := range accounts {
 		get(Bank, a)
 	}

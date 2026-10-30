@@ -33,8 +33,9 @@ var ExtraFormats = map[string]string{
 	ReminderFormatKey: "UP{RRRR}{NNNN}",
 }
 
-// CashBook je pokladničná kniha za rok so zostatkom.
+// CashBook je pokladničná kniha za rok so zostatkom (v mene pokladne).
 type CashBook struct {
+	Register  cash.Register   `json:"register"`
 	Documents []cash.Document `json:"documents"`
 	Opening   money.Dec       `json:"opening"` // zostatok na začiatku roka
 	Balance   money.Dec       `json:"balance"` // aktuálny zostatok (všetky roky)
@@ -42,16 +43,25 @@ type CashBook struct {
 	Out       money.Dec       `json:"out"`     // výdavky v roku
 }
 
-// CashBook vráti doklady za rok, počiatočný a aktuálny zostatok.
+// CashBook vráti doklady hlavnej pokladne za rok so zostatkami.
 func (a *App) CashBook(ctx context.Context, companyID int64, year int) (CashBook, error) {
+	return a.CashBookOf(ctx, companyID, year, 0)
+}
+
+// CashBookOf vráti doklady pokladne za rok, počiatočný a aktuálny zostatok.
+func (a *App) CashBookOf(ctx context.Context, companyID int64, year int, registerID int64) (CashBook, error) {
 	if err := a.Require(ctx, companyID, auth.PermCashRead); err != nil {
 		return CashBook{}, err
 	}
-	all, err := a.Store.ListCashDocuments(ctx, companyID, 0)
+	reg, err := a.cashRegister(ctx, companyID, registerID)
 	if err != nil {
 		return CashBook{}, err
 	}
-	book := CashBook{Documents: []cash.Document{}}
+	all, err := a.registerDocs(ctx, companyID, registerID)
+	if err != nil {
+		return CashBook{}, err
+	}
+	book := CashBook{Register: reg, Documents: []cash.Document{}}
 	for _, d := range all {
 		if d.Cancelled {
 			if d.Date.Year() == year {
@@ -75,12 +85,31 @@ func (a *App) CashBook(ctx context.Context, companyID int64, year int) (CashBook
 	return book, nil
 }
 
+// registerDocs vráti všetky doklady jednej pokladne.
+func (a *App) registerDocs(ctx context.Context, companyID, registerID int64) ([]cash.Document, error) {
+	all, err := a.Store.ListCashDocuments(ctx, companyID, 0)
+	if err != nil {
+		return nil, err
+	}
+	out := all[:0:0]
+	for _, d := range all {
+		if d.RegisterID == registerID {
+			out = append(out, d)
+		}
+	}
+	return out, nil
+}
+
 // CashCandidates vráti neuhradené doklady, ktoré možno zaplatiť v hotovosti.
-func (a *App) CashCandidates(ctx context.Context, companyID int64, kind cash.Kind) ([]bank.Candidate, error) {
+func (a *App) CashCandidates(ctx context.Context, companyID int64, kind cash.Kind, registerID int64) ([]bank.Candidate, error) {
 	if err := a.Require(ctx, companyID, auth.PermCashRead); err != nil {
 		return nil, err
 	}
-	cands, err := a.candidates(ctx, companyID)
+	reg, err := a.cashRegister(ctx, companyID, registerID)
+	if err != nil {
+		return nil, err
+	}
+	cands, err := a.candidatesIn(ctx, companyID, reg.Currency)
 	if err != nil {
 		return nil, err
 	}
@@ -117,6 +146,9 @@ func (a *App) checkLink(ctx context.Context, companyID int64, d *cash.Document) 
 		if inv.Status != invoice.StatusIssued {
 			return bad("Faktúra " + inv.Number + " nie je vystavená a neuhradená")
 		}
+		if cur := currencyCode(inv.Currency); cur != d.Currency {
+			return bad("Faktúra " + inv.Number + " je v mene " + cur + " — pokladňa je v " + d.Currency)
+		}
 		rest := inv.Remaining()
 		if inv.Kind == invoice.KindCreditNote {
 			rest = rest.Neg()
@@ -137,8 +169,8 @@ func (a *App) checkLink(ctx context.Context, companyID int64, d *cash.Document) 
 		if p.Status != purchase.StatusBooked {
 			return bad("Prijatá faktúra " + p.Number + " je už uhradená")
 		}
-		if p.Foreign() {
-			return bad("Prijatá faktúra " + p.Number + " je v mene " + p.Currency + " — pokladňa je v eurách")
+		if cur := currencyCode(p.Currency); cur != d.Currency {
+			return bad("Prijatá faktúra " + p.Number + " je v mene " + cur + " — pokladňa je v " + d.Currency)
 		}
 		if !p.Summary.Total.Equal(d.Amount) {
 			return bad(fmt.Sprintf("Suma sa musí rovnať sume dokladu %s (%s €)", p.Number, p.Summary.Total.Display()))
@@ -148,6 +180,14 @@ func (a *App) checkLink(ctx context.Context, companyID int64, d *cash.Document) 
 		return bad("Neznámy druh dokladu")
 	}
 	return nil
+}
+
+// currencyCode vráti kód meny dokladu (prázdna = EUR).
+func currencyCode(c string) string {
+	if c == "" {
+		return "EUR"
+	}
+	return c
 }
 
 // CashPreview je doklad po prepočte DPH s chybami (pred vystavením).
@@ -175,6 +215,21 @@ func (a *App) PreviewCash(ctx context.Context, companyID int64, d cash.Document)
 // prepareCash upraví texty, prepočíta DPH a overí doklad.
 func (a *App) prepareCash(ctx context.Context, companyID int64, d *cash.Document) error {
 	d.Partner, d.Purpose, d.Note = strings.TrimSpace(d.Partner), strings.TrimSpace(d.Purpose), strings.TrimSpace(d.Note)
+	reg, err := a.cashRegister(ctx, companyID, d.RegisterID)
+	if err != nil {
+		return &invoice.ValidationError{Fields: []invoice.FieldError{{Field: "registerId", Message: "Pokladňa neexistuje"}}}
+	}
+	if reg.Archived {
+		return &invoice.ValidationError{Fields: []invoice.FieldError{{Field: "registerId", Message: "Pokladňa " + reg.Name + " je archivovaná"}}}
+	}
+	d.Currency = reg.Currency
+	if d.Foreign() {
+		// kurz ECB ku dňu dokladu (alebo ručne zadaný)
+		if err := a.fillRate(ctx, d.Currency, d.Date, d.Date, &d.FXRate, &d.FXDate, &d.FXManual); err != nil {
+			return err
+		}
+	}
+	d.SyncEUR()
 	d.NormalizeTax()
 	if d.Tax != nil {
 		company, err := a.Store.GetCompany(ctx, companyID)
@@ -200,7 +255,7 @@ func (a *App) CreateCash(ctx context.Context, companyID int64, d cash.Document) 
 	if err := a.checkLink(ctx, companyID, &d); err != nil {
 		return d, err
 	}
-	all, err := a.Store.ListCashDocuments(ctx, companyID, 0)
+	all, err := a.registerDocs(ctx, companyID, d.RegisterID)
 	if err != nil {
 		return d, err
 	}
@@ -211,17 +266,26 @@ func (a *App) CreateCash(ctx context.Context, companyID int64, d cash.Document) 
 	if err != nil {
 		return d, err
 	}
+	reg, err := a.cashRegister(ctx, companyID, d.RegisterID)
+	if err != nil {
+		return d, err
+	}
 	key, series := CashInFormatKey, "PPD"
 	if d.Kind == cash.Out {
 		key, series = CashOutFormatKey, "VPD"
 	}
-	seq, err := a.Store.NextSequence(ctx, companyID, series, d.Date.Year())
-	if err != nil {
-		return d, err
-	}
 	format := company.NumberFormats[key]
 	if format == "" {
 		format = ExtraFormats[key]
+	}
+	if reg.ID != 0 {
+		// ďalšia pokladňa: vlastný rad s predponou, napr. CZPPD20260001
+		format = reg.Prefix + ExtraFormats[key]
+		series = fmt.Sprintf("%s:%d", series, reg.ID)
+	}
+	seq, err := a.Store.NextSequence(ctx, companyID, series, d.Date.Year())
+	if err != nil {
+		return d, err
 	}
 	d.Number = invoice.FormatNumberWith(format, d.Date.Year(), d.Date.Month(), seq)
 	if err := a.Store.SaveCashDocument(ctx, companyID, &d); err != nil {
@@ -237,7 +301,7 @@ func (a *App) CreateCash(ctx context.Context, companyID int64, d cash.Document) 
 		withVAT = fmt.Sprintf(" (DPH %s €)", tax.Display())
 	}
 	a.record(ctx, companyID, audit.CatCash, "create", "cash", d.ID,
-		fmt.Sprintf("%s pokladničný doklad %s, %s €%s: %s", what, d.Number, d.Amount.Display(), withVAT, d.Purpose), nil, d)
+		fmt.Sprintf("%s pokladničný doklad %s, %s %s%s: %s", what, d.Number, d.Amount.Display(), currencySign(d.Currency), withVAT, d.Purpose), nil, d)
 
 	switch d.LinkKind {
 	case "invoice":
@@ -286,7 +350,7 @@ func (a *App) CancelCash(ctx context.Context, companyID, id int64) (cash.Documen
 	if d.Cancelled {
 		return d, cash.ErrCancelled
 	}
-	all, err := a.Store.ListCashDocuments(ctx, companyID, 0)
+	all, err := a.registerDocs(ctx, companyID, d.RegisterID)
 	if err != nil {
 		return d, err
 	}
@@ -304,7 +368,7 @@ func (a *App) CancelCash(ctx context.Context, companyID, id int64) (cash.Documen
 		return d, err
 	}
 	a.record(ctx, companyID, audit.CatCash, "cancel", "cash", d.ID,
-		fmt.Sprintf("Stornovaný pokladničný doklad %s, %s €", d.Number, d.Amount.Display()), nil, nil)
+		fmt.Sprintf("Stornovaný pokladničný doklad %s, %s %s", d.Number, d.Amount.Display(), currencySign(d.Currency)), nil, nil)
 	switch d.LinkKind {
 	case "invoice":
 		_, err = a.RemovePayment(ctx, companyID, d.LinkID, invoice.PaymentCash, d.ID)
@@ -315,4 +379,11 @@ func (a *App) CancelCash(ctx context.Context, companyID, id int64) (cash.Documen
 		return d, err
 	}
 	return d, nil
+}
+
+func currencySign(c string) string {
+	if c == "" || c == "EUR" {
+		return "€"
+	}
+	return c
 }

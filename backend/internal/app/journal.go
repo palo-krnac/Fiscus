@@ -83,7 +83,11 @@ func (a *App) Journal(ctx context.Context, companyID int64, year int) (JournalBo
 	if err != nil {
 		return JournalBook{}, err
 	}
-	cashOpen, err := a.cashOpening(ctx, companyID, year)
+	regs, err := a.cashRegisters(ctx, companyID)
+	if err != nil {
+		return JournalBook{}, err
+	}
+	cashOpen, err := a.cashOpening(ctx, companyID, year, regs)
 	if err != nil {
 		return JournalBook{}, err
 	}
@@ -118,19 +122,28 @@ func (a *App) journalOpening(ctx context.Context, companyID int64, year int) (ma
 	return out, nil
 }
 
-// cashOpening je počiatočný stav pokladnice: súčet dokladov pred rokom.
-func (a *App) cashOpening(ctx context.Context, companyID int64, year int) (money.Dec, error) {
+// cashOpening vráti počiatočné stavy pokladníc v eurách: súčet dokladov pred
+// rokom (pokladňa v cudzej mene podľa kurzov dokladov).
+func (a *App) cashOpening(ctx context.Context, companyID int64, year int, regs []cash.Register) ([]journal.CashOpening, error) {
 	docs, err := a.Store.ListCashDocuments(ctx, companyID, 0)
 	if err != nil {
-		return money.Zero, err
+		return nil, err
 	}
-	sum := money.Zero
+	sums := map[int64]money.Dec{}
+	used := map[int64]bool{}
 	for _, d := range docs {
+		used[d.RegisterID] = true
 		if !d.Cancelled && d.Date.Year() < year {
-			sum = sum.Add(d.Signed())
+			sums[d.RegisterID] = sums[d.RegisterID].Add(d.SignedEUR())
 		}
 	}
-	return sum, nil
+	out := []journal.CashOpening{}
+	for _, r := range regs {
+		if r.ID == 0 || used[r.ID] {
+			out = append(out, journal.CashOpening{Account: r.Name, Amount: sums[r.ID]})
+		}
+	}
+	return out, nil
 }
 
 // SetJournalOpening uloží počiatočné stavy bankových účtov za rok.
@@ -182,12 +195,24 @@ func (a *App) journalSources(ctx context.Context, companyID int64, year int) ([]
 	if err != nil {
 		return nil, err
 	}
+	regs, err := a.cashRegisters(ctx, companyID)
+	if err != nil {
+		return nil, err
+	}
+	names := map[int64]string{}
+	for _, r := range regs {
+		names[r.ID] = r.Name
+	}
 	for _, d := range docs {
 		if d.Cancelled {
 			continue // stornovaný doklad: peniaze sa nepohli
 		}
+		text := d.Purpose
+		if d.Foreign() {
+			text += fmt.Sprintf(" (%s %s, kurz %s)", d.Amount.Display(), d.Currency, d.FXRate.String())
+		}
 		e := journal.Entry{Key: "cash:" + strconv.FormatInt(d.ID, 10), Date: d.Date, Number: d.Number, Means: journal.Cash,
-			Account: "Pokladnica", Amount: d.Signed(), Partner: d.Partner, Text: d.Purpose}
+			Account: names[d.RegisterID], Amount: d.SignedEUR(), Partner: d.Partner, Text: text}
 		if d.LinkKind != "" && d.LinkID != 0 {
 			e.Doc = &journal.DocRef{Kind: d.LinkKind, ID: d.LinkID, Number: d.LinkNumber}
 		}
@@ -376,7 +401,7 @@ func (a *App) journalEntry(ctx context.Context, companyID int64, key string) (jo
 		if d.Cancelled {
 			return journal.Entry{}, store.ErrNotFound
 		}
-		return journal.Entry{Key: key, Date: d.Date, Amount: d.Signed(), Means: journal.Cash}, nil
+		return journal.Entry{Key: key, Date: d.Date, Amount: d.SignedEUR(), Means: journal.Cash}, nil
 	}
 	return journal.Entry{}, store.ErrNotFound
 }

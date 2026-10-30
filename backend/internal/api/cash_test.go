@@ -53,3 +53,37 @@ func TestCashAPI(t *testing.T) {
 	e.do("GET", fmt.Sprintf("%s/%d", base, d.ID), nil, 200, nil)
 	e.do("GET", fmt.Sprintf("%s/%d", base, 999), nil, 404, nil)
 }
+
+func TestCashRegistersAPI(t *testing.T) {
+	e := setup(t, edition.Desktop)
+	base := fmt.Sprintf("/api/companies/%d/cash-registers", e.cid)
+	var regs []struct {
+		ID       int64
+		Name     string
+		Currency string
+		Balance  string
+	}
+	e.do("GET", base, nil, 200, &regs)
+	if len(regs) != 1 || regs[0].ID != 0 {
+		t.Fatalf("predvolené: %+v", regs)
+	}
+	e.do("PUT", base, `[{"id":0,"name":"Pokladnica"},{"id":-1,"name":"Prevádzka Brezno","prefix":"BR"}]`, 200, &regs)
+	if len(regs) != 2 || regs[1].ID != 1 || regs[1].Currency != "EUR" {
+		t.Fatalf("pokladne: %+v", regs)
+	}
+	e.do("PUT", base, `[{"id":0},{"id":-1,"name":"X"}]`, 422, nil)
+	var d struct{ Number string }
+	e.do("POST", fmt.Sprintf("/api/companies/%d/cash", e.cid), `{"registerId":1,"kind":"in","date":"2026-10-01","amount":"50","purpose":"Vklad"}`, 201, &d)
+	if d.Number != "BRPPD20260001" {
+		t.Fatalf("číslo: %+v", d)
+	}
+	var book struct {
+		Balance   string
+		Documents []any
+	}
+	e.do("GET", fmt.Sprintf("/api/companies/%d/cash?year=2026&register=1", e.cid), nil, 200, &book)
+	if book.Balance != "50.00" || len(book.Documents) != 1 {
+		t.Fatalf("kniha: %+v", book)
+	}
+	e.do("GET", fmt.Sprintf("/api/companies/%d/cash?year=2026&register=9", e.cid), nil, 404, nil)
+}

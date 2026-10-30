@@ -14,17 +14,24 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 )
 
-const cashCols = "id, company_id, number, kind, date, amount, partner, purpose, note, link_kind, link_id, link_number, cancelled, tax_json"
+const cashCols = "id, company_id, number, kind, date, amount, partner, purpose, note, link_kind, link_id, link_number, cancelled, tax_json, register_id, fx_json"
 
 func scanCash(r interface{ Scan(...any) error }) (cash.Document, error) {
 	var d cash.Document
 	var date string
 	var amount int64
-	var tax string
+	var tax, fxj string
 	err := r.Scan(&d.ID, &d.CompanyID, &d.Number, &d.Kind, &date, &amount, &d.Partner, &d.Purpose, &d.Note,
-		&d.LinkKind, &d.LinkID, &d.LinkNumber, &d.Cancelled, &tax)
+		&d.LinkKind, &d.LinkID, &d.LinkNumber, &d.Cancelled, &tax, &d.RegisterID, &fxj)
 	if err != nil {
 		return d, err
+	}
+	if fxj != "" {
+		var f cashFX
+		if err := json.Unmarshal([]byte(fxj), &f); err != nil {
+			return d, err
+		}
+		d.Currency, d.FXRate, d.FXDate, d.FXManual, d.AmountEUR = f.Currency, f.Rate, f.Date, f.Manual, f.AmountEUR
 	}
 	if tax != "" {
 		d.Tax = &cash.Tax{}
@@ -33,8 +40,20 @@ func scanCash(r interface{ Scan(...any) error }) (cash.Document, error) {
 		}
 	}
 	d.Amount = money.FromRaw(amount)
+	if fxj == "" {
+		d.Currency, d.AmountEUR = "EUR", d.Amount // doklady spred viacerých pokladní
+	}
 	d.Date, err = invoice.ParseDate(date)
 	return d, err
+}
+
+// cashFX je mena a kurz dokladu (stĺpec fx_json).
+type cashFX struct {
+	Currency  string       `json:"currency"`
+	Rate      money.Dec    `json:"rate"`
+	Date      invoice.Date `json:"date"`
+	Manual    bool         `json:"manual"`
+	AmountEUR money.Dec    `json:"amountEur"`
 }
 
 func (s *Store) ListCashDocuments(ctx context.Context, companyID int64, year int) ([]cash.Document, error) {
@@ -77,11 +96,15 @@ func (s *Store) SaveCashDocument(ctx context.Context, companyID int64, d *cash.D
 		}
 		tax = string(b)
 	}
+	fxj, err := json.Marshal(cashFX{d.Currency, d.FXRate, d.FXDate, d.FXManual, d.AmountEUR})
+	if err != nil {
+		return err
+	}
 	vals := []any{d.Number, string(d.Kind), d.Date.String(), d.Amount.Raw(), d.Partner, d.Purpose, d.Note,
-		d.LinkKind, d.LinkID, d.LinkNumber, d.Cancelled, tax}
+		d.LinkKind, d.LinkID, d.LinkNumber, d.Cancelled, tax, d.RegisterID, string(fxj)}
 	if d.ID == 0 {
 		res, err := s.db.ExecContext(ctx, `INSERT INTO cash_documents (company_id, number, kind, date, amount, partner,
-			purpose, note, link_kind, link_id, link_number, cancelled, tax_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			purpose, note, link_kind, link_id, link_number, cancelled, tax_json, register_id, fx_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			append([]any{companyID}, vals...)...)
 		if err != nil {
 			return err
@@ -91,7 +114,7 @@ func (s *Store) SaveCashDocument(ctx context.Context, companyID int64, d *cash.D
 		}
 	} else {
 		res, err := s.db.ExecContext(ctx, `UPDATE cash_documents SET number = ?, kind = ?, date = ?, amount = ?, partner = ?,
-			purpose = ?, note = ?, link_kind = ?, link_id = ?, link_number = ?, cancelled = ?, tax_json = ? WHERE id = ? AND company_id = ?`,
+			purpose = ?, note = ?, link_kind = ?, link_id = ?, link_number = ?, cancelled = ?, tax_json = ?, register_id = ?, fx_json = ? WHERE id = ? AND company_id = ?`,
 			append(vals, d.ID, companyID)...)
 		if err != nil {
 			return err

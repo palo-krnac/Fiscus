@@ -41,15 +41,20 @@ func (a *App) ListBank(ctx context.Context, companyID int64, f store.BankFilter)
 	return a.Store.ListBankTransactions(ctx, companyID, f)
 }
 
-// candidates sú neuhradené doklady firmy, ku ktorým môže platba patriť.
+// candidates sú neuhradené doklady firmy v eurách, ku ktorým môže platba patriť.
 func (a *App) candidates(ctx context.Context, companyID int64) ([]bank.Candidate, error) {
+	return a.candidatesIn(ctx, companyID, "EUR")
+}
+
+// candidatesIn sú neuhradené doklady v mene currency (pokladňa v cudzej mene).
+func (a *App) candidatesIn(ctx context.Context, companyID int64, currency string) ([]bank.Candidate, error) {
 	invs, err := a.Store.ListInvoices(ctx, companyID, store.InvoiceFilter{Status: invoice.StatusIssued})
 	if err != nil {
 		return nil, err
 	}
 	var out []bank.Candidate
 	for _, inv := range invs {
-		if inv.Status != invoice.StatusIssued || (inv.Currency != "" && inv.Currency != "EUR") ||
+		if inv.Status != invoice.StatusIssued || currencyCode(inv.Currency) != currency ||
 			(inv.Kind == invoice.KindProforma && inv.Advance != nil && inv.Advance.FinalID != 0) { // vyúčtovaná záloha
 			continue
 		}
@@ -69,7 +74,7 @@ func (a *App) candidates(ctx context.Context, companyID int64) ([]bank.Candidate
 		return nil, err
 	}
 	for _, p := range purs {
-		if p.Status != purchase.StatusBooked || p.Foreign() {
+		if p.Status != purchase.StatusBooked || currencyCode(p.Currency) != currency {
 			continue // účty sú v eurách — doklad v cudzej mene sa označí ako uhradený ručne (ako pri faktúrach)
 		}
 		out = append(out, bank.Candidate{Kind: "purchase", ID: p.ID, Number: p.Number, VS: p.VariableSymbol, Partner: p.Supplier.Name,

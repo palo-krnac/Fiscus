@@ -368,6 +368,16 @@ func Run(t *testing.T, newStore Factory) {
 		if err := s.SaveCashDocument(ctx, b.ID, &d1); !errors.Is(err, store.ErrNotFound) {
 			t.Fatal("úprava dokladu inej firmy")
 		}
+		// druhá pokladňa v cudzej mene
+		d5 := cash.Document{Number: "CZPPD20260001", Kind: cash.In, Date: invoice.MustDate("2026-10-07"), Amount: m.MustParse("2500"),
+			Purpose: "Tržba", RegisterID: 3, Currency: "CZK", FXRate: m.MustParse("25.125"), FXDate: invoice.MustDate("2026-10-06"),
+			AmountEUR: m.MustParse("99.50")}
+		if err := s.SaveCashDocument(ctx, a.ID, &d5); err != nil {
+			t.Fatal(err)
+		}
+		if got, err := s.GetCashDocument(ctx, a.ID, d5.ID); err != nil || !reflect.DeepEqual(got, d5) {
+			t.Fatalf("doklad v cudzej mene:\n got %+v\nwant %+v", got, d5)
+		}
 	})
 
 	t.Run("cenové ponuky", func(t *testing.T) {
