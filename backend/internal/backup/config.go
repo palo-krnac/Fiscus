@@ -14,6 +14,9 @@ import (
 type Config struct {
 	Dir      string `json:"dir,omitempty"`
 	Password string `json:"password,omitempty"`
+	// Remote je kópia záloh v cloude (WebDAV, S3); prístupové údaje sa
+	// nikdy nevracajú cez API ani nezapisujú do logu.
+	Remote RemoteConfig `json:"remote,omitempty"`
 }
 
 // ConfigPath vráti cestu k súboru nastavenia pre databázu: fiskus.db → fiskus-zalohy.json.

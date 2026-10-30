@@ -61,7 +61,7 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [ ] Ďalšie zákonné hodnoty do Legislatívy podľa potreby (limity, sadzby pre mzdy a odvody v etape 4)
 - [x] Obrazovka Zálohy: stav, ručná záloha, stiahnutie, obnova naplánovaná na ďalšie spustenie, `-restore` zo súboru
 - [x] Nastavenie priečinka a hesla záloh priamo v rozhraní, návrh priečinka synchronizovaného do cloudu (OneDrive, Dropbox, Google Disk, iCloud)
-- [ ] Záloha priamo do cloudového úložiska (S3, WebDAV)
+- [x] Záloha priamo do cloudového úložiska (S3, WebDAV) — kópia po každej zálohe s rovnakou rotáciou, overenie spojenia skúšobným súborom, stav poslednej kópie, stiahnutie zálohy z cloudu na novom počítači
 - [x] Inštalačky: Inno Setup (Windows), DMG s Fiškus.app (macOS), .deb a .rpm (Linux); aplikácia s dátami v priečinku používateľa, otvorí prehliadač, skončí po zatvorení okna
 - [ ] Podpísané inštalačky (Authenticode, notarizácia Apple), automatická aktualizácia, AppImage
 - [x] Licencia pre serverovú verziu s viacerými firmami (offline overenie podpisu Ed25519)
