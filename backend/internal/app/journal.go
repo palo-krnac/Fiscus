@@ -321,7 +321,7 @@ func (c *docCache) propose(e journal.Entry, vatPayer bool) []journal.Line {
 			paidVAT = t.Summary.Total.Sub(t.Summary.Base) // dodávateľovi sa platí iba základ (prenesenie)
 		}
 		return journal.BuyLines(e.Amount, journal.Buy{Total: t.Summary.Total, VAT: paidVAT, Kind: p.Expense,
-			Deduct: vatPayer && !p.NoDeduction, Percent: p.DeductPercent})
+			Deduct: vatPayer && !p.NoDeduction, Percent: p.DeductPercent, Mixed: p.Mixed, Coef: p.Coef})
 	}
 	return nil
 }
@@ -344,7 +344,7 @@ func (c *docCache) proposeCash(e journal.Entry, vatPayer bool) []journal.Line {
 	if d.Kind == cash.In {
 		return journal.SaleLines(e.Amount, journal.Sale{Total: gross, VAT: tax, Goods: d.Tax.Goods, VATPayer: vatPayer})
 	}
-	return journal.BuyLines(e.Amount, journal.Buy{Total: gross, VAT: tax, Kind: d.Tax.Expense, Deduct: vatPayer && !d.Tax.NoDeduction, Percent: d.Tax.DeductPercent})
+	return journal.BuyLines(e.Amount, journal.Buy{Total: gross, VAT: tax, Kind: d.Tax.Expense, Deduct: vatPayer && !d.Tax.NoDeduction, Percent: d.Tax.DeductPercent, Mixed: d.Tax.Mixed, Coef: d.Tax.Coef})
 }
 
 func (c *docCache) invoice(id int64) *invoice.Invoice {

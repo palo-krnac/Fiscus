@@ -443,6 +443,11 @@ const docLink = (kind, id) => (kind === 'purchase' ? `/prijate/${id}` : `/faktur
                 <Checkbox v-model="form.tax.noDeduction" binary />
                 <span>Bez odpočtu DPH (reprezentácia, súkromná spotreba)</span>
               </label>
+              <label v-if="!form.tax.noDeduction" class="vat-toggle full">
+                <Checkbox v-model="form.tax.mixed" binary />
+                <span>Aj pre oslobodené plnenia — pomerné odpočítanie (§ 50)<template v-if="form.tax.mixed && preview?.tax?.coef !== undefined"> — koeficient {{ preview.tax.coef }} %</template></span>
+              </label>
+              <p v-if="errors['tax.mixed'] || pvErrors['tax.mixed']" class="err full">{{ errors['tax.mixed'] || pvErrors['tax.mixed'] }}</p>
             </div>
             <label v-else class="vat-toggle">
               <Checkbox v-model="form.tax.goods" binary />
@@ -485,6 +490,7 @@ const docLink = (kind, id) => (kind === 'purchase' ? `/prijate/${id}` : `/faktur
               <span v-if="detail.tax.supplierIcdph" class="vat-line">IČ DPH predajcu {{ detail.tax.supplierIcdph }}</span>
               <span v-if="detail.tax.noDeduction" class="vat-line">bez odpočtu</span>
               <span v-else-if="detail.tax.deductPercent" class="vat-line">odpočet {{ detail.tax.deductPercent }} % (osobné auto)</span>
+              <span v-if="detail.tax.mixed && !detail.tax.noDeduction" class="vat-line">koeficient {{ detail.tax.coef }} % (§ 50)</span>
             </dd>
           </template>
           <dt v-if="detail.linkNumber">Uhrádza</dt>

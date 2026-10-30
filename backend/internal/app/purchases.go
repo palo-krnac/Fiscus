@@ -40,6 +40,9 @@ func (a *App) PreviewPurchase(ctx context.Context, p purchase.Purchase) Purchase
 // PreviewPurchaseFor prepočíta doklad firmy (aj odpočet DPH podľa vozidla).
 func (a *App) PreviewPurchaseFor(ctx context.Context, companyID int64, p purchase.Purchase) PurchasePreview {
 	_ = a.applyVehicleVAT(ctx, companyID, &p)
+	if c, err := a.Store.GetCompany(ctx, companyID); err == nil {
+		_ = a.stampCoef(ctx, c, "mixed", p.Mixed && c.VATPayer, purchaseDate(p), &p.Coef)
+	}
 	return a.PreviewPurchase(ctx, p)
 }
 
@@ -96,6 +99,9 @@ func (a *App) SavePurchase(ctx context.Context, companyID int64, p purchase.Purc
 		return p, nil, err
 	}
 	if err := a.applyVehicleVAT(ctx, companyID, &p); err != nil {
+		return p, nil, err
+	}
+	if err := a.stampCoef(ctx, company, "mixed", p.Mixed && company.VATPayer, purchaseDate(p), &p.Coef); err != nil {
 		return p, nil, err
 	}
 	warns := p.Normalize()

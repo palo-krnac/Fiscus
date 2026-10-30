@@ -52,7 +52,8 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] A.2 a tuzemské prenesenie pri dodaní (§ 69 ods. 12) pri položkách: druhy a) až j), kód colného sadzobníka, hranica 5 000 €, XML
 - [ ] Dobropis k A.2 (kód opravy), trojstranný obchod (kód 1), call-off stock, dovoz s DPH na colnici (r. 22–23)
 - [x] Dobropisy od tuzemských dodávateľov: oprava odpočítanej dane v r. 28 a riadky C.2 (číslo pôvodnej faktúry)
-- [ ] Dobropisy od zahraničných dodávateľov a pri prenesení daňovej povinnosti, čiastočný odpočet (koeficient) — percento odpočtu na doklade je hotové (vozidlá), chýba koeficient podľa § 50
+- [x] Pomerné odpočítanie DPH (§ 50): spoločné nákupy (prijaté faktúry, bloky) s predbežným koeficientom roka, ročný koeficient z plnení vo Fiškuse (alebo ručne), vysporiadanie v poslednom období roka v r. 18–19, prepočet pri zmene koeficientu v nepodaných obdobiach
+- [ ] Dobropisy od zahraničných dodávateľov a pri prenesení daňovej povinnosti
 - [x] Opravné a dodatočné priznanie k DPH (dátum zistenia, r. 36 rozdiel oproti poslednej známej povinnosti, r. 37), opravný KV, záznam o podaní (posledná známa povinnosť, návrh druhu podľa lehoty)
 - [ ] Dodatočný kontrolný výkaz (iba opravované záznamy)
 - [ ] Podanie priamo na portál finančnej správy (vyžaduje autentifikáciu)

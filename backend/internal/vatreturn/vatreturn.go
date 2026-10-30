@@ -158,6 +158,35 @@ type Return struct {
 	Invoices  int       `json:"invoices"`  // počet zahrnutých vydaných dokladov
 	Purchase  int       `json:"purchases"` // počet zahrnutých prijatých faktúr
 	Cash      int       `json:"cash"`      // počet zahrnutých pokladničných dokladov s DPH
+	// Turnover sú plnenia obdobia pre koeficient podľa § 50 ods. 2.
+	Turnover Turnover `json:"turnover"`
+	// Coef je vysporiadanie pomerného odpočítania za rok (§ 50 ods. 4)
+	// v poslednom zdaňovacom období roka; nil = nie je.
+	Coef *CoefAdjustment `json:"coef,omitempty"`
+}
+
+// Turnover sú plnenia bez dane pre koeficient (§ 50 ods. 2): s nárokom na
+// odpočet (zdaniteľné, prenesenie, dodania do zahraničia) a oslobodené bez
+// nároku (tuzemské oslobodené plnenia §§ 28 – 42).
+type Turnover struct {
+	WithRight money.Dec `json:"withRight"`
+	Exempt    money.Dec `json:"exempt"`
+}
+
+// Add pripočíta plnenia iného obdobia.
+func (t Turnover) Add(o Turnover) Turnover {
+	return Turnover{WithRight: t.WithRight.Add(o.WithRight), Exempt: t.Exempt.Add(o.Exempt)}
+}
+
+// CoefAdjustment je rozdiel medzi odpočtom podľa ročného a predbežného
+// koeficientu (+ zvyšuje odpočet, − znižuje); ide do r. 18, 18a, 19.
+type CoefAdjustment struct {
+	Year        int                    `json:"year"`
+	Provisional int                    `json:"provisional"` // predbežný koeficient (%) — ak bol počas roka rovnaký
+	Final       int                    `json:"final"`       // ročný koeficient (%)
+	ByRate      map[vat.Rate]money.Dec `json:"byRate"`
+	Total       money.Dec              `json:"total"`
+	Docs        int                    `json:"docs"` // počet dokladov s pomerným odpočítaním
 }
 
 // Input sú podklady pre výpočet.
@@ -170,6 +199,8 @@ type Input struct {
 	CashDocs []cash.Document
 	// ExcessCarried je nadmerný odpočet z predchádzajúceho obdobia (riadok 34).
 	ExcessCarried money.Dec
+	// Coef je ročné vysporiadanie koeficientu (posledné obdobie roka).
+	Coef *CoefAdjustment
 }
 
 // riadky základu a dane podľa sadzby (DPHv25)
@@ -231,6 +262,7 @@ func Compute(in Input) Return {
 				warn(inv.Number, "invoice", inv.ID, msg)
 			} else {
 				ret.Invoices++
+				ret.Turnover.WithRight = ret.Turnover.WithRight.Add(sum.Base)
 			}
 			continue
 		case inv.ReverseCharge:
@@ -248,15 +280,18 @@ func Compute(in Input) Return {
 		ret.Invoices++
 		for _, r := range sum.Rates {
 			if r.Reverse {
+				ret.Turnover.WithRight = ret.Turnover.WithRight.Add(r.Base)
 				continue // tuzemské prenesenie: daň priznáva odberateľ, dodávateľ len A.2
 			}
 			if r.Rate == 0 {
+				ret.Turnover.Exempt = ret.Turnover.Exempt.Add(r.Base)
 				// oslobodené plnenie: iba riadok 13, do KV sa neuvádza
 				if !credit {
 					add("r13", r.Base)
 				}
 				continue
 			}
+			ret.Turnover.WithRight = ret.Turnover.WithRight.Add(r.Base)
 			if credit {
 				// oprava základu dane podľa § 25 ods. 1 (dobropis)
 				add("r24", r.Base)
@@ -340,10 +375,7 @@ func Compute(in Input) Return {
 			if r.Rate == 0 {
 				continue
 			}
-			deducted := vat.DeductPart(r.VAT, p.DeductPercent) // čiastočný odpočet (osobné auto § 85n)
-			if p.NoDeduction {
-				deducted = money.Zero
-			}
+			deducted := p.DeductOf(r.VAT) // čiastočný odpočet (osobné auto § 85n, koeficient § 50)
 			if p.ReverseCharge {
 				table := reverseRows // služby zo zahraničia, tuzemské prenesenie (§ 69)
 				if foreign(s.Country) && p.SupplyKind == invoice.SupplyGoods {
@@ -393,6 +425,14 @@ func Compute(in Input) Return {
 		r17 = r17.Add(ret.Rows[k])
 	}
 	ret.Rows["r17"] = r17
+	if c := in.Coef; c != nil && !c.Total.IsZero() {
+		for rate, v := range c.ByRate {
+			if row, ok := deductRows[rate]; ok {
+				add(row, v)
+			}
+		}
+		ret.Coef = c
+	}
 	ret.Deduction = ret.Rows["r18"].Add(ret.Rows["r18a"]).Add(ret.Rows["r19"]).RoundCents()
 	result := r17.Sub(ret.Rows["r18"]).Sub(ret.Rows["r18a"]).Sub(ret.Rows["r19"]).
 		Add(ret.Rows["r25"]).Add(ret.Rows["r27"]).Add(ret.Rows["r28"]).Add(ret.Rows["r29"]).
@@ -606,7 +646,7 @@ func (ret *Return) addPurchaseCredit(p purchase.Purchase, tax purchase.Amounts) 
 			continue
 		}
 		// pri čiastočnom odpočte (osobné auto § 85n) sa opravuje iba odpočítaná časť
-		deducted := vat.DeductPart(r.VAT, p.DeductPercent)
+		deducted := p.DeductOf(r.VAT)
 		ret.Rows["r28"] = ret.Rows["r28"].Add(deducted.Neg())
 		ret.KV.C2 = append(ret.KV.C2, KVCorrection{Partner: noSpaces(s.ICDPH), Name: s.Name, Number: noSpaces(p.SupplierNumber),
 			Original: noSpaces(p.CorrectsNumber), BaseDiff: r.Base, VATDiff: r.VAT, Rate: r.Rate, DeductedDiff: deducted, ID: p.ID})
@@ -629,8 +669,10 @@ func (ret *Return) addCash(in Input, add func(string, money.Dec), warn func(stri
 			for _, r := range d.Tax.Rows {
 				if r.Rate == 0 {
 					add("r13", r.Base)
+					ret.Turnover.Exempt = ret.Turnover.Exempt.Add(r.Base)
 					continue
 				}
+				ret.Turnover.WithRight = ret.Turnover.WithRight.Add(r.Base)
 				rows, ok := outputRows[r.Rate]
 				if !ok {
 					warn(d.Number, "cash", d.ID, fmt.Sprintf("Sadzba %d %% nepatrí do tlačiva DPHv25", r.Rate))
@@ -667,7 +709,7 @@ func (ret *Return) addCash(in Input, add func(string, money.Dec), warn func(stri
 				warn(d.Number, "cash", d.ID, fmt.Sprintf("Sadzba %d %% nepatrí do tlačiva DPHv25", r.Rate))
 				continue
 			}
-			part := vat.DeductPart(r.VAT, d.Tax.DeductPercent)
+			part := d.Tax.DeductOf(r.VAT)
 			add(row, part)
 			add(domesticRow[r.Rate], part)
 			base, tax, deducted = base.Add(r.Base), tax.Add(r.VAT), deducted.Add(part)

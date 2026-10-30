@@ -73,7 +73,11 @@ func (a *App) VATReturnWith(ctx context.Context, companyID int64, period string,
 	if err != nil {
 		return vatreturn.Return{}, c, err
 	}
-	r := vatreturn.Compute(vatreturn.Input{Period: p, Invoices: invs, Purchases: purs, CashDocs: cashDocs, ExcessCarried: excess})
+	coef, err := a.coefFor(ctx, c, p)
+	if err != nil {
+		return vatreturn.Return{}, c, err
+	}
+	r := vatreturn.Compute(vatreturn.Input{Period: p, Invoices: invs, Purchases: purs, CashDocs: cashDocs, ExcessCarried: excess, Coef: coef})
 	if err := r.Apply(o); err != nil {
 		return r, c, &invoice.ValidationError{Fields: []invoice.FieldError{{Field: "kind", Message: err.Error()}}}
 	}
