@@ -65,6 +65,7 @@ type App struct {
 	lic     atomic.Pointer[license.License]
 	recurMu sync.Mutex // jeden beh pravidelnej fakturácie naraz
 	quoteMu sync.Mutex // odpovede zákazníkov na ponuky
+	calMu   sync.Mutex // vlastné termíny v kalendári
 	legal   atomic.Pointer[legal.Params]
 	// mfaTickets sú rozpracované prihlásenia, ktoré čakajú na kód 2FA.
 	mfaTickets mfaTickets

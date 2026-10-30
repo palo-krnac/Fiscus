@@ -17,3 +17,12 @@ export async function refreshDrafts(load) {
     attention['/pravidelne'] = 0
   }
 }
+
+/** Obnoví počet termínov do 7 dní a zmeškaných (kalendár). */
+export async function refreshCalendar(load, count) {
+  try {
+    attention['/kalendar'] = count(await load())
+  } catch {
+    attention['/kalendar'] = 0
+  }
+}

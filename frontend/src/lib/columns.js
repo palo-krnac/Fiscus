@@ -8,6 +8,7 @@ import { levelShort } from './reminders.js'
 import { kindLabel } from './advance.js'
 import { assetStatus, disposalOptions, periodLabel } from './assets.js'
 import { tripTime } from './logbook.js'
+import { kindLabel as calendarKind, repeatLabel, stateOf } from './calendar.js'
 import { docKindLabel, emailStatus } from './emails.js'
 import { eurBalance, eurSummary, isForeignCurrency, purchaseEUR, sourceLabel } from './fx.js'
 
@@ -367,6 +368,14 @@ export const kmRateColumns = [
   { header: 'Jednostopové (€/km)', value: (r) => Number(r.moto), type: 'number', width: 14 },
 ]
 
+export const holidayColumns = [
+  t('Deň', (r) => r.day, 10),
+  t('Názov', (r) => r.name, 40),
+  { header: 'Od roku', value: (r) => r.from || '', type: 'number', width: 9 },
+  { header: 'Do roku', value: (r) => r.to || '', type: 'number', width: 9 },
+  t('Okrem rokov', (r) => r.exceptText, 14),
+]
+
 export const vatPeriodColumns = [
   date('Platí od', (r) => r.from),
   date('Platí do', (r) => r.to),
@@ -423,4 +432,24 @@ export const rateColumns = [
   t('Mena', (r) => r.currency, 6),
   { header: 'Kurz (za 1 EUR)', value: (r) => r.rate, type: 'number', width: 14 },
   t('Zdroj', (r) => sourceLabel(r.source), 8),
+]
+
+export const calendarColumns = [
+  date('Dátum', (r) => r.date),
+  t('Druh', (r) => calendarKind(r.kind), 16),
+  t('Termín', (r) => r.title, 48),
+  t('Podrobnosti', (r) => r.detail, 40),
+  money('Suma', (r) => r.amount ?? ''),
+  t('Mena', (r) => (r.amount ? r.currency || 'EUR' : ''), 6),
+  t('Stav', (r) => stateOf(r).text, 12),
+  date('Pôvodná lehota', (r) => r.shifted),
+]
+
+export const ownEventColumns = [
+  t('Termín', (r) => r.title, 40),
+  date('Prvý termín', (r) => r.date),
+  t('Opakovanie', (r) => repeatLabel(r.repeat), 16),
+  date('Do', (r) => r.until),
+  t('Posun na pracovný deň', (r) => yes(r.workday), 10),
+  t('Poznámka', (r) => r.note, 40),
 ]

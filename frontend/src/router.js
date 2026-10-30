@@ -32,9 +32,14 @@ import Rates from './views/Rates.vue'
 import ReminderPrint from './views/ReminderPrint.vue'
 import Legal from './views/Legal.vue'
 import Catalog from './views/Catalog.vue'
+import Calendar from './views/Calendar.vue'
 
 // Moduly z etapového plánu — zatiaľ prázdne stránky s popisom.
 export const modules = [
+  {
+    group: 'Prehľad',
+    items: [{ path: '/kalendar', label: 'Kalendár', icon: 'pi-calendar', ready: true }],
+  },
   {
     group: 'Predaj',
     items: [
@@ -117,6 +122,7 @@ export const router = createRouter({
     { path: '/ponuky/nova', component: InvoiceEdit, props: { quote: true }, meta: { title: 'Nová ponuka', perm: 'invoices.write' } },
     { path: '/ponuky/:id(\\d+)', component: InvoiceEdit, props: (r) => ({ id: r.params.id, quote: true }), meta: { title: 'Cenová ponuka', perm: 'invoices.read' } },
     { path: '/ponuky/:id(\\d+)/tlac', component: InvoicePrint, props: (r) => ({ id: r.params.id, quote: true }), meta: { title: 'Cenová ponuka', bare: true, perm: 'invoices.read' } },
+    { path: '/kalendar', component: Calendar, meta: { title: 'Kalendár' } },
     { path: '/pravidelne', component: RecurringList, meta: { title: 'Pravidelná fakturácia', perm: 'invoices.read' } },
     { path: '/pravidelne/nova', component: InvoiceEdit, props: { recurring: true }, meta: { title: 'Nová pravidelná faktúra', perm: 'invoices.write' } },
     { path: '/pravidelne/:id(\\d+)', component: InvoiceEdit, props: (r) => ({ id: r.params.id, recurring: true }), meta: { title: 'Pravidelná faktúra', perm: 'invoices.read' } },
