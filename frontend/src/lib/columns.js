@@ -489,3 +489,36 @@ export const templateColumns = [
   t('Používa sa', (r) => yes(r.active), 9),
   t('Poznámka', (r) => r.note, 30),
 ]
+
+const docName = (d) => ({ sale: 'Vydaná faktúra', purchase: 'Prijatá faktúra', bank: 'Banka', cash: 'Pokladňa', internal: 'Interný doklad' })[d] ?? d
+const accNo = (n) => (n && n.length > 3 ? `${n.slice(0, 3)}.${n.slice(3)}` : n ?? '')
+const nz = (v) => (Number(v) ? v : '')
+
+/** Účtovný denník — riadky z lib/ledger.js postingRows. */
+export const postingColumns = [
+  date('Dátum', (r) => r.date),
+  t('Doklad', (r) => r.number, 16),
+  t('Druh', (r) => docName(r.doc), 16),
+  t('Partner', (r) => r.partner, 28),
+  t('Text', (r) => r.text, 32),
+  t('Účet', (r) => accNo(r.line.account), 10),
+  t('Názov účtu', (r) => r.line.name, 30),
+  money('MD', (r) => nz(r.line.debit)),
+  money('D', (r) => nz(r.line.credit)),
+  t('Predkontácia', (r) => (r.manual ? 'ručne' : r.template), 14),
+  t('Problém', (r) => r.problem, 30),
+]
+
+const side = (v, s) => (Number(v) * s > 0 ? String(v).replace('-', '') : '')
+
+/** Hlavná kniha — obraty a zostatky účtov. */
+export const turnoverColumns = [
+  t('Účet', (r) => accNo(r.account), 10),
+  t('Názov', (r) => r.name, 36),
+  money('PS MD', (r) => side(r.opening, 1)),
+  money('PS D', (r) => side(r.opening, -1)),
+  money('Obrat MD', (r) => nz(r.debit)),
+  money('Obrat D', (r) => nz(r.credit)),
+  money('KS MD', (r) => side(r.closing, 1)),
+  money('KS D', (r) => side(r.closing, -1)),
+]

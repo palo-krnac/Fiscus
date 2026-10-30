@@ -61,14 +61,15 @@ type App struct {
 	// v testoch falošný poštár).
 	Postman func(postman.Settings) (postman.Provider, error)
 	// Mailer posiela e-maily (nil = SMTP podľa nastavenia firmy).
-	Mailer  mail.Sender
-	lic     atomic.Pointer[license.License]
-	recurMu sync.Mutex // jeden beh pravidelnej fakturácie naraz
-	quoteMu sync.Mutex // odpovede zákazníkov na ponuky
-	calMu   sync.Mutex // vlastné termíny v kalendári
-	coefMu  sync.Mutex // koeficient § 50
-	chartMu sync.Mutex // účtový rozvrh, strediská, zákazky
-	legal   atomic.Pointer[legal.Params]
+	Mailer   mail.Sender
+	lic      atomic.Pointer[license.License]
+	recurMu  sync.Mutex // jeden beh pravidelnej fakturácie naraz
+	quoteMu  sync.Mutex // odpovede zákazníkov na ponuky
+	calMu    sync.Mutex // vlastné termíny v kalendári
+	coefMu   sync.Mutex // koeficient § 50
+	chartMu  sync.Mutex // účtový rozvrh, strediská, zákazky
+	ledgerMu sync.Mutex // účtový denník (predkontácie dokladov, interné doklady)
+	legal    atomic.Pointer[legal.Params]
 	// mfaTickets sú rozpracované prihlásenia, ktoré čakajú na kód 2FA.
 	mfaTickets mfaTickets
 	// oauth: podpisový kľúč a autorizačné kódy OAuth (oauth.go)
