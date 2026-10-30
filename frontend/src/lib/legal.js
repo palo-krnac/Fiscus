@@ -20,3 +20,21 @@ export function ecbErrors(fieldMap) {
   }
   return out
 }
+
+/** Deň sviatku na zobrazenie: "05-01" → "1. 5.", "easter-2" → "Veľká noc − 2 dni". */
+export function holidayDayLabel(day) {
+  const e = /^easter([+-]\d+)$/.exec(day ?? '')
+  if (e) {
+    const n = Number(e[1])
+    const abs = Math.abs(n)
+    const unit = abs === 1 ? 'deň' : abs < 5 ? 'dni' : 'dní'
+    return n === 0 ? 'Veľkonočná nedeľa' : `Veľká noc ${n < 0 ? '−' : '+'} ${abs} ${unit}`
+  }
+  const m = /^(\d{2})-(\d{2})$/.exec(day ?? '')
+  return m ? `${Number(m[2])}. ${Number(m[1])}.` : day ?? ''
+}
+
+/** Zoznam rokov "2026, 2028" → [2026, 2028]; neplatné časti vynechá. */
+export function parseYears(text) {
+  return [...new Set(String(text ?? '').split(/[\s,;]+/).map(Number).filter((y) => Number.isInteger(y) && y >= 1990 && y <= 2200))].sort()
+}

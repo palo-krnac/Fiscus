@@ -12,7 +12,8 @@ import UserMenu from './components/UserMenu.vue'
 import MFADialog from './components/MFADialog.vue'
 import { api } from './lib/api.js'
 import { startHeartbeat } from './lib/desktop.js'
-import { attention, badgeText, refreshDrafts } from './lib/attention.js'
+import { attention, badgeText, refreshCalendar, refreshDrafts } from './lib/attention.js'
+import { badgeRange, soonCount } from './lib/calendar.js'
 
 const route = useRoute()
 const navOpen = ref(false)
@@ -25,6 +26,16 @@ watch(
   () => [session.companyId, session.me, route.path],
   () => {
     if (session.companyId && can('invoices.read')) refreshDrafts(() => api.recurringDrafts(session.companyId))
+  },
+  { immediate: true },
+)
+// odznak pri kalendári: termíny do 7 dní a zmeškané (pri zmene firmy; kalendár ho obnoví sám)
+watch(
+  () => [session.companyId, session.me],
+  () => {
+    if (!session.companyId || !session.me) return
+    const { from, to } = badgeRange(new Date())
+    refreshCalendar(() => api.calendar(session.companyId, from, to), soonCount)
   },
   { immediate: true },
 )
@@ -118,7 +129,7 @@ const isActive = (path) => route.path === path || route.path.startsWith(path + '
           >
             <i class="pi" :class="item.icon" aria-hidden="true" />
             <span>{{ item.label }}</span>
-            <span v-if="badgeText(attention[item.path])" class="nav-badge" :title="`Na kontrolu: ${attention[item.path]}`">{{ badgeText(attention[item.path]) }}</span>
+            <span v-if="badgeText(attention[item.path])" class="nav-badge" :title="item.path === '/kalendar' ? `Termíny do 7 dní a zmeškané: ${attention[item.path]}` : `Na kontrolu: ${attention[item.path]}`">{{ badgeText(attention[item.path]) }}</span>
           </RouterLink>
         </section>
       </nav>
