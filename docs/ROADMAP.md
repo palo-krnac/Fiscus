@@ -129,4 +129,5 @@ Slovenské špecifiká, ktoré MyÚčto nemá: RÚZ, tri identifikátory (IČO /
 - [x] Kalendár (mesiac aj zoznam): priznanie k DPH a KV, SV (ak sú dodania do EÚ), daň z príjmov, daň z motorových vozidiel — lehoty posunuté na pracovný deň podľa dní pracovného pokoja (upraviteľné v Legislatíve); splatnosti vydaných a prijatých faktúr, pravidelné faktúry, koniec platnosti ponúk; zmeškané termíny; podané priznanie označené
 - [x] Vlastné opakované termíny (odvody, preddavky, STK, poistky) s rýchlym výberom a označením „splnené“
 - [x] Odber do mobilu a kalendára (iCalendar, tajný odkaz iba na čítanie, pripomienky 3 dni a 1 deň vopred), súbor .ics, odznak v menu
+- [x] Prepojenie kalendára termínov s Google Kalendárom a Outlookom (Microsoft 365, Outlook.com) cez ich API — funguje aj v desktopovej verzii
 - [ ] Upozornenie e-mailom pred lehotou, termíny miezd (etapa 4)

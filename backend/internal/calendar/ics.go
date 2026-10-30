@@ -110,3 +110,24 @@ func fold(s string) string {
 	}
 	return b.String()
 }
+
+// Summary vráti názov, popis a pripomienku termínu na prenos do iného
+// kalendára (rovnako ako v súbore .ics); sviatky sa neprenášajú (ok = false).
+func Summary(e Event) (title, desc string, remind, ok bool) {
+	if e.Kind == KindHoliday {
+		return "", "", false, false
+	}
+	title = e.Title
+	if e.Done {
+		title = "✓ " + title
+	}
+	desc = description(e)
+	if c := kindLabel[e.Kind]; c != "" {
+		if desc != "" {
+			desc += "\n"
+		}
+		desc += "Fiškus · " + c
+	}
+	remind = !e.Done && (e.Kind == KindTax || e.Kind == KindOwn || e.Kind == KindPay)
+	return title, desc, remind, true
+}
