@@ -76,6 +76,7 @@ export const placeholders = [
   ['{splatnost}', 'splatnosť / lehota úhrady'],
   ['{platba}', 'veta s IBAN a VS (faktúra)'],
   ['{platna_do}', 'platnosť ponuky'],
+  ['{prijatie}', 'veta s odkazom na prijatie ponuky online (ponuka)'],
   ['{Doklad}', 'názov dokladu (Faktúra, Dobropis…)'],
   ['{doklad}', 'názov vo 4. páde (faktúru…)'],
   ['{odberatel}', 'odberateľ'],

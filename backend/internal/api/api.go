@@ -45,6 +45,8 @@ type Server struct {
 	Desktop Launcher
 
 	limit limiter // pokusy o prihlásenie
+	// shareLimit: neplatné odkazy na ponuky z jednej IP (hádanie tokenov)
+	shareLimit limiter
 }
 
 // Launcher ukončí program po zatvorení okna alebo na pokyn používateľa.
@@ -115,6 +117,7 @@ func (s *Server) Handler() http.Handler {
 	open("GET /api/legal", s.getLegal)
 	open("PUT /api/legal", s.setLegal)
 	open("POST /api/legal/reset", s.resetLegal)
+	open("POST /api/legal/ecb", s.updateECBRates)
 	open("GET /api/rates", s.listRates)
 	open("PUT /api/rates", s.setRate)
 	open("POST /api/rates/update", s.updateRates)
@@ -158,6 +161,12 @@ func (s *Server) Handler() http.Handler {
 	need("POST /api/companies/{cid}/quotes/{id}/reject", auth.PermInvoicesWrite, s.quoteAction((*Server).rejectQuote))
 	need("POST /api/companies/{cid}/quotes/{id}/copy", auth.PermInvoicesWrite, s.quoteAction((*Server).copyQuote))
 	need("POST /api/companies/{cid}/quotes/{id}/invoice", auth.PermInvoicesWrite, s.invoiceQuote)
+	need("POST /api/companies/{cid}/quotes/{id}/share", auth.PermInvoicesWrite, s.quoteAction((*Server).shareQuote))
+	need("DELETE /api/companies/{cid}/quotes/{id}/share", auth.PermInvoicesWrite, s.quoteAction((*Server).unshareQuote))
+	// ponuka pre zákazníka cez tajný odkaz (bez prihlásenia)
+	public("GET /api/public/quotes/{token}", s.publicQuote)
+	public("GET /api/public/quotes/{token}/pdf", s.publicQuotePDF)
+	public("POST /api/public/quotes/{token}/respond", s.publicQuoteRespond)
 
 	need("GET /api/companies/{cid}/recurring", auth.PermInvoicesRead, s.listRecurring)
 	need("GET /api/companies/{cid}/recurring/drafts", auth.PermInvoicesRead, s.recurringDrafts)

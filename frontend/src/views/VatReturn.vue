@@ -148,6 +148,7 @@ const kvSections = computed(() => {
     { code: 'B.1', title: 'Prijaté faktúry – prenesenie daňovej povinnosti', rows: f(kv.b1, 'B.1'), kind: 'purchase' },
     { code: 'B.2', title: 'Prijaté faktúry s odpočtom DPH', rows: f(kv.b2, 'B.2'), kind: 'purchase' },
     { code: 'C.1', title: 'Vydané opravné faktúry (dobropisy) platiteľom', rows: f(kv.c1, 'C.1'), kind: 'invoice', correction: true },
+    { code: 'C.2', title: 'Prijaté opravné faktúry (dobropisy od dodávateľov)', rows: f(kv.c2 ?? [], 'C.2'), kind: 'purchase', correction: true },
   ]
 })
 const kvAll = computed(() => kvSections.value.flatMap((s) => s.rows))
@@ -379,7 +380,7 @@ async function downloadXML(which) {
                     <td class="num">{{ formatAmount(l.vat ?? l.vatDiff) }}</td>
                     <td class="num">{{ l.rate }}</td>
                   </template>
-                  <td v-if="s.kind === 'purchase'" class="num">{{ formatAmount(l.deducted) }}</td>
+                  <td v-if="s.kind === 'purchase'" class="num">{{ formatAmount(s.code === 'C.2' ? l.deductedDiff : l.deducted) }}</td>
                 </tr>
               </tbody>
             </table>

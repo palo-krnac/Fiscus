@@ -39,6 +39,7 @@ func (a *App) PreviewPurchase(ctx context.Context, p purchase.Purchase) Purchase
 
 func normalizePurchase(p *purchase.Purchase) {
 	p.SupplierNumber = strings.TrimSpace(p.SupplierNumber)
+	p.CorrectsNumber = strings.TrimSpace(p.CorrectsNumber)
 	p.SupplierIBAN = formatIBAN(p.SupplierIBAN)
 	if p.VariableSymbol == "" {
 		p.VariableSymbol = invoice.VariableSymbol(p.SupplierNumber)

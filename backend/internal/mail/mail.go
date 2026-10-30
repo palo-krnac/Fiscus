@@ -73,7 +73,7 @@ func DefaultTemplates() map[string]Template {
 		KindQuote: {
 			Subject: "Cenová ponuka {cislo} – {firma}",
 			Body: "Dobrý deň,\n\nv prílohe Vám posielame cenovú ponuku {cislo} na sumu {suma}. Ponuka platí do {platna_do}.\n\n" +
-				"V prípade otázok nás neváhajte kontaktovať.\n\nS pozdravom\n{firma}",
+				"{prijatie}V prípade otázok nás neváhajte kontaktovať.\n\nS pozdravom\n{firma}",
 		},
 		KindReminder: {
 			Subject: "{Doklad} {cislo} – {firma}",

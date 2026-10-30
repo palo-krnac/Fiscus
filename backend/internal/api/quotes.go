@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"github.com/palo-krnac/fiscus/backend/internal/app"
 	"net/http"
 	"strconv"
 
@@ -10,7 +11,7 @@ import (
 )
 
 func failQuote(w http.ResponseWriter, err error) {
-	if errors.Is(err, quote.ErrLocked) || errors.Is(err, quote.ErrBadTransition) {
+	if errors.Is(err, quote.ErrLocked) || errors.Is(err, quote.ErrBadTransition) || errors.Is(err, app.ErrNoPublicURL) {
 		writeErr(w, http.StatusConflict, err.Error(), nil)
 		return
 	}
