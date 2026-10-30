@@ -100,6 +100,8 @@ FISKUS_BACKUP_PASSWORD=… bin/fiskus -db fiskus.db -backup-dir ~/Fiskus-zalohy
 
 Zálohy: priečinok a heslo sa dajú nastaviť v programe (Zálohy) — uložia sa do súboru `fiskus-zalohy.json` vedľa databázy (práva 0600). Parameter `-backup-dir` a premenná `FISKUS_BACKUP_PASSWORD` majú prednosť a v programe sa potom nedajú zmeniť. Bez parametra je priečinok `zalohy` vedľa databázy.
 
+Kópia v cloude: v časti Zálohy sa dá nastaviť WebDAV (Nextcloud, ownCloud, Synology…) alebo úložisko kompatibilné s S3 (AWS, Wasabi, Backblaze B2, Hetzner, MinIO). Po každej zálohe sa zašifrovaný súbor skopíruje aj tam a staré kópie sa mažú podľa rovnakého pravidla ako na disku. Výpadok cloudu lokálnu zálohu nezastaví — chyba sa ukáže v stave záloh a v denníku. Prístupové údaje sú v `fiskus-zalohy.json` a API ich nikdy nevracia. Na novom počítači stačí nastaviť rovnaké heslo záloh a cloud, v zozname „Zálohy v cloude“ zálohu stiahnuť a obnoviť.
+
 Vývoj s okamžitým obnovovaním: `make dev-api` v jednom termináli a `make dev-web` v druhom (http://localhost:5173).
 
 ### Aplikácia z inštalátora
