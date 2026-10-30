@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/palo-krnac/fiscus/backend/internal/edition"
+	"github.com/palo-krnac/fiscus/backend/internal/fx"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	m "github.com/palo-krnac/fiscus/backend/internal/money"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
@@ -208,5 +209,44 @@ func TestAdvanceWithin15Period(t *testing.T) {
 		if (err == nil) != tc.ok || (!tc.ok && !strings.Contains(err.Error(), "október 2026")) {
 			t.Errorf("%s: %v", tc.period, err)
 		}
+	}
+}
+
+func TestAdvanceForeignCurrency(t *testing.T) {
+	a, c := newApp(t, edition.Desktop)
+	if err := a.Store.SaveRates(ctx, []fx.Rate{
+		{Currency: "CZK", Date: "2026-09-30", Rate: m.MustParse("25.1"), Source: fx.SourceECB},
+		{Currency: "CZK", Date: "2026-10-09", Rate: m.MustParse("25"), Source: fx.SourceECB},
+		{Currency: "CZK", Date: "2026-10-19", Rate: m.MustParse("24.6"), Source: fx.SourceECB},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	d := proformaDraft() // 400 + 92 = 492 CZK
+	d.Currency = "CZK"
+	p := issuePaidProforma(t, a, c.ID, d, "492") // platba 10. 10., kurz 25
+	r, err := a.Store.GetInvoice(ctx, c.ID, p.Advance.ReceiptID)
+	if err != nil || r.Currency != "CZK" || !r.FXRate.Equal(m.MustParse("25")) || !r.Local.VAT.Equal(m.MustParse("3.68")) {
+		t.Fatalf("doklad k platbe v CZK: %+v %v", r.Local, err)
+	}
+	f, err := a.SettleAdvance(ctx, c.ID, p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Lines[0].Quantity = m.MustParse("20") // dodávka 984 CZK
+	f.DeliveryDate = invoice.MustDate("2026-10-20")
+	if f, err = a.SaveDraft(ctx, c.ID, f); err != nil {
+		t.Fatal(err)
+	}
+	if f, err = a.Issue(ctx, c.ID, f.ID); err != nil {
+		t.Fatalf("vyúčtovanie: %v", err)
+	}
+	// v eurách: 800/24,6 = 32,52; 184/24,6 = 7,48 → mínus záloha 16,00 + 3,68
+	if !f.FXRate.Equal(m.MustParse("24.6")) || !f.Local.Base.Equal(m.MustParse("16.52")) || !f.Local.VAT.Equal(m.MustParse("3.8")) {
+		t.Fatalf("vyúčtovanie v eurách: %s %+v", f.FXRate, f.Local)
+	}
+	ret, _, _ := a.VATReturn(ctx, c.ID, "2026-10", m.Zero)
+	// daň spolu: 3,68 (platba) + 3,80 (zostatok) = 7,48 € = celá dodávka kurzom vyúčtovania
+	if !ret.Rows["r04"].Equal(m.MustParse("7.48")) || !ret.Rows["r03"].Equal(m.MustParse("32.52")) {
+		t.Fatalf("DPH: %+v", ret.Rows)
 	}
 }

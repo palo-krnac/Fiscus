@@ -21,7 +21,7 @@ func TestAdvanceMode(t *testing.T) {
 		{"tuzemsko", func(*Invoice) {}, AdvanceReceipt},
 		{"tuzemsko do 15 dní", func(i *Invoice) { i.Within15 = true }, AdvanceWithin15},
 		{"neplatiteľ", func(i *Invoice) { i.NonVATPayer = true }, AdvanceNonVAT},
-		{"cudzia mena", func(i *Invoice) { i.Currency = "USD" }, AdvanceManual},
+		{"cudzia mena", func(i *Invoice) { i.Currency = "USD" }, AdvanceReceipt},
 		{"tovar do EÚ", func(i *Invoice) { i.Customer.Country, i.SupplyKind = "DE", SupplyGoods }, AdvanceUntaxed},
 		{"vývoz", func(i *Invoice) { i.Customer.Country, i.SupplyKind = "US", SupplyGoods }, AdvanceUntaxed},
 		{"služba mimo EÚ", func(i *Invoice) { i.Customer.Country, i.SupplyKind = "CH", SupplyServices }, AdvanceUntaxed},
