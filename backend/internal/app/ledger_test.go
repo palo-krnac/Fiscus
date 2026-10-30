@@ -7,6 +7,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/cash"
 	"github.com/palo-krnac/fiscus/backend/internal/chart"
 	"github.com/palo-krnac/fiscus/backend/internal/edition"
+	"github.com/palo-krnac/fiscus/backend/internal/fx"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/ledger"
 	m "github.com/palo-krnac/fiscus/backend/internal/money"
@@ -320,6 +321,111 @@ func TestFXLines(t *testing.T) {
 		lines = fxLines(lines, x, m.MustParse(tc.doc))
 		if got := lineStr(lines); got != tc.want || !ledger.Balanced(lines) {
 			t.Errorf("%s: %s", tc.name, got)
+		}
+	}
+}
+
+func TestLedgerImport(t *testing.T) {
+	a, c := newApp(t, edition.Desktop)
+	pu := validPurchase()
+	pu.Supplier.Country, pu.Supplier.ICDPH = "CN", ""
+	pu.SupplyKind, pu.Expense = invoice.SupplyGoods, purchase.ExpenseStock
+	pu.Rates = []purchase.RateRow{{Rate: vat.Rate23, Base: m.MustParse("1000")}}
+	p, _, err := a.SavePurchase(ctx, c.ID, pu)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !p.Import() || p.Summary.Total.String() != "1000.00" {
+		t.Fatalf("dovoz: %+v", p.Summary)
+	}
+	book, err := a.Ledger(ctx, c.ID, 2026)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ps := book.Postings[0]
+	if ps.Problem != "" || lineStr(ps.Lines) != "501 MD 1000.00, 343 MD 230.00, 321 D 1000.00, 379 D 230.00" {
+		t.Errorf("dovoz: %s %q", lineStr(ps.Lines), ps.Problem)
+	}
+}
+
+func TestFXRevaluation(t *testing.T) {
+	a, c := newApp(t, edition.Desktop)
+	if err := a.Store.SaveRates(ctx, []fx.Rate{rate("CZK", "2026-10-22", "25")}); err != nil {
+		t.Fatal(err)
+	}
+	d := validDraft() // 400 + 92 = 492 CZK
+	d.Currency = "CZK"
+	d.IssueDate, d.DeliveryDate = invoice.MustDate("2026-10-26"), invoice.MustDate("2026-10-23")
+	dr, _ := a.SaveDraft(ctx, c.ID, d)
+	inv, err := a.Issue(ctx, c.ID, dr.ID)
+	if err != nil || inv.Local == nil || inv.Local.Total.String() != "19.68" {
+		t.Fatalf("faktúra CZK: %+v %v", inv.Local, err)
+	}
+	// bez kurzu k 31. 12.
+	rv, err := a.FXRevaluationFor(ctx, c.ID, 2026)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rv.Missing) != 0 { // kurz z októbra je posledný známy pred 1. 1.
+		t.Fatalf("chýbajúce kurzy: %v", rv.Missing)
+	}
+	if err := a.Store.SaveRates(ctx, []fx.Rate{rate("CZK", "2026-12-31", "24")}); err != nil {
+		t.Fatal(err)
+	}
+	if rv, err = a.FXRevaluationFor(ctx, c.ID, 2026); err != nil {
+		t.Fatal(err)
+	}
+	if len(rv.Items) != 1 || rv.Items[0].NewEUR.String() != "20.50" || rv.Items[0].Diff.String() != "0.82" ||
+		lineStr(rv.Lines) != "311 MD 0.82, 663 D 0.82" {
+		t.Fatalf("návrh: %+v %s", rv.Items, lineStr(rv.Lines))
+	}
+	doc, err := a.PostFXRevaluation(ctx, c.ID, 2026)
+	if err != nil || !doc.FX || doc.Number != "ID2026001" {
+		t.Fatalf("zaúčtovanie: %+v %v", doc, err)
+	}
+	if _, err := a.PostFXRevaluation(ctx, c.ID, 2026); err != nil { // nahradí, nepridá druhý
+		t.Fatal(err)
+	}
+	book, _ := a.Ledger(ctx, c.ID, 2026)
+	n := 0
+	for _, ps := range book.Postings {
+		if ps.Doc == chart.DocInternal {
+			n++
+		}
+	}
+	if n != 1 || len(book.Internal) != 1 {
+		t.Errorf("interné doklady: %d", n)
+	}
+	if rv, _ = a.FXRevaluationFor(ctx, c.ID, 2026); rv.Posted != "ID2026001" {
+		t.Errorf("zaúčtované: %+v", rv)
+	}
+
+	// úhrada v roku 2027 jednou platbou 20 €: strata voči 20,50 € z 31. 12.
+	if _, err := a.MarkPaid(ctx, c.ID, inv.ID, invoice.MustDate("2027-01-15")); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := a.Store.SaveBankTransactions(ctx, c.ID, []bank.Transaction{{Account: "SK3112000000198742637541", Date: invoice.MustDate("2027-01-15"),
+		Amount: m.MustParse("20"), Currency: "EUR", Direction: bank.In, Fingerprint: "p", Status: bank.StatusMatched,
+		Match: &bank.Match{Kind: "invoice", ID: inv.ID, Number: inv.Number}}}); err != nil {
+		t.Fatal(err)
+	}
+	book, err = a.Ledger(ctx, c.ID, 2027)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ps := range book.Postings {
+		if ps.Doc == chart.DocBank && lineStr(ps.Lines) != "221 MD 20.00, 311 D 20.50, 563 MD 0.50" {
+			t.Errorf("úhrada 2027: %s %q", lineStr(ps.Lines), ps.Problem)
+		}
+	}
+	// zmazanie dokladu zruší prepočet
+	if err := a.DeleteInternal(ctx, c.ID, 2026, doc.ID); err != nil {
+		t.Fatal(err)
+	}
+	book, _ = a.Ledger(ctx, c.ID, 2027)
+	for _, ps := range book.Postings {
+		if ps.Doc == chart.DocBank && lineStr(ps.Lines) != "221 MD 20.00, 311 D 19.68, 663 D 0.32" {
+			t.Errorf("úhrada bez prepočtu: %s", lineStr(ps.Lines))
 		}
 	}
 }

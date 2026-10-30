@@ -37,6 +37,9 @@ type LedgerData struct {
 	// Opening sú počiatočné stavy účtov (kladný = MD, záporný = D).
 	Opening map[string]money.Dec `json:"opening,omitempty"`
 	NextID  int64                `json:"nextId,omitempty"`
+	// Revalued sú sumy pohľadávok a záväzkov v cudzej mene v eurách
+	// prepočítané kurzom k 31. 12. (kľúč sale:ID, purchase:ID).
+	Revalued map[string]money.Dec `json:"revalued,omitempty"`
 	// Dims sú stredisko a zákazka dokladu (náklady a výnosy).
 	Dims map[string]ledger.Dims `json:"dims,omitempty"`
 }
@@ -57,6 +60,8 @@ type InternalDoc struct {
 	Amount   money.Dec     `json:"amount"`
 	Lines    []ledger.Line `json:"lines,omitempty"`
 	ledger.Dims
+	// FX: kurzové rozdiely k 31. 12. (vytvára Fiškus).
+	FX bool `json:"fx,omitempty"`
 }
 
 // LedgerBook je účtovný denník a hlavná kniha za rok.
@@ -258,6 +263,8 @@ type poster struct {
 	// fx je suma dokladu v eurách pri úhrade faktúry v cudzej mene
 	// (rozdiel oproti úhrade je kurzový zisk 663 alebo strata 563).
 	fx map[string]money.Dec
+	// customs je DPH pri dovoze, ktorú vyrubí colný úrad (D 379).
+	customs map[string]money.Dec
 	// deduct sú odpočítané zálohy vyúčtovacej faktúry.
 	deduct map[string][]invoice.Deduction
 }
@@ -334,6 +341,9 @@ func (p *poster) apply(post *ledger.Posting, a chart.Amounts) {
 		if acc != "" {
 			lines = append(lines, ledger.Line{Account: acc, Debit: non}, ledger.Line{Account: "343", Credit: non})
 		}
+	}
+	if v, ok := p.customs[post.Key]; ok && !v.IsZero() {
+		lines = append(lines, ledger.Line{Account: "379", Credit: v})
 	}
 	if deds := p.deduct[post.Key]; len(deds) > 0 {
 		lines = append(lines, deductionLines(t, deds)...)
@@ -450,6 +460,7 @@ var (
 	// presun peňazí medzi bankou a pokladnicou (261 peniaze na ceste)
 	reToCash   = regexp.MustCompile(`(?i)do pokladn|v[ýy]ber hotovost|v[ýy]ber z bankomatu|atm`)
 	reFromBank = regexp.MustCompile(`(?i)z banky|z (bankov[ée]ho )?[úu][čc]tu|v[ýy]ber z`)
+	rePHM      = regexp.MustCompile(`(?i)pohonn|\bphm\b|benz[íi]n|naft|tankov`)
 )
 
 // ledgerSources načíta doklady roka a navrhne predkontácie.
@@ -561,7 +572,13 @@ func (a *App) ledgerSources(ctx context.Context, companyID int64, year int, p *p
 			non := s.VAT.Sub(deduct)
 			switch {
 			case pu.Import() && !s.VAT.IsZero():
-				post.Problem = "Dovoz — DPH z colného vyhlásenia zaúčtujte ručne"
+				// dovoz: dodávateľovi sa platí základ, DPH vyrubí colný úrad
+				// (MD 343 odpočítateľná časť, neodpočítaná do nákladu / D 379)
+				p.set(key, chart.Amounts{Total: s.Total, Base: s.Base, VAT: deduct, VATNon: non})
+				if p.customs == nil {
+					p.customs = map[string]money.Dec{}
+				}
+				p.customs[key] = s.VAT
 			case pu.ReverseCharge || !s.Total.Equal(s.Base.Add(s.VAT)):
 				p.set(key, chart.Amounts{Total: s.Total, Base: s.Base, Self: deduct})
 				if p.reverse == nil {
@@ -580,6 +597,11 @@ func (a *App) ledgerSources(ctx context.Context, companyID int64, year int, p *p
 	txs, err := a.Store.ListBankTransactions(ctx, companyID, store.BankFilter{Year: year})
 	if err != nil {
 		return nil, err
+	}
+	// doklady prepočítané kurzom k 31. 12. minulého roka
+	var revalued map[string]money.Dec
+	if prev, err := a.loadLedger(ctx, companyID, year-1); err == nil {
+		revalued = prev.Revalued
 	}
 	// počet úhrad dokladu: kurzový rozdiel iba pri úhrade jednou platbou
 	pays := map[string]int{}
@@ -619,7 +641,7 @@ func (a *App) ledgerSources(ctx context.Context, companyID int64, year int, p *p
 			out = append(out, post)
 			continue
 		}
-		p.set(key, chart.Amounts{Total: abs(signed)})
+		p.set(key, chart.Amounts{Total: abs(signed), Base: abs(signed)})
 		p.dir(key, signed.Sign())
 		if t.Status == bank.StatusMatched && t.Match != nil {
 			post.Number = t.Match.Number
@@ -633,14 +655,18 @@ func (a *App) ledgerSources(ctx context.Context, companyID int64, year int, p *p
 				case inv.Kind == invoice.KindProforma:
 					post.Template = "B-ZALOHA"
 				case inv.Foreign() && single && inv.Status == invoice.StatusPaid:
-					if s, ok := inv.TaxSummary(); ok {
+					if v, ok := revalued["sale:"+strconv.FormatInt(inv.ID, 10)]; ok {
+						p.setFX(key, v) // prepočítané k 31. 12. minulého roka
+					} else if s, ok := inv.TaxSummary(); ok {
 						p.setFX(key, s.Total)
 					}
 				}
 			case "purchase":
 				post.Template = "B-DODAVATEL"
 				if pu := getPur(t.Match.ID); pu != nil && pu.Foreign() && single && pu.Status == purchase.StatusPaid {
-					if tx, ok := pu.Tax(); ok {
+					if v, ok := revalued["purchase:"+strconv.FormatInt(pu.ID, 10)]; ok {
+						p.setFX(key, v)
+					} else if tx, ok := pu.Tax(); ok {
 						p.setFX(key, tx.Summary.Total)
 					}
 				}
@@ -677,10 +703,10 @@ func (a *App) ledgerSources(ctx context.Context, companyID int64, year int, p *p
 		p.dir(key, dir)
 		switch {
 		case d.LinkKind == "invoice":
-			p.set(key, chart.Amounts{Total: abs(d.SignedEUR())})
+			p.set(key, chart.Amounts{Total: abs(d.SignedEUR()), Base: abs(d.SignedEUR())})
 			post.Template = "P-ODBERATEL"
 		case d.LinkKind == "purchase":
-			p.set(key, chart.Amounts{Total: abs(d.SignedEUR())})
+			p.set(key, chart.Amounts{Total: abs(d.SignedEUR()), Base: abs(d.SignedEUR())})
 			post.Template = "P-DODAVATEL"
 		case d.Tax != nil && len(d.Tax.Rows) > 0:
 			if d.Foreign() {
@@ -703,9 +729,12 @@ func (a *App) ledgerSources(ctx context.Context, companyID int64, year int, p *p
 				}
 			}
 		default:
-			p.set(key, chart.Amounts{Total: abs(d.SignedEUR())})
-			if dir > 0 && reFromBank.MatchString(d.Purpose) {
+			p.set(key, chart.Amounts{Total: abs(d.SignedEUR()), Base: abs(d.SignedEUR())})
+			switch {
+			case dir > 0 && reFromBank.MatchString(d.Purpose):
 				post.Template = "P-VKLAD"
+			case dir < 0 && rePHM.MatchString(d.Purpose):
+				post.Template = "P-PHM" // napr. tankovanie v zahraničí (bez DPH na odpočet)
 			}
 		}
 		out = append(out, post)
@@ -878,6 +907,7 @@ func (a *App) SaveInternal(ctx context.Context, companyID int64, year int, doc I
 				if strings.TrimSpace(doc.Number) == "" {
 					doc.Number = d.Internal[i].Number
 				}
+				doc.FX = d.Internal[i].FX
 				d.Internal[i] = doc
 				return "Upravený interný doklad " + doc.Number + ": " + doc.Text, nil
 			}
@@ -893,6 +923,9 @@ func (a *App) DeleteInternal(ctx context.Context, companyID int64, year int, id 
 		for i, doc := range d.Internal {
 			if doc.ID == id {
 				d.Internal = append(d.Internal[:i], d.Internal[i+1:]...)
+				if doc.FX {
+					d.Revalued = nil
+				}
 				return "Zmazaný interný doklad " + doc.Number, nil
 			}
 		}

@@ -128,6 +128,7 @@ const templateOptions = computed(() => {
 const drawerTitle = computed(() => {
   if (mode.value === 'opening') return `Počiatočné stavy k 1. 1. ${year.value}`
   if (mode.value === 'money') return 'Účty bánk a pokladníc'
+  if (mode.value === 'fx') return `Kurzové rozdiely k 31. 12. ${year.value}`
   if (mode.value === 'account') return `Účet ${accountDisplay(current.value?.account)}`
   if (mode.value === 'internal') return current.value?.id ? `Interný doklad ${current.value.number}` : 'Nový interný doklad'
   return `Zaúčtovanie ${current.value?.number || 'dokladu'}`
@@ -158,6 +159,17 @@ function openInternal(doc) {
   form.value = { date: fromISODate(d.date), text: d.text, number: d.number, template: d.template || null, amount: Number(d.amount) ? String(d.amount) : '', center: d.center || '', job: d.job || '' }
   lines.value = editLines(d.lines)
   show('internal', d)
+}
+
+// kurzové rozdiely k 31. 12.
+const fxr = ref(null)
+async function openFX() {
+  try {
+    fxr.value = await api.fxRevaluation(session.companyId, year.value)
+    show('fx', null)
+  } catch (e) {
+    toast.add({ severity: 'error', summary: 'Nepodarilo sa', detail: e.message, life: 6000 })
+  }
 }
 
 // analytické účty bánk a pokladníc
@@ -203,6 +215,9 @@ async function save() {
         return
       }
       await api.saveInternal(cid, year.value, doc)
+    } else if (mode.value === 'fx') {
+      const doc = await api.postFXRevaluation(cid, year.value)
+      toast.add({ severity: 'success', summary: 'Kurzové rozdiely zaúčtované', detail: doc.number, life: 4000 })
     } else if (mode.value === 'money') {
       await api.setMoneyAccounts(cid, Object.fromEntries(moneyForm.value.map((m) => [m.key, m.account || ''])))
     } else if (mode.value === 'opening') {
@@ -331,6 +346,7 @@ function removeInternal() {
             <template v-if="st.previousEmpty">Predchádzajúce obdobie nemá v programe zápisy.</template>
           </p>
           <div class="toolbar">
+            <Button v-if="canWrite" :label="`Kurzové rozdiely k 31. 12. ${year}`" icon="pi pi-euro" size="small" severity="secondary" outlined @click="openFX" />
             <div class="spacer" />
             <ExportButton :name="`${tab === 'balance' ? 'Súvaha' : 'Výkaz ziskov a strát'} ${year}`" :columns="ledgerStatementColumns(tab === 'balance', st.previousEmpty)" :rows="statementRows" />
           </div>
@@ -537,6 +553,42 @@ function removeInternal() {
           <Button v-if="current?.id" label="Zmazať" severity="danger" text size="small" @click="removeInternal" />
           <span class="spacer" />
           <Button type="submit" label="Uložiť" icon="pi pi-check" size="small" :loading="busy" />
+        </div>
+      </form>
+
+      <!-- kurzové rozdiely k 31. 12. -->
+      <form v-else-if="mode === 'fx' && fxr" class="dform" @submit.prevent="save">
+        <p class="hint">
+          Neuhradené pohľadávky a záväzky v cudzej mene sa k 31. 12. prepočítajú kurzom ECB. Rozdiel je kurzový zisk (663) alebo strata (563);
+          prepočítaná suma platí aj pri úhrade v ďalšom roku.
+        </p>
+        <p v-if="fxr.missing.length" class="warn">Chýba kurz k 31. 12. pre {{ fxr.missing.join(', ') }} — aktualizujte kurzy mien.</p>
+        <p v-if="fxr.items.some((it) => it.rateDate < `${year}-12-24`)" class="warn">
+          Kurz k 31. 12. {{ year }} ešte nie je vyhlásený — návrh používa posledný známy kurz. Zaúčtujte ho až po skončení roka.
+        </p>
+        <p v-if="fxr.posted" class="hint">Zaúčtované dokladom {{ fxr.posted }}. Ďalšie zaúčtovanie ho nahradí.</p>
+        <p v-if="!fxr.items.length && !fxr.missing.length" class="hint">K 31. 12. {{ year }} nie sú žiadne kurzové rozdiely.</p>
+        <div v-for="it in fxr.items" :key="it.key" class="fx-item">
+          <span class="text"><b>{{ it.number }}</b> {{ it.partner }}</span>
+          <span class="num" :class="{ loss: Number(it.diff) < 0 }">{{ Number(it.diff) > 0 ? '+' : '' }}{{ formatAmount(it.diff) }}</span>
+          <span class="meta">
+            {{ it.kind === 'receivable' ? 'pohľadávka' : 'záväzok' }} {{ formatAmount(it.remaining) }} {{ it.currency }} · kurz {{ it.rate }} z {{ formatDate(it.rateDate) }}
+            · {{ formatAmount(it.bookEur) }} → {{ formatAmount(it.newEur) }} €
+          </span>
+        </div>
+        <small v-if="errors.rates || errors.items" class="err">{{ errors.rates || errors.items }}</small>
+        <div v-if="fxr.lines.length" class="preview">
+          <div v-for="(l, i) in fxr.lines" :key="i" class="post-line">
+            <span class="acc"><b>{{ accountDisplay(l.account) }}</b></span>
+            <span class="num">{{ amt(l.debit) }}</span>
+            <span class="num">{{ amt(l.credit) }}</span>
+          </div>
+        </div>
+        <div class="actions">
+          <RouterLink to="/kurzy" class="doclink"><i class="pi pi-euro" /> Kurzy mien</RouterLink>
+          <span class="spacer" />
+          <Button v-if="canWrite" type="submit" :label="fxr.posted ? 'Zaúčtovať znova' : 'Zaúčtovať'" icon="pi pi-check" size="small" :loading="busy"
+            :disabled="!fxr.items.length || fxr.missing.length > 0" />
         </div>
       </form>
 
@@ -761,6 +813,18 @@ function removeInternal() {
   padding: 0 4px;
   border-radius: 2px;
   white-space: nowrap;
+}
+.fx-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--rule-soft);
+}
+.fx-item .meta {
+  grid-column: 1 / -1;
+  font-size: var(--fs-sm);
+  color: var(--ink-faint);
 }
 .tags {
   display: inline-flex;
