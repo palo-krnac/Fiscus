@@ -82,3 +82,18 @@ describe('tuzemské prenesenie', () => {
     expect(needsCommodity('metals') && needsCommodity('crops') && !needsCommodity('construction')).toBe(true)
   })
 })
+
+describe('trojstranný obchod', () => {
+  it('ponúka sa iba pri partnerovi z EÚ', async () => {
+    const { supplyKindsFor } = await import('./codes.js')
+    expect(supplyKindsFor('AT').map((k) => k.value)).toContain('triangular')
+    expect(supplyKindsFor('US').map((k) => k.value)).not.toContain('triangular')
+    expect(supplyKindsFor('SK').map((k) => k.value)).not.toContain('triangular')
+  })
+  it('text na faktúre a nápoveda', () => {
+    expect(vatExemptionNote({ reverseCharge: true, customer: { country: 'AT' }, supplyKind: 'triangular' })).toContain('§ 45')
+    expect(supplyHint('sale', 'AT', 'triangular')).toContain('kód 1')
+    expect(supplyHint('purchase', 'DE', 'triangular')).toContain('r. 11–12')
+    expect(supplyHint('purchase', 'CN', 'goods')).toContain('r. 23')
+  })
+})

@@ -16,6 +16,9 @@ func ExemptionNote(reverseCharge bool, customer Party, kind SupplyKind) string {
 		return "Prenesenie daňovej povinnosti podľa § 69 ods. 12 zákona o DPH. Daň odvedie odberateľ."
 	}
 	eu := party.IsEU(customer.Country)
+	if kind == SupplyTriangular {
+		return "Trojstranný obchod podľa § 45 zákona o DPH (čl. 141 smernice 2006/112/ES) – daň platí odberateľ (čl. 197)."
+	}
 	if kind == SupplyGoods {
 		if eu {
 			return "Dodanie tovaru do iného členského štátu oslobodené od dane podľa § 43 zákona o DPH (čl. 138 smernice 2006/112/ES)."

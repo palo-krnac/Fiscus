@@ -51,7 +51,9 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] Súhrnný výkaz (SVDPHv20): tovar do EÚ (kód 0), služby do EÚ (kód 2); r. 13–15 pre dodanie do EÚ a vývoz; nadobudnutie tovaru z EÚ (r. 05–08) a služby zo zahraničia (r. 09–10)
 - [x] A.2 a tuzemské prenesenie pri dodaní (§ 69 ods. 12) pri položkách: druhy a) až j), kód colného sadzobníka, hranica 5 000 €, XML
 - [x] Dobropis k A.2: C.1 bez dane a sadzby, pri tovare kód SCS / druh a rozdiel množstva so znamienkom mínus
-- [ ] Trojstranný obchod (kód 1), call-off stock, dovoz s DPH na colnici (r. 22–23)
+- [x] Trojstranný obchod (§ 45): prvý odberateľ — faktúra s textom, SV kód 1, mimo priznania; druhý odberateľ — r. 11–12, odpočet, KV B.1
+- [x] Dovoz tovaru z tretej krajiny s DPH zaplatenou colnému úradu: odpočet r. 18–19, z toho r. 22–23, bez KV
+- [ ] Call-off stock, dovoz s uplatnením dane v priznaní (§ 84a ods. 3, r. 11c–12e)
 - [x] Dobropisy od tuzemských dodávateľov: oprava odpočítanej dane v r. 28 a riadky C.2 (číslo pôvodnej faktúry)
 - [x] Pomerné odpočítanie DPH (§ 50): spoločné nákupy (prijaté faktúry, bloky) s predbežným koeficientom roka, ročný koeficient z plnení vo Fiškuse (alebo ručne), vysporiadanie v poslednom období roka v r. 18–19, prepočet pri zmene koeficientu v nepodaných obdobiach
 - [x] Dobropisy pri prenesení daňovej povinnosti (služby zo zahraničia, tuzemské § 69 ods. 12): zníženie samozdanenia v r. 09–10 a odpočtu v r. 18–19, C.2 v období prijatia

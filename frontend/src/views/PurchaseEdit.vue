@@ -16,7 +16,7 @@ import IcoInput from '../components/IcoInput.vue'
 import VatIdInput from '../components/VatIdInput.vue'
 import { api, ApiError } from '../lib/api.js'
 import { session, can } from '../lib/session.js'
-import { codes, ratesOn, supplyKinds, isForeign, supplyHint } from '../lib/codes.js'
+import { codes, ratesOn, supplyKindsFor, isForeign, supplyHint } from '../lib/codes.js'
 import SelectButton from 'primevue/selectbutton'
 import { filterContacts, customerFromContact } from '../lib/contacts.js'
 import { fillFromRegistry, fillFromVIES } from '../lib/registry.js'
@@ -482,7 +482,7 @@ const set = (obj, key) => (v) => {
             <span class="supply-label">Druh plnenia</span>
             <SelectButton
               :model-value="p.supplyKind || null"
-              :options="supplyKinds"
+              :options="supplyKindsFor(p.supplier.country)"
               option-label="label"
               option-value="value"
               :disabled="locked"

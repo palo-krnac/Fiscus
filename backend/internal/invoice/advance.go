@@ -188,7 +188,7 @@ func (inv *Invoice) AdvanceMode() (AdvanceMode, string) {
 	mode := AdvanceReceipt
 	if party.Foreign(inv.Customer.Country) {
 		switch {
-		case inv.SupplyKind == SupplyGoods:
+		case inv.SupplyKind.Goods():
 			return AdvanceUntaxed, ""
 		case inv.SupplyKind == SupplyServices && !party.IsEU(inv.Customer.Country):
 			return AdvanceUntaxed, ""

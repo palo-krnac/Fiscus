@@ -136,6 +136,13 @@ type Amounts struct {
 	Summary Summary   `json:"summary"`
 }
 
+// Import vráti true pre dovoz tovaru z tretej krajiny: DPH (z rozhodnutia
+// colného úradu) sa platí colnému úradu, nie dodávateľovi.
+func (p *Purchase) Import() bool {
+	c := p.Supplier.Country
+	return c != "" && c != "SK" && !party.IsEU(c) && p.SupplyKind == invoice.SupplyGoods && !p.ReverseCharge
+}
+
 // Foreign vráti true pre doklad v cudzej mene.
 func (p *Purchase) Foreign() bool { return p.Currency != "" && p.Currency != "EUR" }
 
@@ -217,8 +224,10 @@ func (p *Purchase) Normalize() []Warning {
 		s.Base = s.Base.Add(r.Base)
 		s.VAT = s.VAT.Add(r.VAT)
 	}
-	if p.ReverseCharge {
-		s.Total = s.Base // dodávateľovi platíme bez DPH, DPH je samozdanenie
+	if p.ReverseCharge || p.Import() {
+		// dodávateľovi platíme bez DPH: DPH je samozdanenie alebo ju pri
+		// dovoze platíme colnému úradu
+		s.Total = s.Base
 	} else {
 		s.Total = s.Base.Add(s.VAT)
 	}
@@ -304,6 +313,8 @@ func (p *Purchase) Validate() error {
 		add("supplyKind", "Neznámy druh plnenia")
 	} else if party.Foreign(s.Country) && p.SupplyKind == "" {
 		add("supplyKind", "Pri zahraničnom dodávateľovi vyberte, či ide o tovar alebo službu")
+	} else if p.SupplyKind == invoice.SupplyTriangular && (!party.IsEU(s.Country) || !p.ReverseCharge) {
+		add("supplyKind", "Trojstranný obchod je nákup od dodávateľa z iného štátu EÚ s prenesením daňovej povinnosti")
 	}
 	if !p.PaymentMethod.Valid() {
 		add("paymentMethod", "Neznámy spôsob úhrady")
@@ -349,7 +360,7 @@ func (p *Purchase) Validate() error {
 	if p.DeductPercent < 0 || p.DeductPercent > 100 {
 		add("deductPercent", "Odpočet DPH musí byť 0 až 100 %")
 	}
-	if hasVAT && !p.NoDeduction && s.ICDPH == "" {
+	if hasVAT && !p.NoDeduction && s.ICDPH == "" && !p.Import() {
 		add("supplier.icdph", "Na odpočet DPH zadajte IČ DPH dodávateľa (potrebné do kontrolného výkazu)")
 	}
 	if len(errs) > 0 {
