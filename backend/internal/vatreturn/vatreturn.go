@@ -17,6 +17,7 @@ package vatreturn
 import (
 	"fmt"
 	"strings"
+	"unicode"
 
 	"github.com/palo-krnac/fiscus/backend/internal/cash"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
@@ -357,7 +358,7 @@ func Compute(in Input) Return {
 			warn(doc, "purchase", p.ID, "Prijatá faktúra v mene "+p.Currency+" nemá kurz — doplňte ho, inak nejde do priznania")
 			continue
 		case tax.Summary.Base.Sign() < 0:
-			if msg := ret.addPurchaseCredit(p, tax); msg != "" {
+			if msg := ret.addPurchaseCredit(p, tax, in); msg != "" {
 				warn(doc, "purchase", p.ID, msg)
 			} else {
 				ret.Purchase++
@@ -436,6 +437,7 @@ func Compute(in Input) Return {
 		}
 	}
 
+	ret.addLateAcquisitionCredits(in)
 	ret.addCash(in, add, warn)
 
 	// súčty
@@ -741,47 +743,149 @@ func (ret *Return) addImport(p purchase.Purchase, tax purchase.Amounts, add func
 // (služby zo zahraničia, tuzemské prenesenie § 69 ods. 12): zníži sa
 // samozdanený základ a daň v tých istých riadkoch (r. 09–10) aj odpočet
 // (r. 18–19); v KV ide do C.2 v období prijatia dobropisu.
-func (ret *Return) addReverseCredit(p purchase.Purchase, tax purchase.Amounts) string {
+func (ret *Return) addReverseCredit(p purchase.Purchase, tax purchase.Amounts, in Input) string {
 	s := p.Supplier
 	switch {
 	case foreign(s.Country) && p.SupplyKind == "":
 		return "Pri zahraničnom dodávateľovi vyberte, či ide o tovar alebo službu"
-	case foreign(s.Country) && p.SupplyKind.Goods():
-		return "Dobropis k nadobudnutiu tovaru z EÚ opravuje obdobie pôvodného nadobudnutia (r. 05–08, dodatočné priznanie) — doplňte ručne"
 	case strings.TrimSpace(p.CorrectsNumber) == "":
 		return "Dobropis bez čísla pôvodnej faktúry dodávateľa — v C.2 ho doplňte ručne"
 	}
+	table := creditRows(p)
 	for _, r := range tax.Rates {
-		if _, ok := reverseRows[r.Rate]; r.Rate != 0 && !ok {
+		if _, ok := table[r.Rate]; r.Rate != 0 && !ok {
 			return fmt.Sprintf("Sadzba %d %% nepatrí do tlačiva DPHv25", r.Rate)
+		}
+	}
+	// nadobudnutie tovaru z EÚ: základ a daň sa opravujú v období pôvodného
+	// nadobudnutia; KV C.2 v období prijatia dobropisu (finančná správa)
+	rows, msg := true, ""
+	if acquisitionCredit(p) {
+		if orig, ok := originalPurchase(p, in.Purchases); !ok {
+			msg = "Dobropis k nadobudnutiu tovaru z EÚ: pôvodná faktúra " + p.CorrectsNumber +
+				" sa vo Fiškuse nenašla — oprava je v období prijatia dobropisu; ak nadobudnutie patrí do iného obdobia, opravte ju dodatočným priznaním za to obdobie"
+		} else if when := deductionDate(orig); !in.Period.Contains(when) {
+			rows = false
+			msg = fmt.Sprintf("Dobropis k nadobudnutiu tovaru z EÚ: oprava základu a dane (r. 05–08, 18–19) patrí do obdobia pôvodného nadobudnutia %s — Fiškus ju zahrnie do priznania za to obdobie; podajte dodatočné priznanie. Tu je iba C.2.",
+				PeriodOf(when, in.Period.Quarter > 0).Label())
 		}
 	}
 	for _, r := range tax.Rates {
 		if r.Rate == 0 || r.VAT.IsZero() && r.Base.IsZero() {
 			continue
 		}
-		rows := reverseRows[r.Rate]
 		deducted := p.DeductOf(r.VAT)
-		ret.Rows[rows.base] = ret.Rows[rows.base].Add(r.Base)
-		ret.Rows[rows.tax] = ret.Rows[rows.tax].Add(r.VAT)
-		if !deducted.IsZero() {
-			ret.Rows[deductRows[r.Rate]] = ret.Rows[deductRows[r.Rate]].Add(deducted)
+		if rows {
+			ret.creditRows(p, r, table)
 		}
 		ret.KV.C2 = append(ret.KV.C2, KVCorrection{Partner: noSpaces(strings.ToUpper(s.ICDPH)), Name: s.Name, Number: noSpaces(p.SupplierNumber),
 			Original: noSpaces(p.CorrectsNumber), BaseDiff: r.Base, VATDiff: r.VAT, Rate: r.Rate, DeductedDiff: deducted, ID: p.ID})
 	}
-	return ""
+	return msg
+}
+
+// creditRows zníži samozdanený základ a daň aj odpočet o dobropis.
+func (ret *Return) creditRows(p purchase.Purchase, r purchase.RateRow, table map[vat.Rate]rowPair) {
+	rows := table[r.Rate]
+	deducted := p.DeductOf(r.VAT)
+	ret.Rows[rows.base] = ret.Rows[rows.base].Add(r.Base)
+	ret.Rows[rows.tax] = ret.Rows[rows.tax].Add(r.VAT)
+	if !deducted.IsZero() {
+		ret.Rows[deductRows[r.Rate]] = ret.Rows[deductRows[r.Rate]].Add(deducted)
+	}
+}
+
+// creditRows vráti riadky samozdanenia podľa druhu nákupu.
+func creditRows(p purchase.Purchase) map[vat.Rate]rowPair {
+	switch {
+	case p.SupplyKind == invoice.SupplyTriangular:
+		return triangularRows
+	case foreign(p.Supplier.Country) && p.SupplyKind == invoice.SupplyGoods:
+		return acquisitionRows
+	}
+	return reverseRows
+}
+
+// acquisitionCredit: dobropis k nadobudnutiu tovaru z EÚ (aj trojstranný obchod).
+func acquisitionCredit(p purchase.Purchase) bool {
+	return p.ReverseCharge && foreign(p.Supplier.Country) && party.IsEU(p.Supplier.Country) && p.SupplyKind.Goods() &&
+		strings.TrimSpace(p.CorrectsNumber) != ""
+}
+
+// deductionDate je deň, podľa ktorého nákup patrí do obdobia.
+func deductionDate(p purchase.Purchase) invoice.Date {
+	when := p.ReceivedDate
+	if p.DeliveryDate.After(when) {
+		when = p.DeliveryDate
+	}
+	return when
+}
+
+// originalPurchase nájde pôvodnú faktúru dodávateľa k dobropisu.
+func originalPurchase(cn purchase.Purchase, all []purchase.Purchase) (purchase.Purchase, bool) {
+	want := docKey(cn.CorrectsNumber)
+	for _, o := range all {
+		if o.ID == cn.ID || o.Summary.Base.Sign() < 0 || want == "" || docKey(o.SupplierNumber) != want {
+			continue
+		}
+		same := (cn.ContactID != 0 && o.ContactID == cn.ContactID) ||
+			(cn.Supplier.ICDPH != "" && strings.EqualFold(noSpaces(o.Supplier.ICDPH), noSpaces(cn.Supplier.ICDPH))) ||
+			strings.EqualFold(strings.TrimSpace(o.Supplier.Name), strings.TrimSpace(cn.Supplier.Name))
+		if same {
+			return o, true
+		}
+	}
+	return purchase.Purchase{}, false
+}
+
+// docKey porovná čísla dokladov bez medzier, pomlčiek a lomiek.
+func docKey(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToUpper(s) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// addLateAcquisitionCredits zahrnie do obdobia pôvodného nadobudnutia tovaru
+// z EÚ opravy z dobropisov prijatých neskôr (dodatočné priznanie).
+func (ret *Return) addLateAcquisitionCredits(in Input) {
+	for _, p := range in.Purchases {
+		if p.Summary.Base.Sign() >= 0 || p.NoDeduction && !p.ReverseCharge || !acquisitionCredit(p) || in.Period.Contains(deductionDate(p)) {
+			continue
+		}
+		orig, ok := originalPurchase(p, in.Purchases)
+		if !ok || !in.Period.Contains(deductionDate(orig)) {
+			continue
+		}
+		tax, ok := p.Tax()
+		if !ok {
+			continue
+		}
+		table := creditRows(p)
+		for _, r := range tax.Rates {
+			if _, ok := table[r.Rate]; !ok || r.Rate == 0 {
+				continue
+			}
+			ret.creditRows(p, r, table)
+		}
+		ret.Warnings = append(ret.Warnings, Warning{p.Number, "purchase", p.ID, fmt.Sprintf(
+			"Zahrnutý dobropis %s prijatý %s k nadobudnutiu tovaru z EÚ (oprava pôvodného obdobia) — ak je priznanie podané, podajte dodatočné",
+			p.SupplierNumber, deductionDate(p).Display())})
+	}
 }
 
 // addPurchaseCredit zaradí dobropis od tuzemského platiteľa: zníženie
 // odpočítanej dane do r. 28 (§ 53 ods. 1, kladná suma zvyšuje daň na úhradu)
 // a riadky C.2 so zápornými rozdielmi. Obdobie = doručenie dobropisu.
 // Vráti text upozornenia, ak dobropis nemožno zaradiť.
-func (ret *Return) addPurchaseCredit(p purchase.Purchase, tax purchase.Amounts) string {
+func (ret *Return) addPurchaseCredit(p purchase.Purchase, tax purchase.Amounts, in Input) string {
 	s := p.Supplier
 	switch {
 	case p.ReverseCharge:
-		return ret.addReverseCredit(p, tax)
+		return ret.addReverseCredit(p, tax, in)
 	case foreign(s.Country):
 		return "" // zahraničnú DPH nemožno odpočítať — nie je čo opravovať
 	case p.NoDeduction:

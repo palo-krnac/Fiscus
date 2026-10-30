@@ -206,6 +206,11 @@ func TestTriangularValidation(t *testing.T) {
 			t.Errorf("%s: %v", tt.name, err)
 		}
 	}
+	noRC := foreignInv(1, "FA1", "AT", "ATU12345678", invoice.SupplyTriangular, "100")
+	noRC.ReverseCharge = false
+	if err := noRC.Validate(); err == nil || !strings.Contains(fieldsOf(err), "prenesenie") {
+		t.Errorf("trojstranný obchod bez prenesenia: %v", err)
+	}
 	if n := invoice.ExemptionNote(true, invoice.Party{Country: "AT"}, invoice.SupplyTriangular); !strings.Contains(n, "§ 45") {
 		t.Errorf("text na faktúre: %q", n)
 	}
