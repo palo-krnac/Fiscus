@@ -26,14 +26,16 @@ func TestPurchaseCreditNotes(t *testing.T) {
 	ret := Compute(Input{Period: p, Purchases: []purchase.Purchase{buy, credit, noNumber, noDeduction, foreign, euGoods}})
 	// odpočet z faktúry ostáva, dobropis zvyšuje daň na úhradu cez r. 28;
 	// dobropis k službe zo zahraničia zníži samozdanenie (r. 09b, 10b) aj odpočet (r. 19)
-	if ret.Rows["r19"].String() != "207.00" || ret.Rows["r28"].String() != "46.00" ||
-		ret.Rows["r09b"].String() != "-100.00" || ret.Rows["r10b"].String() != "-23.00" {
+	// dobropis k tovaru z DE bez nájdenej pôvodnej faktúry: oprava v tomto období (r. 07–08)
+	if ret.Rows["r19"].String() != "184.00" || ret.Rows["r28"].String() != "46.00" ||
+		ret.Rows["r09b"].String() != "-100.00" || ret.Rows["r10b"].String() != "-23.00" ||
+		ret.Rows["r07"].String() != "-100.00" || ret.Rows["r08"].String() != "-23.00" {
 		t.Fatalf("riadky: %+v", ret.Rows)
 	}
-	if want := "161.00"; ret.Deduction.Sub(ret.Rows["r28"]).String() != want {
+	if want := "138.00"; ret.Deduction.Sub(ret.Rows["r28"]).String() != want {
 		t.Fatalf("odpočet po oprave: %s - %s", ret.Deduction, ret.Rows["r28"])
 	}
-	if len(ret.KV.C2) != 2 {
+	if len(ret.KV.C2) != 3 {
 		t.Fatalf("C.2: %+v", ret.KV.C2)
 	}
 	if f := ret.KV.C2[1]; f.Partner != "CZ12345678" || f.Original != "F1" || f.BaseDiff.String() != "-100.00" || f.DeductedDiff.String() != "-23.00" {
@@ -48,7 +50,7 @@ func TestPurchaseCreditNotes(t *testing.T) {
 	for _, w := range ret.Warnings {
 		msgs = append(msgs, w.Message)
 	}
-	if len(msgs) != 2 || !strings.Contains(msgs[0], "čísla pôvodnej faktúry") || !strings.Contains(msgs[1], "nadobudnutiu tovaru z EÚ") {
+	if len(msgs) != 2 || !strings.Contains(msgs[0], "čísla pôvodnej faktúry") || !strings.Contains(msgs[1], "R7 sa vo Fiškuse nenašla") {
 		t.Fatalf("upozornenia: %q", msgs)
 	}
 	kv := string(KVXML(ret, Taxpayer{Name: "Firma", DIC: "2020372640", ICDPH: "SK2020372640", City: "Zvolen"}))
@@ -117,5 +119,39 @@ func TestA2CreditNote(t *testing.T) {
 		if !strings.Contains(kv, s) {
 			t.Errorf("XML bez %s:\n%s", s, kv)
 		}
+	}
+}
+
+// TestAcquisitionCreditPeriod: dobropis k nadobudnutiu tovaru z EÚ prijatý
+// v novembri opravuje október (r. 07–08, 19 — dodatočné priznanie); C.2 je
+// v novembri.
+func TestAcquisitionCreditPeriod(t *testing.T) {
+	buy := pur(1, "P1", "2026-10-05", "DE123456789", 23, "1000", "230")
+	buy.Supplier.Country, buy.ReverseCharge, buy.SupplyKind, buy.SupplierNumber = "DE", true, invoice.SupplyGoods, "RE-77"
+	buy.Normalize()
+	cn := pur(2, "P2", "2026-11-04", "DE123456789", 23, "-200", "-46")
+	cn.Supplier.Country, cn.ReverseCharge, cn.SupplyKind, cn.CorrectsNumber = "DE", true, invoice.SupplyGoods, "RE 77"
+	cn.Normalize()
+	all := []purchase.Purchase{buy, cn}
+
+	oct, _ := ParsePeriod("2026-10")
+	ret := Compute(Input{Period: oct, Purchases: all})
+	if ret.Rows["r07"].String() != "800.00" || ret.Rows["r08"].String() != "184.00" || ret.Rows["r19"].String() != "184.00" {
+		t.Fatalf("október (opravený): %+v", ret.Rows)
+	}
+	if len(ret.KV.C2) != 0 || len(ret.KV.B1) != 1 || len(ret.Warnings) != 1 || !strings.Contains(ret.Warnings[0].Message, "dodatočné") {
+		t.Fatalf("október KV/upozornenia: %+v %+v", ret.KV.C2, ret.Warnings)
+	}
+
+	nov, _ := ParsePeriod("2026-11")
+	ret = Compute(Input{Period: nov, Purchases: all})
+	if !ret.Rows["r07"].IsZero() || !ret.Rows["r08"].IsZero() || !ret.Rows["r19"].IsZero() {
+		t.Fatalf("november bez opravy riadkov: %+v", ret.Rows)
+	}
+	if len(ret.KV.C2) != 1 || ret.KV.C2[0].BaseDiff.String() != "-200.00" || ret.KV.C2[0].Original != "RE77" {
+		t.Fatalf("november C.2: %+v", ret.KV.C2)
+	}
+	if len(ret.Warnings) != 1 || !strings.Contains(ret.Warnings[0].Message, "október 2026") {
+		t.Fatalf("november upozornenie: %+v", ret.Warnings)
 	}
 }

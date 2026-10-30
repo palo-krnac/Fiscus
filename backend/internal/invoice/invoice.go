@@ -271,6 +271,8 @@ func (inv *Invoice) Validate() error {
 		add("supplyKind", "Pri zahraničnom odberateľovi vyberte, či ide o tovar alebo službu")
 	} else if inv.SupplyKind == SupplyTriangular && (!party.IsEU(c.Country) || c.ICDPH == "" || inv.NonVATPayer) {
 		add("supplyKind", ErrTriangular)
+	} else if inv.SupplyKind == SupplyTriangular && !inv.ReverseCharge {
+		add("reverseCharge", "Pri trojstrannom obchode označte prenesenie daňovej povinnosti — faktúra je bez DPH")
 	}
 	if len(inv.Lines) == 0 {
 		add("lines", "Faktúra musí mať aspoň jednu položku")

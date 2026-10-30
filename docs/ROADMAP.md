@@ -57,7 +57,7 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] Dobropisy od tuzemských dodávateľov: oprava odpočítanej dane v r. 28 a riadky C.2 (číslo pôvodnej faktúry)
 - [x] Pomerné odpočítanie DPH (§ 50): spoločné nákupy (prijaté faktúry, bloky) s predbežným koeficientom roka, ročný koeficient z plnení vo Fiškuse (alebo ručne), vysporiadanie v poslednom období roka v r. 18–19, prepočet pri zmene koeficientu v nepodaných obdobiach
 - [x] Dobropisy pri prenesení daňovej povinnosti (služby zo zahraničia, tuzemské § 69 ods. 12): zníženie samozdanenia v r. 09–10 a odpočtu v r. 18–19, C.2 v období prijatia
-- [ ] Dobropis k nadobudnutiu tovaru z EÚ (oprava v období pôvodného nadobudnutia, dodatočné priznanie)
+- [x] Dobropis k nadobudnutiu tovaru z EÚ: oprava r. 05–08 (trojstranný r. 11–12) a odpočtu v období pôvodného nadobudnutia (podľa čísla pôvodnej faktúry), C.2 v období prijatia, upozornenie na dodatočné priznanie
 - [x] Opravné a dodatočné priznanie k DPH (dátum zistenia, r. 36 rozdiel oproti poslednej známej povinnosti, r. 37), opravný KV, záznam o podaní (posledná známa povinnosť, návrh druhu podľa lehoty)
 - [ ] Dodatočný kontrolný výkaz (iba opravované záznamy)
 - [ ] Podanie priamo na portál finančnej správy (vyžaduje autentifikáciu)
