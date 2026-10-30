@@ -101,7 +101,8 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [ ] Jednoduché účtovníctvo ďalej: elektronické uloženie závierky do RÚZ, XML daňového priznania typu B pre eDane
 - [x] Účtový rozvrh: rámcová účtová osnova pre podnikateľov (syntetické účty, druh, nedaňové náklady), analytické účty firmy, skrytie nepoužívaných, strediská a zákazky
 - [x] Predkontácie (vzory zaúčtovania) pre faktúry, nákupy, banku a pokladňu — 23 predvolených, vlastné, kontrola vyrovnania MD = D
-- [ ] Podvojné účtovníctvo: denník, hlavná kniha, automatické účtovanie podľa predkontácií
+- [x] Podvojné účtovníctvo: účtovný denník, hlavná kniha (obratová predvaha), automatické účtovanie faktúr, nákupov, banky a pokladne podľa predkontácií, ručné zápisy, interné doklady, počiatočné stavy
+- [ ] Podvojné účtovníctvo ďalej: strediská a zákazky v zápisoch, kurzové rozdiely, automatické účtovanie záloh a dovozu, analytické účty bánk a pokladníc
 - [ ] Účtovné obdobia, uzávierky, výkazy, uloženie závierky do RÚZ
 - [ ] Daňové priznanie k dani z príjmov (typ A/B pre FO, PO)
 

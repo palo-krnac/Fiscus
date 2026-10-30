@@ -166,6 +166,12 @@ export const api = {
   saveJob: (cid, old, j) =>
     old ? request('PUT', `/api/companies/${cid}/chart/jobs/${encodeURIComponent(old)}`, j) : request('POST', `/api/companies/${cid}/chart/jobs`, j),
   deleteJob: (cid, code) => request('DELETE', `/api/companies/${cid}/chart/jobs/${encodeURIComponent(code)}`),
+  ledger: (cid, year) => request('GET', `/api/companies/${cid}/ledger` + query({ year })),
+  setPosting: (cid, year, key, body) => request('PUT', `/api/companies/${cid}/ledger/${year}/postings/${encodeURIComponent(key)}`, body),
+  setLedgerOpening: (cid, year, lines) => request('PUT', `/api/companies/${cid}/ledger/${year}/opening`, { lines }),
+  saveInternal: (cid, year, doc) =>
+    doc.id ? request('PUT', `/api/companies/${cid}/ledger/${year}/internal/${doc.id}`, doc) : request('POST', `/api/companies/${cid}/ledger/${year}/internal`, doc),
+  deleteInternal: (cid, year, id) => request('DELETE', `/api/companies/${cid}/ledger/${year}/internal/${id}`),
   saveTemplate: (cid, old, t) =>
     old ? request('PUT', `/api/companies/${cid}/chart/templates/${encodeURIComponent(old)}`, t) : request('POST', `/api/companies/${cid}/chart/templates`, t),
   deleteTemplate: (cid, code) => request('DELETE', `/api/companies/${cid}/chart/templates/${encodeURIComponent(code)}`),

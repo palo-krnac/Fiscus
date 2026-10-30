@@ -253,6 +253,8 @@ var DefaultTemplates = []Template{
 		{Debit, "221", PartTotal}, {Credit, "311", PartTotal}}},
 	{Code: "B-DODAVATEL", Name: "Úhrada dodávateľovi", Doc: DocBank, Lines: []TemplateLine{
 		{Debit, "321", PartTotal}, {Credit, "221", PartTotal}}},
+	{Code: "B-ZALOHA", Name: "Prijatý preddavok od odberateľa (zálohová faktúra)", Doc: DocBank, Lines: []TemplateLine{
+		{Debit, "221", PartTotal}, {Credit, "324", PartTotal}}},
 	{Code: "B-POPLATKY", Name: "Bankové poplatky", Doc: DocBank, Lines: []TemplateLine{
 		{Debit, "568", PartTotal}, {Credit, "221", PartTotal}}},
 	{Code: "B-UROKY", Name: "Prijaté úroky", Doc: DocBank, Lines: []TemplateLine{
@@ -269,6 +271,10 @@ var DefaultTemplates = []Template{
 		{Debit, "501", PartBase}, {Debit, "501", PartVATNon}, {Debit, "343", PartVAT}, {Credit, "211", PartTotal}}},
 	{Code: "P-ODBERATEL", Name: "Pokladňa – úhrada faktúry v hotovosti", Doc: DocCash, Lines: []TemplateLine{
 		{Debit, "211", PartTotal}, {Credit, "311", PartTotal}}},
+	{Code: "P-DODAVATEL", Name: "Pokladňa – úhrada faktúry dodávateľovi", Doc: DocCash, Lines: []TemplateLine{
+		{Debit, "321", PartTotal}, {Credit, "211", PartTotal}}},
+	{Code: "P-VKLAD-PODN", Name: "Pokladňa – vklad podnikateľa (fyzická osoba)", Doc: DocCash, Lines: []TemplateLine{
+		{Debit, "211", PartTotal}, {Credit, "491", PartTotal}}},
 	{Code: "P-VKLAD", Name: "Pokladňa – príjem z banky", Doc: DocCash, Lines: []TemplateLine{
 		{Debit, "211", PartTotal}, {Credit, "261", PartTotal}}},
 	{Code: "ID-ODPISY", Name: "Odpisy dlhodobého hmotného majetku", Doc: DocInternal, Lines: []TemplateLine{
