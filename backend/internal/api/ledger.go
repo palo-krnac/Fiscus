@@ -38,11 +38,12 @@ func (s *Server) setPosting(w http.ResponseWriter, r *http.Request) {
 		Template string        `json:"template"`
 		Lines    []ledger.Line `json:"lines"`
 		Note     string        `json:"note"`
+		ledger.Dims
 	}
 	if !decode(w, r, &body) {
 		return
 	}
-	if err := s.App.SetPosting(r.Context(), cid, pathYear(r), r.PathValue("key"), body.Template, body.Lines, body.Note); err != nil {
+	if err := s.App.SetPosting(r.Context(), cid, pathYear(r), r.PathValue("key"), body.Template, body.Lines, body.Note, body.Dims); err != nil {
 		fail(w, err)
 		return
 	}
@@ -128,4 +129,20 @@ func (s *Server) openingProposal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, lines)
+}
+
+func (s *Server) setMoneyAccounts(w http.ResponseWriter, r *http.Request) {
+	cid, ok := s.company(w, r)
+	if !ok {
+		return
+	}
+	var body map[string]string
+	if !decode(w, r, &body) {
+		return
+	}
+	if err := s.App.SetMoneyAccounts(r.Context(), cid, body); err != nil {
+		fail(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

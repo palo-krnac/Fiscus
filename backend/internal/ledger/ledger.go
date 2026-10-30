@@ -21,6 +21,29 @@ type Line struct {
 	Name    string    `json:"name,omitempty"` // názov účtu na zobrazenie
 	Debit   money.Dec `json:"debit"`
 	Credit  money.Dec `json:"credit"`
+	// Center a Job sú stredisko a zákazka (iba náklady a výnosy).
+	Center string `json:"center,omitempty"`
+	Job    string `json:"job,omitempty"`
+}
+
+// Dims sú stredisko a zákazka dokladu.
+type Dims struct {
+	Center string `json:"center,omitempty"`
+	Job    string `json:"job,omitempty"`
+}
+
+// Empty vráti true bez strediska aj zákazky.
+func (d Dims) Empty() bool { return d.Center == "" && d.Job == "" }
+
+// ApplyDims priradí stredisko a zákazku nákladovým a výnosovým riadkom.
+func ApplyDims(lines []Line, d Dims) {
+	for i := range lines {
+		if c := lines[i].Account; c != "" && (c[0] == '5' || c[0] == '6') {
+			lines[i].Center, lines[i].Job = d.Center, d.Job
+		} else {
+			lines[i].Center, lines[i].Job = "", ""
+		}
+	}
 }
 
 // Posting je zápis v účtovnom denníku: jeden doklad a jeho riadky.
@@ -38,7 +61,8 @@ type Posting struct {
 	Template string `json:"template,omitempty"`
 	Manual   bool   `json:"manual,omitempty"`
 	Note     string `json:"note,omitempty"`
-	Lines    []Line `json:"lines"`
+	Dims
+	Lines []Line `json:"lines"`
 	// Problem: doklad nie je zaúčtovaný alebo zápis nie je v poriadku.
 	Problem string `json:"problem,omitempty"`
 }
@@ -109,7 +133,7 @@ func CheckLines(lines []Line, c chart.Chart) error {
 // pokladnica (21x), bankové účty (22x) a peniaze na ceste (261).
 func MoneySide(t chart.Template) int {
 	for _, l := range t.Lines {
-		if !isMoney(l.Account, t.Doc) {
+		if !IsMoney(l.Account, t.Doc) {
 			continue
 		}
 		if l.Side == chart.Debit {
@@ -120,7 +144,8 @@ func MoneySide(t chart.Template) int {
 	return 0
 }
 
-func isMoney(acc string, doc chart.DocKind) bool {
+// IsMoney vráti true pre peňažný účet dokladu (pokladnica, banka).
+func IsMoney(acc string, doc chart.DocKind) bool {
 	switch doc {
 	case chart.DocCash:
 		return strings.HasPrefix(acc, "21")
@@ -242,4 +267,61 @@ func Sort(ps []Posting) {
 		}
 		return a.Number < b.Number
 	})
+}
+
+// DimTurnover sú náklady, výnosy a výsledok strediska alebo zákazky.
+type DimTurnover struct {
+	Kind     string    `json:"kind"` // center | job
+	Code     string    `json:"code"`
+	Name     string    `json:"name"`
+	Costs    money.Dec `json:"costs"`
+	Revenues money.Dec `json:"revenues"`
+	Result   money.Dec `json:"result"`
+}
+
+// DimBook spočíta náklady (trieda 5) a výnosy (trieda 6) po strediskách
+// a zákazkách zo zápisov bez problému.
+func DimBook(postings []Posting, names map[string]string) []DimTurnover {
+	m := map[string]*DimTurnover{}
+	add := func(kind, code string, l Line) {
+		if code == "" {
+			return
+		}
+		k := kind + ":" + code
+		t, ok := m[k]
+		if !ok {
+			t = &DimTurnover{Kind: kind, Code: code, Name: names[k]}
+			m[k] = t
+		}
+		switch l.Account[0] {
+		case '5':
+			t.Costs = t.Costs.Add(l.Debit).Sub(l.Credit)
+		case '6':
+			t.Revenues = t.Revenues.Add(l.Credit).Sub(l.Debit)
+		}
+		t.Result = t.Revenues.Sub(t.Costs)
+	}
+	for _, p := range postings {
+		if p.Problem != "" {
+			continue
+		}
+		for _, l := range p.Lines {
+			if l.Account == "" {
+				continue
+			}
+			add("center", l.Center, l)
+			add("job", l.Job, l)
+		}
+	}
+	out := make([]DimTurnover, 0, len(m))
+	for _, t := range m {
+		out = append(out, *t)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Kind != out[j].Kind {
+			return out[i].Kind < out[j].Kind
+		}
+		return out[i].Code < out[j].Code
+	})
+	return out
 }

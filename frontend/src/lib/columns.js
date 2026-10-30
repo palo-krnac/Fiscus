@@ -505,6 +505,8 @@ export const postingColumns = [
   t('Názov účtu', (r) => r.line.name, 30),
   money('MD', (r) => nz(r.line.debit)),
   money('D', (r) => nz(r.line.credit)),
+  t('Stredisko', (r) => r.line.center, 10),
+  t('Zákazka', (r) => r.line.job, 12),
   t('Predkontácia', (r) => (r.manual ? 'ručne' : r.template), 14),
   t('Problém', (r) => r.problem, 30),
 ]
@@ -533,3 +535,13 @@ export function ledgerStatementColumns(balance = true, previousEmpty = false) {
   cols.push(t('Účty', (r) => r.accounts, 40))
   return cols
 }
+
+/** Náklady a výnosy po strediskách a zákazkách. */
+export const dimColumns = [
+  t('Druh', (r) => (r.kind === 'center' ? 'stredisko' : 'zákazka'), 10),
+  t('Kód', (r) => r.code, 14),
+  t('Názov', (r) => r.name, 36),
+  money('Náklady', (r) => r.costs),
+  money('Výnosy', (r) => r.revenues),
+  money('Výsledok', (r) => r.result),
+]
