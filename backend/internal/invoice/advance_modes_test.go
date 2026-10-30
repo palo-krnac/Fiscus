@@ -34,13 +34,13 @@ func TestAdvanceMode(t *testing.T) {
 			i.Lines[0].Reverse = RCConstruction
 			i.Lines = append(i.Lines, ln("Materiál", "1", "50", 23))
 		}, AdvanceReceipt},
-		{"prenesenie pri tovare", func(i *Invoice) { i.Lines[0].Reverse = RCPhones }, AdvanceManual},
+		{"prenesenie pri tovare", func(i *Invoice) { i.Lines[0].Reverse = RCPhones }, AdvanceReceipt},
 		{"dva druhy prenesenia", func(i *Invoice) {
 			i.Lines[0].Reverse = RCConstruction
 			l := ln("Šrot", "1", "50", 23)
 			l.Reverse = RCScrap
 			i.Lines = append(i.Lines, l)
-		}, AdvanceManual},
+		}, AdvanceReceipt},
 		{"prenesenie bez druhu v tuzemsku", func(i *Invoice) { i.ReverseCharge = true }, AdvanceManual},
 	}
 	for _, c := range cases {

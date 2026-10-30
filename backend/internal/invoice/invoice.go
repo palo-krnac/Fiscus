@@ -90,6 +90,16 @@ type Line struct {
 	// Commodity je kód colného sadzobníka (plodiny, kovy) pre kontrolný výkaz.
 	Reverse   DomesticRC `json:"reverse,omitempty"`
 	Commodity string     `json:"commodity,omitempty"`
+	// A2 je množstvo tovaru pre KV A.2, ak sa líši od položky: doklad
+	// k prijatej platbe pri prenesení pri tovare uvádza celé množstvo
+	// dodávky (iba prvý doklad — množstvo sa vykazuje len raz).
+	A2 *A2Qty `json:"a2,omitempty"`
+}
+
+// A2Qty je množstvo a merná jednotka tovaru v časti A.2 kontrolného výkazu.
+type A2Qty struct {
+	Quantity money.Dec `json:"quantity"`
+	Unit     string    `json:"unit"` // t, kg, m, ks
 }
 
 // Invoice je vydaná faktúra.

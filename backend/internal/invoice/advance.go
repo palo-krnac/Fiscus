@@ -91,6 +91,50 @@ type Deduction struct {
 	// Untaxed: k platbe sa nevyhotovil daňový doklad — odpočíta sa iba
 	// z úhrady, DPH je z celej dodávky (UntaxedForeign, UntaxedWithin15).
 	Untaxed string `json:"untaxed,omitempty"`
+	// A2 sú časti dokladu k platbe s tuzemským prenesením (KV A.2) po druhoch
+	// a kódoch tovaru — vyúčtovanie ich odpočíta z rovnakých riadkov A.2.
+	A2 []A2Part `json:"a2,omitempty"`
+}
+
+// A2Part je základ dokladu k platbe s prenesením pre jeden riadok A.2.
+type A2Part struct {
+	Reverse   DomesticRC `json:"reverse"`
+	Commodity string     `json:"commodity,omitempty"`
+	Base      money.Dec  `json:"base"`
+	// Quantity: doklad k platbe už uviedol množstvo tovaru — vyúčtovanie ho neuvádza.
+	Quantity bool `json:"quantity,omitempty"`
+}
+
+// A2Key je kľúč riadka A.2: druh prenesenia a kód tovaru.
+func A2Key(k DomesticRC, commodity string) string {
+	code := ""
+	if k.NeedsCode() {
+		code = CommodityCode(commodity)
+	}
+	return string(k) + "/" + code
+}
+
+// a2Parts vráti časti dokladu k platbe s prenesením po riadkoch A.2.
+func a2Parts(r Invoice) []A2Part {
+	var out []A2Part
+	idx := map[string]int{}
+	for _, l := range r.Lines {
+		if !l.Reverse.Reported() {
+			continue
+		}
+		key := A2Key(l.Reverse, l.Commodity)
+		i, ok := idx[key]
+		if !ok {
+			i = len(out)
+			idx[key] = i
+			out = append(out, A2Part{Reverse: l.Reverse, Commodity: CommodityCode(l.Commodity)})
+		}
+		out[i].Base = out[i].Base.Add(l.Amount)
+		if l.A2 != nil {
+			out[i].Quantity = true
+		}
+	}
+	return out
 }
 
 // Dôvody odpočtu zálohy bez daňového dokladu k platbe.
@@ -157,19 +201,6 @@ func (inv *Invoice) AdvanceMode() (AdvanceMode, string) {
 	} else {
 		if inv.ReverseCharge {
 			return AdvanceManual, "Pri odberateľovi v tuzemsku vyberte prenesenie pri položkách (§ 69 ods. 12)"
-		}
-		kinds := map[DomesticRC]bool{}
-		for _, l := range inv.Lines {
-			if l.Reverse == "" {
-				continue
-			}
-			if l.Reverse.Goods() {
-				return AdvanceManual, "Zálohu s prenesením daňovej povinnosti pri tovare (množstvo v KV A.2) zatiaľ vyúčtujte ručne"
-			}
-			kinds[l.Reverse] = true
-		}
-		if len(kinds) > 1 {
-			return AdvanceManual, "Zálohu s viacerými druhmi prenesenia daňovej povinnosti zatiaľ vyúčtujte ručne"
 		}
 	}
 	if inv.Within15 {
@@ -258,18 +289,14 @@ func NewAdvanceReceipt(proforma Invoice, amount money.Dec, paid, issue Date) (In
 	if len(proforma.Lines) > 0 && proforma.Lines[0].Description != "" {
 		what += " – " + proforma.Lines[0].Description
 	}
-	var rc DomesticRC // tuzemské prenesenie: druh plnenia (jediný, nie tovar)
-	for _, l := range proforma.Lines {
-		if l.Reverse != "" {
-			rc = l.Reverse
-		}
-	}
+	// množstvo tovaru s prenesením sa v KV uvádza raz — na prvom doklade
+	first := len(proforma.AllReceipts()) == 0
 	for _, part := range splitByRates(proforma.Summary, amount) {
-		l := Line{Description: what, Quantity: money.FromInt(1), Unit: "", UnitPrice: part.Total, Rate: part.Rate}
-		if part.Reverse {
-			l.Reverse = rc
+		if !part.Reverse {
+			r.Lines = append(r.Lines, Line{Description: what, Quantity: money.FromInt(1), UnitPrice: part.Total, Rate: part.Rate})
+			continue
 		}
-		r.Lines = append(r.Lines, l)
+		r.Lines = append(r.Lines, reverseReceiptLines(proforma.Lines, part, what, first)...)
 	}
 	if len(r.Lines) == 0 {
 		return Invoice{}, errors.New("zálohová faktúra nemá sumu")
@@ -278,6 +305,78 @@ func NewAdvanceReceipt(proforma Invoice, amount money.Dec, paid, issue Date) (In
 		return Invoice{}, err
 	}
 	return r, nil
+}
+
+// reverseReceiptLines rozdelí časť platby s tuzemským prenesením na riadky
+// A.2 (druh prenesenia a kód tovaru) v pomere ich základu v zálohovej
+// faktúre; posledný dostane zvyšok. Pri tovare prvý doklad nesie celé
+// množstvo dodávky pre kontrolný výkaz.
+func reverseReceiptLines(lines []Line, part vat.RateSummary, what string, first bool) []Line {
+	type group struct {
+		line  Line
+		base  money.Dec
+		qty   money.Dec
+		mixed bool
+	}
+	var order []string
+	groups := map[string]*group{}
+	var total money.Dec
+	for _, l := range lines {
+		if l.Reverse == "" {
+			continue
+		}
+		key := A2Key(l.Reverse, l.Commodity)
+		g, ok := groups[key]
+		if !ok {
+			g = &group{line: Line{Quantity: money.FromInt(1), Rate: part.Rate, Reverse: l.Reverse, Commodity: CommodityCode(l.Commodity)}}
+			if l.Reverse.Goods() {
+				g.line.A2 = &A2Qty{Unit: KVUnit(l.Unit)}
+			}
+			groups[key] = g
+			order = append(order, key)
+		}
+		amt := l.Quantity.Mul(l.UnitPrice).RoundCents()
+		g.base = g.base.Add(amt)
+		total = total.Add(amt)
+		if g.line.A2 != nil {
+			if KVUnit(l.Unit) != g.line.A2.Unit {
+				g.mixed = true
+			}
+			g.qty = g.qty.Add(l.Quantity)
+		}
+	}
+	if len(order) == 0 || total.IsZero() {
+		return []Line{{Description: what, Quantity: money.FromInt(1), UnitPrice: part.Total, Rate: part.Rate}}
+	}
+	var out []Line
+	rest := part.Total
+	for i, key := range order {
+		g := groups[key]
+		amt := rest
+		if i < len(order)-1 {
+			amt = part.Total.MulRatio(g.base, total).RoundCents()
+			rest = rest.Sub(amt)
+		}
+		l := g.line
+		l.UnitPrice = amt
+		l.Description = what
+		if len(order) > 1 || l.Reverse.Goods() {
+			l.Description += " – " + l.Reverse.Label()
+			if l.Commodity != "" {
+				l.Description += " (kód " + l.Commodity + ")"
+			}
+		}
+		if l.A2 != nil {
+			if !first || g.mixed {
+				l.A2 = nil // množstvo už uviedol prvý doklad (pri rôznych jednotkách doplňte ručne)
+			} else {
+				l.A2.Quantity = g.qty.RoundCents()
+				l.Description += fmt.Sprintf(", celé množstvo dodávky %s %s", l.A2.Quantity.Display(), l.A2.Unit)
+			}
+		}
+		out = append(out, l)
+	}
+	return out
 }
 
 // splitByRates rozdelí sumu na sadzby v pomere súm (s DPH) rekapitulácie;
@@ -362,7 +461,7 @@ func advanceDeductions(proforma Invoice, receipts []Invoice) ([]Deduction, error
 	var covered money.Dec
 	for _, r := range receipts {
 		deductions = append(deductions, Deduction{ProformaID: proforma.ID, ProformaNumber: proforma.Number, ReceiptID: r.ID, Number: r.Number, Date: r.DeliveryDate,
-			Rates: append([]vat.RateSummary(nil), r.Summary.Rates...), Total: r.Summary.Total})
+			Rates: append([]vat.RateSummary(nil), r.Summary.Rates...), Total: r.Summary.Total, A2: a2Parts(r)})
 		covered = covered.Add(r.Summary.Total)
 	}
 	switch mode {
