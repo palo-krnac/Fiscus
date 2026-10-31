@@ -1,6 +1,8 @@
 package moneys3
 
 import (
+	"archive/zip"
+	"bytes"
 	"errors"
 	"os"
 	"testing"
@@ -63,5 +65,28 @@ func TestParseErrors(t *testing.T) {
 	}
 	if _, err := Parse([]byte(`<MoneyData><SeznamFirem><Firma>`)); err == nil {
 		t.Error("nedokončené XML má byť chyba")
+	}
+}
+
+func TestParseArchive(t *testing.T) {
+	raw, err := os.ReadFile("testdata/export.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for _, n := range []string{"faktury.xml", "adresar.XML"} {
+		w, _ := zw.Create(n)
+		w.Write(raw)
+	}
+	w, _ := zw.Create("info.txt")
+	w.Write([]byte("x"))
+	zw.Close()
+	d, err := ParseArchive(buf.Bytes(), 1<<20)
+	if err != nil || len(d.Invoices) != 12 || d.Other["ObjPrij"] != 2 {
+		t.Errorf("%d %v %v", len(d.Invoices), d.Other, err)
+	}
+	if _, err := ParseArchive(buf.Bytes(), 100); err == nil {
+		t.Error("príliš veľký archív")
 	}
 }

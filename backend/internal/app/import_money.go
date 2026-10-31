@@ -23,7 +23,7 @@ func (a *App) ImportMoney(ctx context.Context, companyID int64, data []byte, opt
 	if err := a.requireMigrate(ctx, companyID); err != nil {
 		return ImportReport{}, err
 	}
-	d, err := moneys3.Parse(data)
+	d, err := moneys3.ParseArchive(data, MaxMigrateBytes)
 	if err != nil {
 		return ImportReport{Source: "Money S3", Warnings: []string{}, Other: map[string]int{}}, mfaFieldErr("file", err.Error())
 	}
