@@ -816,6 +816,65 @@ func Run(t *testing.T, newStore Factory) {
 		}
 	})
 
+	t.Run("skladová karta a obrázky", func(t *testing.T) {
+		s := newStore(t)
+		a, _ := s.CreateCompany(ctx, store.Company{Name: "Alfa"})
+		b, _ := s.CreateCompany(ctx, store.Company{Name: "Beta"})
+		it := &catalog.Item{Code: "CYKY", Name: "Kábel CYKY 3x2,5", Unit: "m", Price: m.MustParse("1.20"), PriceMode: vat.PriceNet, Rate: 23,
+			EAN: "5901234123457", Category: "Káble / Silové", Brand: "NKT", Supplier: "Elektro VO", SupplierCode: "NKT-3x25",
+			PurchasePrice: m.MustParse("0.8123"), Weight: m.MustParse("0.125"), Description: "Silový kábel\ndo zeme",
+			Params: []catalog.Param{{Name: "Prierez", Value: "2,5", Unit: "mm²"}, {Name: "Počet žíl", Value: "3"}}}
+		if err := s.SaveItem(ctx, a.ID, it); err != nil {
+			t.Fatal(err)
+		}
+		it.Params[0].Value = "zmenené" // úložisko má vlastnú kópiu
+		got, err := s.GetItem(ctx, a.ID, it.ID)
+		it.Params[0].Value = "2,5"
+		if err != nil || !reflect.DeepEqual(got, *it) {
+			t.Fatalf("karta:\n got %+v\nwant %+v", got, *it)
+		}
+		// obrázky: poradie, dáta, cudzia firma, zmazanie s položkou
+		var ids []int64
+		for i, n := range []string{"a.jpg", "b.png", "c.webp"} {
+			im := &store.ItemImage{CompanyID: a.ID, ItemID: it.ID, Name: n, ContentType: "image/jpeg", Data: []byte{byte(i), 1, 2}, Created: time.Date(2026, 10, 31, 0, 0, 0, 0, time.UTC)}
+			if err := s.AddItemImage(ctx, im); err != nil || im.ID == 0 || im.Position != i || im.Size != 3 {
+				t.Fatalf("pridanie %+v %v", im, err)
+			}
+			ids = append(ids, im.ID)
+		}
+		if err := s.AddItemImage(ctx, &store.ItemImage{CompanyID: b.ID, ItemID: it.ID, Data: []byte{1}}); !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("cudzia firma pridala: %v", err)
+		}
+		if err := s.SetItemImageOrder(ctx, a.ID, it.ID, []int64{ids[2], ids[0], ids[1]}); err != nil {
+			t.Fatal(err)
+		}
+		list, _ := s.ListItemImages(ctx, a.ID, it.ID)
+		if len(list) != 3 || list[0].Name != "c.webp" || list[0].Data != nil || list[1].Name != "a.jpg" {
+			t.Fatalf("poradie %+v", list)
+		}
+		one, err := s.GetItemImage(ctx, a.ID, ids[1])
+		if err != nil || one.Name != "b.png" || len(one.Data) != 3 || one.Data[0] != 1 || !one.Created.Equal(time.Date(2026, 10, 31, 0, 0, 0, 0, time.UTC)) {
+			t.Fatalf("obrázok %+v %v", one, err)
+		}
+		if _, err := s.GetItemImage(ctx, b.ID, ids[1]); !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("cudzia firma číta: %v", err)
+		}
+		if err := s.SetItemImageOrder(ctx, b.ID, it.ID, ids); !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("cudzia firma triedi: %v", err)
+		}
+		if err := s.DeleteItemImage(ctx, a.ID, ids[0]); err != nil {
+			t.Fatal(err)
+		}
+		if l, _ := s.ListItemImages(ctx, a.ID, it.ID); len(l) != 2 {
+			t.Errorf("po zmazaní %d", len(l))
+		}
+		if err := s.DeleteItem(ctx, a.ID, it.ID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.GetItemImage(ctx, a.ID, ids[1]); !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("obrázok po zmazaní položky: %v", err)
+		}
+	})
 	t.Run("cenník", func(t *testing.T) {
 		s := newStore(t)
 		a, _ := s.CreateCompany(ctx, store.Company{Name: "Alfa"})

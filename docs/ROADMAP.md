@@ -116,6 +116,7 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 ## Etapa 3 — sklad a majetok
 - [x] Sklad: skladové položky z cenníka, viac skladov, príjemky, výdajky, inventúrne rozdiely, ocenenie váženým priemerom, výdajka z vystavenej faktúry a vrátenie k dobropisu, zaúčtovanie (132/131, 504/132…), zásoby vo výkaze o majetku
 - [x] Sklad: FIFO alebo vážený priemer v nastaveniach, presun medzi skladmi, príjemka k prijatej faktúre, odkaz pre e-shop (zásoby JSON/CSV, objednávky → výdajky)
+- [x] Karta produktu: EAN s kontrolou, kategória, značka, dodávateľ a jeho kód, nákupná cena, hmotnosť, technické parametre, popis, až 10 obrázkov (hlavný v zozname), stav a hodnota po skladoch, všetky pohyby s hľadaním a exportom; zaradenie na sklad priamo z karty; import cenníka tieto údaje načíta a chýbajúce stĺpce neprepíše
 - [x] Register dlhodobého majetku s daňovými odpismi (§ 22 – 29 ZDP): skupiny 0 – 6, rovnomerné a zrýchlené odpisovanie, pomerná časť v roku zaradenia, podiel na podnikaní, vyradenie (ZC do výdavkov), odpisový plán, väzba na prijatú faktúru, hľadanie a export
 - [x] Odpisy z registra jedným tlačidlom do uzávierky roka (stĺpec e6); zostatkové ceny do výkazu o majetku a záväzkoch (r. 01, 02) a tabuľky 1a DP typ B
 - [ ] Účtovné odpisy, technické zhodnotenie, prerušenie odpisovania, prenájom (§ 27 ods. 2)

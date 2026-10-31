@@ -804,6 +804,31 @@ func seedStock(ctx context.Context, a *app.App, c store.Company, contactIDs []in
 	if cable.ID == 0 || drive.ID == 0 {
 		return nil
 	}
+	// karty produktov: čiarový kód, kategória, parametre, obrázky
+	cable.EAN, cable.Category, cable.Brand = "8585012345674", "Káble / Silové", "NKT"
+	cable.Supplier, cable.SupplierCode, cable.PurchasePrice, cable.Weight = "Elektro veľkoobchod BB s.r.o.", "CYKY-J-5X2,5", m.MustParse("1.42"), m.MustParse("0.31")
+	cable.Description = "Silový kábel s medenými jadrami a PVC izoláciou na pevné uloženie v budovách, v zemi aj v betóne."
+	cable.Params = []catalog.Param{{Name: "Počet žíl", Value: "5"}, {Name: "Prierez", Value: "2,5", Unit: "mm²"}, {Name: "Menovité napätie", Value: "0,6/1", Unit: "kV"},
+		{Name: "Materiál jadra", Value: "meď"}, {Name: "Vonkajší priemer", Value: "13,2", Unit: "mm"}}
+	drive.EAN, drive.Category, drive.Brand = "4047028765432", "Pohony / Frekvenčné meniče", "Siemens"
+	drive.Supplier, drive.SupplierCode, drive.PurchasePrice, drive.Weight = "Elektro veľkoobchod BB s.r.o.", "6SL3210-1KE21-3UF1", m.MustParse("279.90"), m.MustParse("2.2")
+	drive.Description = "Kompaktný frekvenčný menič na riadenie otáčok trojfázových motorov — čerpadlá, ventilátory, dopravníky."
+	drive.Params = []catalog.Param{{Name: "Výkon", Value: "4", Unit: "kW"}, {Name: "Napájanie", Value: "3× 400", Unit: "V"}, {Name: "Výstupný prúd", Value: "8,8", Unit: "A"},
+		{Name: "Krytie", Value: "IP20"}, {Name: "Komunikácia", Value: "PROFINET, Modbus RTU"}}
+	for _, it := range []*catalog.Item{&cable, &drive} {
+		if _, err := a.SaveItem(ctx, c.ID, *it); err != nil {
+			return err
+		}
+	}
+	for _, p := range []struct {
+		id   int64
+		name string
+		data []byte
+	}{{drive.ID, "menic-predok.png", drivePicture(false)}, {drive.ID, "menic-bok.png", drivePicture(true)}, {cable.ID, "cyky-kotuc.png", cablePicture()}} {
+		if _, err := a.AddItemImage(ctx, c.ID, p.id, p.name, p.data); err != nil {
+			return err
+		}
+	}
 	if _, err := a.SaveStockConfig(ctx, c.ID, app.StockConfig{
 		Warehouses: []app.Warehouse{{Code: "HL", Name: "Hlavný sklad – Banská Bystrica"}, {Code: "ZV", Name: "Príručný sklad Zvolen"}},
 		Items:      []app.StockItem{{ItemID: cable.ID, Kind: stock.Goods, Min: m.MustParse("100")}, {ItemID: drive.ID, Kind: stock.Goods, Min: m.MustParse("2")}},

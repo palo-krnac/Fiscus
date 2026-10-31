@@ -15,6 +15,7 @@ func (s *Store) ListItems(_ context.Context, companyID int64) ([]catalog.Item, e
 	out := []catalog.Item{}
 	for _, it := range s.items {
 		if it.CompanyID == companyID {
+			it.Params = append([]catalog.Param(nil), it.Params...)
 			out = append(out, it)
 		}
 	}
@@ -40,6 +41,7 @@ func (s *Store) GetItem(_ context.Context, companyID, id int64) (catalog.Item, e
 	if !ok || it.CompanyID != companyID {
 		return catalog.Item{}, store.ErrNotFound
 	}
+	it.Params = append([]catalog.Param(nil), it.Params...)
 	return it, nil
 }
 
@@ -65,7 +67,9 @@ func (s *Store) SaveItem(_ context.Context, companyID int64, it *catalog.Item) e
 		it.ID = s.id()
 	}
 	it.CompanyID = companyID
-	s.items[it.ID] = *it
+	cp := *it
+	cp.Params = append([]catalog.Param(nil), it.Params...)
+	s.items[it.ID] = cp
 	return nil
 }
 
@@ -76,5 +80,10 @@ func (s *Store) DeleteItem(_ context.Context, companyID, id int64) error {
 		return store.ErrNotFound
 	}
 	delete(s.items, id)
+	for k, im := range s.images {
+		if im.ItemID == id {
+			delete(s.images, k)
+		}
+	}
 	return nil
 }

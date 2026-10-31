@@ -20,7 +20,7 @@ import ExportButton from '../components/ExportButton.vue'
 import { api, ApiError } from '../lib/api.js'
 import { session, can } from '../lib/session.js'
 import { codes, ratesOn } from '../lib/codes.js'
-import { formatAmount } from '../lib/format.js'
+import { formatAmount, formatQuantity } from '../lib/format.js'
 import { fiskusGridTheme, skGridLocale, gridRows } from '../lib/grid.js'
 import { itemColumns } from '../lib/columns.js'
 import { filterItems, importActions, importErrors, importLabel } from '../lib/catalog.js'
@@ -89,6 +89,7 @@ async function load() {
   loading.value = true
   try {
     items.value = await api.items(session.companyId)
+    applyResponsive()
   } catch (e) {
     toast.add({ severity: 'error', summary: 'Cenník sa nenačítal', detail: e.message, life: 6000 })
   } finally {
@@ -116,10 +117,22 @@ const money = (field, header, extra = {}) => ({
   field, headerName: header, width: 116, type: 'rightAligned',
   valueGetter: (p) => Number(p.data[field]), valueFormatter: (p) => formatAmount(p.value), ...extra,
 })
+// náhľad hlavného obrázka (id je číslo z API, do HTML ide bezpečne)
+const thumb = (p) =>
+  p.data.imageId ? `<img class="thumb" src="${api.itemImageURL(session.companyId, p.data.id, Number(p.data.imageId))}" alt="" loading="lazy">` : ''
 const columnDefs = [
+  { colId: 'img', headerName: '', width: 46, sortable: false, resizable: false, cellRenderer: thumb, cellClass: 'cell-img' },
   { field: 'code', headerName: 'Kód', width: 90, cellClass: 'cell-code' },
   { field: 'name', headerName: 'Názov', flex: 2, minWidth: 180, cellClass: 'cell-name' },
+  { field: 'category', headerName: 'Kategória', flex: 1, minWidth: 120, cellClass: 'cell-code' },
+  { field: 'ean', headerName: 'EAN', width: 124, cellClass: 'cell-code' },
   { field: 'unit', headerName: 'MJ', width: 70 },
+  {
+    colId: 'stock', headerName: 'Sklad', width: 90, type: 'rightAligned',
+    valueGetter: (p) => (p.data.stock === undefined ? null : Number(p.data.stock)),
+    valueFormatter: (p) => (p.value === null ? '' : formatQuantity(p.value)),
+    cellClassRules: { 'cell-neg': (p) => p.value !== null && p.value <= 0 },
+  },
   money('priceNet', 'Bez DPH'),
   { field: 'vatRate', headerName: 'DPH', width: 74, type: 'rightAligned', valueFormatter: (p) => `${p.value} %` },
   money('priceGross', 'S DPH', { cellClass: 'ag-right-aligned-cell cell-name' }),
@@ -128,7 +141,14 @@ const columnDefs = [
 const gridApi = shallowRef(null)
 const narrow = window.matchMedia('(max-width: 760px)')
 function applyResponsive() {
-  gridApi.value?.setColumnsVisible(['code', 'vatRate', 'priceNet'], !narrow.matches)
+  gridApi.value?.setColumnsVisible(['code', 'vatRate', 'priceNet', 'category', 'ean', 'unit'], !narrow.matches)
+  // stĺpce, ktoré nikto nevyplnil, sa neukazujú
+  gridApi.value?.setColumnsVisible(['img'], items.value.some((it) => it.imageId))
+  if (!narrow.matches) {
+    gridApi.value?.setColumnsVisible(['category'], items.value.some((it) => it.category))
+    gridApi.value?.setColumnsVisible(['ean'], items.value.some((it) => it.ean))
+  }
+  gridApi.value?.setColumnsVisible(['stock'], items.value.some((it) => it.stock !== undefined))
   gridApi.value?.sizeColumnsToFit()
 }
 narrow.addEventListener('change', applyResponsive)
@@ -217,7 +237,7 @@ onBeforeUnmount(() => {
       <div class="toolbar">
         <IconField class="search">
           <InputIcon class="pi pi-search" />
-          <InputText v-model="search" placeholder="Hľadať kód, názov, poznámku" size="small" aria-label="Hľadať v cenníku" />
+          <InputText v-model="search" placeholder="Hľadať kód, názov, EAN" size="small" aria-label="Hľadať v cenníku" />
         </IconField>
         <label class="archived-toggle">
           <Checkbox v-model="showArchived" binary input-id="arch" />
@@ -239,6 +259,7 @@ onBeforeUnmount(() => {
           @grid-ready="(e) => { gridApi = e.api; applyResponsive() }"
           @grid-size-changed="(e) => e.api.sizeColumnsToFit()"
           @row-clicked="(e) => router.push(`/cennik/${e.data.id}`)"
+          @row-double-clicked="(e) => router.push(`/cennik/${e.data.id}/karta`)"
         />
       </div>
     </section>
@@ -247,6 +268,9 @@ onBeforeUnmount(() => {
       <header class="panel-head">
         <button class="close" aria-label="Zavrieť" @click="router.push('/cennik')"><i class="pi pi-times" /></button>
         <h2>{{ form.id ? form.name || 'Položka' : 'Nová položka' }}</h2>
+        <div class="spacer" />
+        <Button v-if="form.id" label="Karta produktu" icon="pi pi-id-card" size="small" severity="secondary" outlined
+          v-tooltip.bottom="'Obrázky, parametre, sklady a pohyby'" @click="router.push(`/cennik/${form.id}/karta`)" />
       </header>
       <div class="panel-body">
         <div class="form-grid">
@@ -450,6 +474,20 @@ onBeforeUnmount(() => {
 }
 .grid :deep(.row-archived) {
   color: var(--ink-faint);
+}
+.grid :deep(.cell-img) {
+  padding: 2px 6px;
+}
+.grid :deep(.thumb) {
+  display: block;
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+  background: var(--paper);
+  border: 1px solid var(--rule-soft);
+}
+.grid :deep(.cell-neg) {
+  color: var(--tone-overdue);
 }
 .grid :deep(.cell-code) {
   color: var(--ink-soft);

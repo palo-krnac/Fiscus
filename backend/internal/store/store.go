@@ -172,6 +172,19 @@ type Logo struct {
 	Updated     time.Time
 }
 
+// ItemImage je obrázok produktu (skladovej karty). Prvý podľa poradia je hlavný.
+type ItemImage struct {
+	ID          int64     `json:"id"`
+	CompanyID   int64     `json:"-"`
+	ItemID      int64     `json:"itemId"`
+	Name        string    `json:"name"`
+	ContentType string    `json:"contentType"`
+	Size        int       `json:"size"`
+	Position    int       `json:"position"`
+	Data        []byte    `json:"-"`
+	Created     time.Time `json:"created"`
+}
+
 // PurchaseFile je súbor prijatého dokladu (fotka bločku, sken faktúry).
 type PurchaseFile struct {
 	CompanyID   int64
@@ -257,6 +270,14 @@ type Store interface {
 	// v jednej firme → ErrDuplicate.
 	SaveItem(ctx context.Context, companyID int64, it *catalog.Item) error
 	DeleteItem(ctx context.Context, companyID, id int64) error
+	// Obrázky produktu: zoznam (bez dát, podľa poradia), jeden s dátami,
+	// pridanie (na koniec), nové poradie a zmazanie. Zmazanie položky zmaže
+	// aj obrázky.
+	ListItemImages(ctx context.Context, companyID, itemID int64) ([]ItemImage, error)
+	GetItemImage(ctx context.Context, companyID, id int64) (ItemImage, error)
+	AddItemImage(ctx context.Context, img *ItemImage) error
+	SetItemImageOrder(ctx context.Context, companyID, itemID int64, ids []int64) error
+	DeleteItemImage(ctx context.Context, companyID, id int64) error
 
 	// ListStockDocs vráti skladové doklady firmy podľa dátumu a ID.
 	ListStockDocs(ctx context.Context, companyID int64) ([]stock.Doc, error)

@@ -8,6 +8,7 @@ import { levelShort } from './reminders.js'
 import { kindLabel } from './advance.js'
 import { assetStatus, disposalOptions, periodLabel } from './assets.js'
 import { tripTime } from './logbook.js'
+import { moveLabel } from './itemcard.js'
 import { kindLabel as calendarKind, repeatLabel, stateOf } from './calendar.js'
 import { docKindLabel, emailStatus } from './emails.js'
 import { addressText, personsText } from './contacts.js'
@@ -393,6 +394,16 @@ export const itemColumns = [
   { header: 'DPH (%)', value: (r) => r.vatRate, type: 'number', width: 8 },
   money('Cena s DPH', (r) => r.priceGross),
   t('Zadaná cena', (r) => (r.priceMode === 'gross' ? 's DPH' : 'bez DPH'), 10),
+  t('EAN', (r) => r.ean, 14),
+  t('Kategória', (r) => r.category, 20),
+  t('Značka', (r) => r.brand, 14),
+  t('Dodávateľ', (r) => r.supplier, 20),
+  t('Kód u dodávateľa', (r) => r.supplierCode, 12),
+  money('Nákupná cena', (r) => r.purchasePrice),
+  { header: 'Hmotnosť (kg)', value: (r) => (Number(r.weight) ? Number(r.weight) : ''), type: 'number', width: 10 },
+  { header: 'Stav skladu', value: (r) => (r.stock !== undefined ? Number(r.stock) : ''), type: 'number', width: 10 },
+  t('Parametre', (r) => (r.params ?? []).map((p) => `${p.name}: ${p.value}${p.unit ? ' ' + p.unit : ''}`).join('; '), 40),
+  t('Popis', (r) => r.description, 40),
   t('Archivovaná', (r) => yes(r.archived), 10),
   t('Poznámka', (r) => r.note, 30),
 ]
@@ -582,4 +593,18 @@ export const stockDocColumns = [
   money('Cena za MJ', (r) => r.line.unitCost),
   money('Spolu', (r) => r.line.total),
   t('Poznámka', (r) => r.note, 24),
+]
+
+/** Pohyby na skladovej karte produktu. */
+export const itemMoveColumns = [
+  date('Dátum', (r) => r.date),
+  t('Doklad', (r) => r.number, 12),
+  t('Druh', moveLabel, 18),
+  t('Sklad', (r) => r.warehouse, 8),
+  t('Partner', (r) => r.partner, 28),
+  num('Množstvo', (r) => r.quantity),
+  money('Cena za MJ', (r) => r.unitCost),
+  money('Hodnota pohybu', (r) => r.total),
+  num('Stav', (r) => r.balance),
+  money('Hodnota zásoby', (r) => r.value),
 ]

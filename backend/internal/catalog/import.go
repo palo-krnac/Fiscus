@@ -21,11 +21,21 @@ const (
 	colMode
 	colArchived
 	colNote
+	colEAN
+	colCategory
+	colBrand
+	colSupplier
+	colSupplierCode
+	colPurchase
+	colWeight
+	colParams
+	colDesc
+	colStock // iba v exporte (stav sa mení skladovými dokladmi), import ho ignoruje
 )
 
 var headers = map[string]int{
 	"kod": colCode, "code": colCode, "cislo": colCode,
-	"nazov": colName, "nazov polozky": colName, "polozka": colName, "popis": colName, "name": colName,
+	"nazov": colName, "nazov polozky": colName, "polozka": colName, "name": colName,
 	"mj": colUnit, "jednotka": colUnit, "merna jednotka": colUnit, "unit": colUnit,
 	"cena": colNet, "cena bez dph": colNet, "jednotkova cena": colNet, "price": colNet,
 	"cena s dph": colGross,
@@ -33,6 +43,35 @@ var headers = map[string]int{
 	"zadana cena": colMode,
 	"archivovana": colArchived,
 	"poznamka":    colNote, "note": colNote,
+	"ean": colEAN, "ciarovy kod": colEAN, "gtin": colEAN, "barcode": colEAN,
+	"kategoria": colCategory, "category": colCategory,
+	"znacka": colBrand, "vyrobca": colBrand, "brand": colBrand,
+	"dodavatel": colSupplier, "supplier": colSupplier,
+	"kod u dodavatela": colSupplierCode, "kod dodavatela": colSupplierCode,
+	"nakupna cena": colPurchase, "purchase price": colPurchase,
+	"hmotnost (kg)": colWeight, "hmotnost": colWeight, "weight": colWeight,
+	"parametre": colParams, "params": colParams,
+	"stav skladu": colStock,
+	// „Popis“ je popis produktu; bez stĺpca Názov ho staršie programy používajú ako názov
+	"popis": colDesc, "description": colDesc,
+}
+
+// ParseParams prečíta parametre v tvare z exportu: „Napätie: 24 V; Krytie: IP20“.
+// Jednotka je posledné slovo hodnoty, ak hodnota začína číslom („24 V“).
+func ParseParams(s string) []Param {
+	var out []Param
+	for _, part := range strings.Split(s, ";") {
+		name, value, ok := strings.Cut(part, ":")
+		if !ok {
+			continue
+		}
+		p := Param{Name: strings.TrimSpace(name), Value: strings.TrimSpace(value)}
+		if f := strings.Fields(p.Value); len(f) == 2 && strings.ContainsAny(f[0][:1], "0123456789-") {
+			p.Value, p.Unit = f[0], f[1]
+		}
+		out = append(out, p)
+	}
+	return out
 }
 
 var fold = strings.NewReplacer(
@@ -49,6 +88,8 @@ type ImportRow struct {
 	Item   Item                 `json:"item"`
 	Action string               `json:"action"` // create | update | skip
 	Errors []invoice.FieldError `json:"errors"`
+	// cols sú stĺpce v súbore; ostatné údaje sa pri zmene ponechajú z cenníka.
+	cols map[int]bool
 }
 
 // parseNumber prečíta číslo v slovenskom aj anglickom zápise: „1 234,50“, „1234.5“, „23 %“, „12,50 €“.
@@ -76,6 +117,15 @@ func ParseItems(rows [][]string, defaultRate vat.Rate) ([]ImportRow, error) {
 			cols[i], have[c] = c, true
 		}
 	}
+	if !have[colName] && have[colDesc] {
+		// „Popis“ bez „Názvu“ je názov položky (export starších programov)
+		for i, c := range cols {
+			if c == colDesc {
+				cols[i] = colName
+			}
+		}
+		have[colName], have[colDesc] = true, false
+	}
 	if !have[colName] {
 		return nil, fmt.Errorf("v prvom riadku chýba stĺpec „Názov“ (hlavička: Kód; Názov; MJ; Cena bez DPH; DPH (%%); Cena s DPH; Poznámka)")
 	}
@@ -84,7 +134,7 @@ func ParseItems(rows [][]string, defaultRate vat.Rate) ([]ImportRow, error) {
 	}
 	var out []ImportRow
 	for li, r := range rows[1:] {
-		row := ImportRow{Line: li + 2, Action: "create"}
+		row := ImportRow{Line: li + 2, Action: "create", cols: have}
 		cell := map[int]string{}
 		for i, v := range r {
 			if c, ok := cols[i]; ok {
@@ -117,6 +167,23 @@ func ParseItems(rows [][]string, defaultRate vat.Rate) ([]ImportRow, error) {
 			it.Price = d
 		}
 		it.Archived = Key(cell[colArchived]) == "ano"
+		it.EAN, it.Category, it.Brand = cell[colEAN], cell[colCategory], cell[colBrand]
+		it.Supplier, it.SupplierCode, it.Description = cell[colSupplier], cell[colSupplierCode], cell[colDesc]
+		it.Params = ParseParams(cell[colParams])
+		for _, n := range []struct {
+			col   int
+			field string
+			label string
+			dst   *money.Dec
+		}{{colPurchase, "purchasePrice", "nákupná cena", &it.PurchasePrice}, {colWeight, "weight", "hmotnosť", &it.Weight}} {
+			if v := cell[n.col]; v != "" {
+				if d, err := parseNumber(v); err != nil {
+					add(n.field, "Neplatná "+n.label+" „"+v+"“")
+				} else {
+					*n.dst = d
+				}
+			}
+		}
 		it.Normalize()
 		if err := it.Validate(); err != nil {
 			if ve, ok := err.(*invoice.ValidationError); ok {
@@ -166,6 +233,35 @@ func Match(rows []ImportRow, existing []Item) {
 		}
 		if ok {
 			r.Action, r.Item.ID = "update", old.ID
+			r.keep(old)
+		}
+	}
+}
+
+// keep doplní údaje, ktorých stĺpec v súbore nie je, z existujúcej položky
+// (import s kódom a cenou nezmaže EAN, parametre ani popis).
+func (r *ImportRow) keep(old Item) {
+	it := &r.Item
+	for _, f := range []struct {
+		col int
+		do  func()
+	}{
+		{colUnit, func() { it.Unit = old.Unit }},
+		{colRate, func() { it.Rate = old.Rate }},
+		{colArchived, func() { it.Archived = old.Archived }},
+		{colNote, func() { it.Note = old.Note }},
+		{colEAN, func() { it.EAN = old.EAN }},
+		{colCategory, func() { it.Category = old.Category }},
+		{colBrand, func() { it.Brand = old.Brand }},
+		{colSupplier, func() { it.Supplier = old.Supplier }},
+		{colSupplierCode, func() { it.SupplierCode = old.SupplierCode }},
+		{colPurchase, func() { it.PurchasePrice = old.PurchasePrice }},
+		{colWeight, func() { it.Weight = old.Weight }},
+		{colParams, func() { it.Params = append([]Param(nil), old.Params...) }},
+		{colDesc, func() { it.Description = old.Description }},
+	} {
+		if !r.cols[f.col] {
+			f.do()
 		}
 	}
 }

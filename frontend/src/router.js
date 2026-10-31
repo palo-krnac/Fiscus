@@ -35,6 +35,7 @@ import Rates from './views/Rates.vue'
 import ReminderPrint from './views/ReminderPrint.vue'
 import Legal from './views/Legal.vue'
 import Catalog from './views/Catalog.vue'
+import ItemCard from './views/ItemCard.vue'
 import ChartOfAccounts from './views/ChartOfAccounts.vue'
 import LedgerBook from './views/LedgerBook.vue'
 import { settingsSections } from './lib/settingsNav.js'
@@ -131,6 +132,7 @@ export const router = createRouter({
     { path: '/pravidelne/nova', component: InvoiceEdit, props: { recurring: true }, meta: { title: 'Nová pravidelná faktúra', perm: 'invoices.write' } },
     { path: '/pravidelne/:id(\\d+)', component: InvoiceEdit, props: (r) => ({ id: r.params.id, recurring: true }), meta: { title: 'Pravidelná faktúra', perm: 'invoices.read' } },
     { path: '/cennik', component: Catalog, meta: { title: 'Cenník', perm: 'invoices.read' } },
+    { path: '/cennik/:id(\\d+)/karta', component: ItemCard, props: true, meta: { title: 'Karta produktu', perm: 'invoices.read' } },
     { path: '/cennik/:id(\\d+|nova)', component: Catalog, props: true, meta: { title: 'Cenník', perm: 'invoices.read' } },
     { path: '/upomienky', component: Reminders, meta: { title: 'Upomienky', perm: 'invoices.read' } },
     { path: '/emaily', component: Emails, meta: { title: 'E-maily', perm: 'invoices.read' } },

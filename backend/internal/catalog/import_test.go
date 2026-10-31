@@ -122,3 +122,54 @@ func TestMatch(t *testing.T) {
 		t.Errorf("duplicita: %+v", rows[4].Errors)
 	}
 }
+
+func TestImportCardFields(t *testing.T) {
+	old := Item{ID: 7, Code: "REL", Name: "Relé", Unit: "ks", Rate: 23, EAN: "5901234123457", Brand: "Finder", Description: "Popis z e-shopu",
+		Params: []Param{{Name: "Napätie", Value: "24", Unit: "V"}}, PurchasePrice: money.MustParse("6.5")}
+	tests := []struct {
+		name  string
+		rows  [][]string
+		check func(t *testing.T, it Item)
+	}{
+		{"iba kód a cena — karta ostane", [][]string{{"Kód", "Názov", "Cena bez DPH"}, {"REL", "Relé 24V", "12"}}, func(t *testing.T, it Item) {
+			if it.ID != 7 || it.EAN != old.EAN || it.Brand != "Finder" || len(it.Params) != 1 || it.Description != old.Description || !it.PurchasePrice.Equal(old.PurchasePrice) {
+				t.Errorf("%+v", it)
+			}
+		}},
+		{"stĺpce karty zo súboru", [][]string{
+			{"Kód", "Názov", "Cena bez DPH", "EAN", "Kategória", "Značka", "Nákupná cena", "Hmotnosť (kg)", "Parametre", "Popis", "Stav skladu"},
+			{"REL", "Relé", "12", "96385074", "Relé / Priemyselné", "Schrack", "7,20", "0,035", "Napätie: 230 V; Krytie: IP20", "", "15"}}, func(t *testing.T, it Item) {
+			if it.EAN != "96385074" || it.Category != "Relé / Priemyselné" || it.Brand != "Schrack" || it.PurchasePrice.String() != "7.20" ||
+				it.Weight.String() != money.MustParse("0.035").String() || it.Description != "" ||
+				len(it.Params) != 2 || it.Params[0] != (Param{"Napätie", "230", "V"}) || it.Params[1] != (Param{"Krytie", "IP20", ""}) {
+				t.Errorf("%+v", it)
+			}
+		}},
+		{"Popis bez Názvu je názov", [][]string{{"Popis", "Cena"}, {"Montáž", "40"}}, func(t *testing.T, it Item) {
+			if it.Name != "Montáž" || it.Description != "" {
+				t.Errorf("%+v", it)
+			}
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rows, err := ParseItems(tt.rows, vat.Rate23)
+			if err != nil {
+				t.Fatal(err)
+			}
+			Match(rows, []Item{old})
+			if len(rows[0].Errors) > 0 {
+				t.Fatal(rows[0].Errors)
+			}
+			tt.check(t, rows[0].Item)
+		})
+	}
+	bad, _ := ParseItems([][]string{{"Názov", "Cena", "EAN", "Hmotnosť"}, {"A", "1", "123", "ťažké"}}, vat.Rate23)
+	fields := []string{}
+	for _, e := range bad[0].Errors {
+		fields = append(fields, e.Field)
+	}
+	if strings.Join(fields, ",") != "weight,ean" {
+		t.Errorf("chyby %v", fields)
+	}
+}

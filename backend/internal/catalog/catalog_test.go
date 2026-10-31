@@ -61,3 +61,65 @@ func TestNormalizeValidate(t *testing.T) {
 		}
 	}
 }
+
+func TestValidEAN(t *testing.T) {
+	tests := map[string]bool{
+		"8586000000006": false, "5901234123457": true, "96385074": true, "036000291452": true, "15400141288763": true,
+		"5901234123458": false, "590123412345": false, "59012341234a7": false, "": false,
+	}
+	for in, want := range tests {
+		if got := ValidEAN(in); got != want {
+			t.Errorf("ValidEAN(%q) = %v", in, got)
+		}
+	}
+}
+
+func TestItemCard(t *testing.T) {
+	base := func() Item {
+		return Item{Name: "Kábel CYKY 3x2,5", Unit: "m", PriceMode: "net", Rate: 23}
+	}
+	tests := []struct {
+		name  string
+		edit  func(*Item)
+		field string
+	}{
+		{"platná karta", func(it *Item) {
+			it.EAN, it.Category, it.Brand = "5901234123457", "Káble", "NKT"
+			it.Params = []Param{{Name: "Prierez", Value: "2,5", Unit: "mm²"}, {Name: " ", Value: ""}}
+		}, ""},
+		{"zlý EAN", func(it *Item) { it.EAN = "5901234123458" }, "ean"},
+		{"parameter bez mena", func(it *Item) { it.Params = []Param{{Value: "5"}} }, "params[0].name"},
+		{"parameter dvakrát", func(it *Item) { it.Params = []Param{{Name: "Farba", Value: "a"}, {Name: "farba", Value: "b"}} }, "params[1].name"},
+		{"záporná hmotnosť", func(it *Item) { it.Weight = m.FromInt(-1) }, "weight"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			it := base()
+			tt.edit(&it)
+			it.Normalize()
+			err := it.Validate()
+			if tt.field == "" {
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(it.Params) != 1 || it.EAN != "5901234123457" {
+					t.Errorf("karta %+v", it)
+				}
+				return
+			}
+			ve, ok := err.(*invoice.ValidationError)
+			found := false
+			for _, f := range func() []invoice.FieldError {
+				if ok {
+					return ve.Fields
+				}
+				return nil
+			}() {
+				found = found || f.Field == tt.field
+			}
+			if !found {
+				t.Errorf("chcem chybu %s, mám %v", tt.field, err)
+			}
+		})
+	}
+}
