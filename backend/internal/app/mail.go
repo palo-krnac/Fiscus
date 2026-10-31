@@ -90,7 +90,9 @@ func (a *App) SetMailSettings(ctx context.Context, companyID int64, s mail.Setti
 	if err != nil {
 		return mail.Settings{}, err
 	}
-	if s.Password == "" && !clearPassword {
+	// uložené heslo ide iba na ten istý server — pri zmene servera sa musí
+	// zadať znova (inak by ho niekto bez prístupu k heslu poslal na svoj server)
+	if s.Password == "" && !clearPassword && strings.EqualFold(strings.TrimSpace(s.Host), old.Host) {
 		s.Password = old.Password
 	}
 	s.PasswordSet = false

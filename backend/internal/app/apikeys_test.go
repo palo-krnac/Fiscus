@@ -90,3 +90,17 @@ func TestDesktopKeyOnlyInDesktop(t *testing.T) {
 		t.Fatalf("server: %v", err)
 	}
 }
+
+// Spárovaný telefón nevytvorí API kľúč ani odber kalendára.
+func TestMobileCannotMintAccess(t *testing.T) {
+	a, _ := newApp(t, edition.Desktop)
+	phone := auth.Local
+	phone.Mobile = true
+	mctx := auth.WithActor(ctx, phone)
+	if _, _, err := a.CreateAPIKey(mctx, "z telefónu", false); !errors.Is(err, ErrForbidden) {
+		t.Errorf("kľúč z telefónu: %v", err)
+	}
+	if _, err := a.CreateCalendarFeed(mctx); !errors.Is(err, ErrForbidden) {
+		t.Errorf("odber z telefónu: %v", err)
+	}
+}

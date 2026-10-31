@@ -274,6 +274,17 @@ func (a *App) AddMember(ctx context.Context, companyID int64, nm NewMember) (Mem
 	if len(fe) > 0 {
 		return Member{}, &invoice.ValidationError{Fields: fe}
 	}
+	if !isNew {
+		// už je členom: zmena roly so všetkými kontrolami (posledný správca…)
+		if old, err := a.memberRole(ctx, companyID, u.ID); err == nil {
+			if old != nm.Role {
+				if err := a.SetRole(ctx, companyID, u.ID, nm.Role); err != nil {
+					return Member{}, err
+				}
+			}
+			return Member{publicUser(u), nm.Role}, nil
+		}
+	}
 	if isNew {
 		hash, err := auth.HashPassword(nm.Password)
 		if err != nil {

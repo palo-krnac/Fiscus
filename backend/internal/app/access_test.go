@@ -203,3 +203,25 @@ func TestAuditRecordsChanges(t *testing.T) {
 		t.Fatalf("reťazec %d: %v", n, err)
 	}
 }
+
+// Opätovné pridanie člena mení rolu rovnako ako SetRole — so všetkými kontrolami.
+func TestAddExistingMember(t *testing.T) {
+	o := newOffice(t)
+	actx := as(o.admin)
+	if _, err := o.a.AddMember(actx, o.alfa.ID, NewMember{Email: "sef@kancelaria.sk", Role: auth.RoleViewer}); !errors.Is(err, ErrSelfDemote) {
+		t.Fatalf("posledný správca si cez pridanie odobral rolu: %v", err)
+	}
+	if role, _ := o.a.memberRole(ctx, o.alfa.ID, o.admin.UserID); role != auth.RoleAdmin {
+		t.Fatalf("rola správcu %s", role)
+	}
+	if _, err := o.a.AddMember(actx, o.alfa.ID, NewMember{Email: "jana@kancelaria.sk", Role: auth.RoleInvoicer}); err != nil {
+		t.Fatal(err)
+	}
+	if role, _ := o.a.memberRole(ctx, o.alfa.ID, o.jana.UserID); role != auth.RoleInvoicer {
+		t.Errorf("rola Jany %s", role)
+	}
+	// synchronizácia do cudzieho kalendára iba s právom na nastavenia
+	if _, err := o.a.SyncCalendar(as(o.jana), o.alfa.ID); !errors.Is(err, ErrForbidden) {
+		t.Errorf("fakturant spustil synchronizáciu: %v", err)
+	}
+}

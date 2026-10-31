@@ -504,7 +504,8 @@ func (a *App) CalendarFeed(ctx context.Context) (CalendarFeedStatus, error) {
 // používateľa iba na čítanie a platí len pre kalendár.
 func (a *App) CreateCalendarFeed(ctx context.Context) (string, error) {
 	act := auth.ActorFrom(ctx)
-	if act.KeyID != 0 || act.Channel == auth.ChannelSystem {
+	// kľúč ani spárovaný telefón nevytvárajú trvalé prístupy (prežili by zrušenie párovania)
+	if act.KeyID != 0 || act.Mobile || act.Channel == auth.ChannelSystem {
 		return "", ErrForbidden
 	}
 	if err := a.RevokeCalendarFeed(ctx); err != nil {

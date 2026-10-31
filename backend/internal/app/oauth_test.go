@@ -159,6 +159,16 @@ func TestOAuthFlow(t *testing.T) {
 	if _, err := o.a.OAuthActor(ctx, tok2.AccessToken, auth.ChannelMCP, ""); err != nil {
 		t.Fatal(err)
 	}
+	// vymyslené tokeny (bez podpisu Fiškusa) povolenie nezrušia
+	grant := strings.SplitN(strings.TrimPrefix(tok2.RefreshToken, OAuthRefreshPrefix), ".", 2)[0]
+	for _, fake := range []string{OAuthRefreshPrefix + grant + ".x", OAuthRefreshPrefix + grant + ".x.y", OAuthRefreshPrefix + grant + ".x.y.z"} {
+		if _, err := o.a.RefreshOAuth(ctx, clientID, fake); !isOAuth(err, "invalid_grant") {
+			t.Fatalf("vymyslený token %q: %v", fake, err)
+		}
+	}
+	if _, err := o.a.OAuthActor(ctx, tok2.AccessToken, auth.ChannelMCP, ""); err != nil {
+		t.Fatal("vymyslený token zrušil povolenie")
+	}
 	// starý obnovovací token znova = krádež: povolenie sa zruší
 	if _, err := o.a.RefreshOAuth(ctx, clientID, tok.RefreshToken); !isOAuth(err, "invalid_grant") {
 		t.Fatal("starý obnovovací token")

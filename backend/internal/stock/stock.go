@@ -241,9 +241,19 @@ type state struct {
 }
 
 func (c *state) add(m Method, q, total money.Dec) {
+	short := c.Quantity.Sign() < 0
 	c.Quantity, c.Value = c.Quantity.Add(q), c.Value.Add(total)
 	if m == FIFO {
-		c.layers = append(c.layers, layer{q, total})
+		if short {
+			// príjem najprv pokryje výdaj nad stav; zvyšok je jedna vrstva so
+			// zostatkovou hodnotou (inak by rozdiel ocenenia z karty zmizol)
+			c.layers = nil
+			if c.Quantity.Sign() > 0 {
+				c.layers = []layer{{c.Quantity, c.Value}}
+			}
+		} else {
+			c.layers = append(c.layers, layer{q, total})
+		}
 	}
 	if c.Quantity.Sign() > 0 {
 		c.AvgCost = c.Value.MulRatio(money.FromInt(1), c.Quantity)

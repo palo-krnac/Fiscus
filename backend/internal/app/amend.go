@@ -67,6 +67,12 @@ func (a *App) AmendBlock(ctx context.Context, companyID int64, inv invoice.Invoi
 			}
 		}
 	}
+	return a.vatClosed(ctx, companyID, inv)
+}
+
+// vatClosed vráti dôvod, ak obdobie DPH faktúry (podľa dátumu dodania,
+// pri dobropise vystavenia) už bolo priznané ("" = ešte nie).
+func (a *App) vatClosed(ctx context.Context, companyID int64, inv invoice.Invoice) string {
 	co, err := a.Store.GetCompany(ctx, companyID)
 	if err == nil && co.VATPayer && !inv.NonVATPayer {
 		point := inv.DeliveryDate
@@ -112,6 +118,10 @@ func (a *App) amendIssued(ctx context.Context, companyID int64, old, inv invoice
 		inv.Correction = &c
 	}
 	inv.Payments, inv.PaidAmount, inv.PaidDate = old.Payments, old.PaidAmount, old.PaidDate
+	// nové dátumy nesmú faktúru presunúť do obdobia, ktoré už bolo priznané
+	if reason := a.vatClosed(ctx, companyID, inv); reason != "" {
+		return old, &AmendError{"Nový dátum dodania patrí do priznaného obdobia — opravuje sa dobropisom"}
+	}
 	if err := a.applyCompany(ctx, companyID, &inv); err != nil {
 		return old, err
 	}

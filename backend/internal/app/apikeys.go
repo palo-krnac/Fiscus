@@ -23,7 +23,8 @@ const KeyPrefix = "fk_"
 // raz — uloží sa len jeho odtlačok.
 func (a *App) CreateAPIKey(ctx context.Context, name string, readOnly bool) (string, auth.APIKey, error) {
 	act := auth.ActorFrom(ctx)
-	if act.KeyID != 0 || act.Channel == auth.ChannelSystem {
+	// kľúč ani spárovaný telefón nevytvárajú trvalé prístupy (prežili by zrušenie párovania)
+	if act.KeyID != 0 || act.Mobile || act.Channel == auth.ChannelSystem {
 		return "", auth.APIKey{}, ErrForbidden // kľúč nemôže vytvárať ďalšie kľúče
 	}
 	name = strings.TrimSpace(name)

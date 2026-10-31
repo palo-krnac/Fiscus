@@ -69,6 +69,9 @@ func TestLANHandler(t *testing.T) {
 	for _, c := range []struct{ method, path string }{
 		{"GET", "/api/mobile"}, {"POST", "/api/mobile/pairing"}, {"POST", "/api/backups"}, {"POST", "/api/desktop/quit"},
 		{"PUT", "/api/security/pin"}, {"DELETE", fmt.Sprintf("/api/companies/%d", e.cid)}, {"POST", "/api/auth/lock"}, {"GET", "/api/license"},
+		// trvalé prístupy by prežili zrušenie párovania
+		{"POST", "/api/me/keys"}, {"POST", "/api/me/calendar-feed"}, {"PUT", "/api/ai/settings"},
+		{"PUT", "/api/calendar-sync/config"}, {"PUT", "/api/rates"}, {"POST", "/api/me/mfa/setup"},
 	} {
 		if code, _, _ := call(c.method, c.path, "{}", token); code != 403 {
 			t.Errorf("%s %s: %d", c.method, c.path, code)
