@@ -13,9 +13,9 @@ func TestParse(t *testing.T) {
 	}
 	single, _ := os.ReadFile("testdata/FAKVY.XML")
 	tests := []struct {
-		name                                                     string
-		data                                                     []byte
-		file                                                     string
+		name                                                   string
+		data                                                   []byte
+		file                                                   string
 		invoices, items, payments, purchases, addresses, banks int
 	}{
 		{"ZIP", zipped, "export.zip", 6, 4, 2, 2, 3, 1},
