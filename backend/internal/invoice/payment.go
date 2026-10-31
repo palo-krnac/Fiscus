@@ -144,3 +144,39 @@ func OffsetCreditNote(orig, cn *Invoice) (money.Dec, error) {
 	}
 	return amount, nil
 }
+
+// ErrCreditRefunded — dobropis je už vrátený odberateľovi, storno najprv
+// vyžaduje zrušenie úhrady.
+var ErrCreditRefunded = errors.New("dobropis je vrátený odberateľovi — najprv zrušte úhradu (vrátenie peňazí)")
+
+// CancelCreditNote stornuje vystavený dobropis a zruší jeho zápočet
+// s pôvodnou faktúrou (orig môže byť nil, ak dobropis nemá väzbu). Dobropis
+// vyrovnaný iba zápočtom sa dá stornovať; vrátený odberateľovi nie.
+func CancelCreditNote(cn, orig *Invoice) error {
+	if cn.Kind != KindCreditNote || (cn.Status != StatusIssued && cn.Status != StatusPaid) {
+		return ErrBadTransition
+	}
+	for _, p := range cn.Payments {
+		if p.Source != PaymentCredit {
+			return ErrCreditRefunded
+		}
+	}
+	if orig != nil {
+		orig.RemovePayment(PaymentCredit, cn.ID)
+	}
+	cn.Payments = nil
+	cn.Status, cn.PaidDate = StatusCancelled, Date{}
+	cn.SyncPaid()
+	return nil
+}
+
+// ErrNotDraft — zmazať sa dá iba koncept.
+var ErrNotDraft = errors.New("vystavený doklad sa nedá zmazať — stornujte ho alebo opravte dobropisom")
+
+// CanDelete: zmazať sa dá iba koncept bez čísla (číselný rad ostane súvislý).
+func (inv *Invoice) CanDelete() error {
+	if inv.Status != StatusDraft || inv.Number != "" {
+		return ErrNotDraft
+	}
+	return nil
+}

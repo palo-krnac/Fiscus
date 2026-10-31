@@ -232,6 +232,8 @@ type Store interface {
 	GetInvoice(ctx context.Context, companyID, id int64) (invoice.Invoice, error)
 	// SaveInvoice vloží (ID == 0) alebo prepíše faktúru. Nastaví ID.
 	SaveInvoice(ctx context.Context, companyID int64, inv *invoice.Invoice) error
+	// DeleteInvoice zmaže faktúru aj s riadkami (aplikácia dovolí iba koncept).
+	DeleteInvoice(ctx context.Context, companyID, id int64) error
 	// ListPurchases vráti prijaté faktúry, najnovšie (podľa doručenia) prvé.
 	ListPurchases(ctx context.Context, companyID int64, f PurchaseFilter) ([]purchase.Purchase, error)
 	GetPurchase(ctx context.Context, companyID, id int64) (purchase.Purchase, error)

@@ -78,3 +78,20 @@ func (s *Server) removeAdvance(w http.ResponseWriter, r *http.Request) {
 		return s.App.RemoveAdvanceFromFinal(r.Context(), cid, id, pid)
 	})
 }
+
+// deleteInvoice: DELETE …/invoices/{id} — zmaže koncept.
+func (s *Server) deleteInvoice(w http.ResponseWriter, r *http.Request) {
+	cid, ok := s.company(w, r)
+	if !ok {
+		return
+	}
+	id, ok := pathID(w, r, "id")
+	if !ok {
+		return
+	}
+	if err := s.App.DeleteInvoice(r.Context(), cid, id); err != nil {
+		fail(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
