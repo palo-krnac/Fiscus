@@ -4,6 +4,7 @@
 package printout
 
 import (
+	_ "embed"
 	"fmt"
 	"strings"
 
@@ -44,13 +45,14 @@ type Supplier struct {
 
 // sheet je rozpracovaný doklad: aktuálna strana a zvislá pozícia.
 type sheet struct {
-	doc   *pdf.Doc
-	f     pdf.Family
-	pages []*pdf.Page
-	p     *pdf.Page
-	y     float64
-	label string // názov dokladu v päte strán
-	out   []byte // hotové PDF
+	footLogo *pdf.Image // logo Fiškusa v päte
+	doc      *pdf.Doc
+	f        pdf.Family
+	pages    []*pdf.Page
+	p        *pdf.Page
+	y        float64
+	label    string // názov dokladu v päte strán
+	out      []byte // hotové PDF
 	// header nakreslí hlavičku tabuľky po zalomení strany
 	header func()
 }
@@ -123,10 +125,35 @@ func (s *sheet) stamp(t string) {
 	s.p.TextRotated(cx-w/2*cos, cy+w/2*sin+size*0.35, s.f.Bold, size, stampC, 18, t)
 }
 
-// finish doplní čísla strán (pri viacerých stranách) a zostaví PDF.
+// fiskusLogo je malé logo programu do päty každej strany.
+//
+//go:embed fiskus-logo.png
+var fiskusLogo []byte
+
+// Footer je text päty pod logom programu.
+const Footer = "Vytvorené v programe Fiškus"
+
+// footer nakreslí dole na stred malé logo a „Vytvorené v programe Fiškus“.
+func (s *sheet) footer(p *pdf.Page) {
+	size, gap := pdf.MM(3.2), pdf.MM(1.5)
+	tw := s.f.Regular.Width(Footer, 7)
+	x := (pdf.PageWidth - (size + gap + tw)) / 2
+	y := pdf.PageHeight - pdf.MM(10)
+	if s.footLogo == nil {
+		s.footLogo, _ = pdf.NewImage(fiskusLogo) // jeden obrázok pre všetky strany
+	}
+	if s.footLogo != nil {
+		p.Image(s.footLogo, x, y-size*0.78, size, size)
+	}
+	p.Text(x+size+gap, y, s.f.Regular, 7, faint, Footer)
+}
+
+// finish doplní pätu, čísla strán (pri viacerých stranách) a zostaví PDF.
 func (s *sheet) finish() *sheet {
-	if n := len(s.pages); n > 1 {
-		for i, p := range s.pages {
+	n := len(s.pages)
+	for i, p := range s.pages {
+		s.footer(p)
+		if n > 1 {
 			t := fmt.Sprintf("%s · strana %d/%d", s.label, i+1, n)
 			p.TextRight(right, pdf.PageHeight-pdf.MM(10), s.f.Regular, 7.5, faint, t)
 		}

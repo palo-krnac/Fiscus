@@ -2,6 +2,7 @@
 // Faktúra alebo cenová ponuka (quote) na tlač / uloženie do PDF (A4).
 // PDF vytvorí prehliadač cez „Tlačiť → Uložiť ako PDF“.
 import { computed, onMounted, ref } from 'vue'
+import PrintFooter from '../components/PrintFooter.vue'
 import { addressLines, customerGroups, deliveryLines, supplierGroups } from '../lib/parties.js'
 import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
@@ -264,6 +265,7 @@ const deliveryOf = (i) => deliveryLines(i, countryName)
         <p v-if="!nonVat && domesticReverseNote(inv.lines)">{{ domesticReverseNote(inv.lines) }}</p>
         <p v-if="quote">Cenová ponuka nie je daňový doklad.</p>
       </footer>
+      <PrintFooter />
     </article>
     <SendMailDialog v-if="inv" v-model:visible="mailOpen" :kind="quote ? 'quotes' : 'invoices'" :id="id" />
   </div>

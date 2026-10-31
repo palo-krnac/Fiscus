@@ -3,6 +3,7 @@
 // doklady nákladov s DPH a vyúčtovanie. Slúži aj ako podrobná evidencia
 // vozidla podľa § 85n zákona o DPH (jazdy, stav tachometra, náklady).
 import { computed, onMounted, ref } from 'vue'
+import PrintFooter from '../components/PrintFooter.vue'
 import { useRoute, useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import { api } from '../lib/api.js'
@@ -151,6 +152,7 @@ const print = () => window.print()
         <div><span>Vyhotovil</span></div>
         <div><span>Schválil</span></div>
       </footer>
+      <PrintFooter />
     </article>
   </div>
 </template>
@@ -186,6 +188,7 @@ const print = () => window.print()
 }
 /* A4 na šírku */
 .sheet {
+  position: relative;
   width: 297mm;
   min-height: 210mm;
   margin: 24px auto 0;

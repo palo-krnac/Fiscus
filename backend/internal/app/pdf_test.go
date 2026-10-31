@@ -40,8 +40,11 @@ func TestInvoicePDF(t *testing.T) {
 		if doc.Name != tt.want || !bytes.HasPrefix(doc.Data, []byte("%PDF-")) {
 			t.Errorf("%s: %q %d B", tt.name, doc.Name, len(doc.Data))
 		}
-		if hasImg := bytes.Contains(doc.Data, []byte("/Subtype /Image")); hasImg != (tt.logo != nil) {
-			t.Errorf("%s: logo v PDF = %v", tt.name, hasImg)
+		// logo Fiškusa v päte je vždy (obrázok + maska priehľadnosti),
+		// logo firmy pribudne iba vtedy, keď je nahraté
+		n := bytes.Count(doc.Data, []byte("/Subtype /Image"))
+		if n < 2 || (n > 2) != (tt.logo != nil) {
+			t.Errorf("%s: obrázkov v PDF %d (logo firmy %v)", tt.name, n, tt.logo != nil)
 		}
 	}
 	if fileKind(invoice.KindCreditNote) != "Dobropis" || fileKind(invoice.KindProforma) != "Zalohova-faktura" {
