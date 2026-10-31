@@ -102,7 +102,7 @@ func pohodaMigration(d pohoda.Data, today invoice.Date) migration {
 				label = h.Type
 			}
 			issued := strings.HasPrefix(h.Type, "issued") || h.Type == "receivable" || h.Type == "penalty"
-			m.Skips = append(m.Skips, migSkip{Purchase: !issued,
+			m.Skips = append(m.Skips, migSkip{Agenda: map[bool]string{true: agInvoices, false: agPurchases}[issued],
 				Text: fmt.Sprintf("%s %s sa neprenáša (zálohy a ostatné doklady zadajte vo Fiškuse)", strings.ToUpper(label[:1])+label[1:], num)})
 		}
 	}

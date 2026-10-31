@@ -9,12 +9,14 @@ import InputIcon from 'primevue/inputicon'
 import Message from 'primevue/message'
 import Checkbox from 'primevue/checkbox'
 import DatePicker from 'primevue/datepicker'
+import Select from 'primevue/select'
 import ExportButton from '../components/ExportButton.vue'
-import { api } from '../lib/api.js'
+import { api, ApiError } from '../lib/api.js'
 import { session, can } from '../lib/session.js'
 import { importWarningColumns } from '../lib/columns.js'
 import { toISODate } from '../lib/format.js'
-import { filterWarnings, maxImportBytes, newTotal, otherText, sources, summaryRows } from '../lib/migrate.js'
+import { downloadCSV } from '../lib/export.js'
+import { filterWarnings, kindLabel, maxImportBytes, newTotal, otherText, sources, summaryRows, tableKinds, templateExport } from '../lib/migrate.js'
 
 const toast = useToast()
 const canWrite = computed(() => can('invoices.write') && can('purchases.write') && can('contacts.write'))
@@ -28,6 +30,16 @@ const search = ref('')
 // faktúry so splatnosťou do dátumu budú uhradené (staré roky sú vyrovnané)
 const paidOn = ref(false)
 const paidUntil = ref(null)
+// obsah tabuľky Excel/CSV ('auto' = rozpoznať z hlavičky)
+const kind = ref('auto')
+const needKind = ref(false)
+const kindParam = computed(() => (selected.value.kinds && kind.value !== 'auto' ? kind.value : ''))
+const templateKind = ref('invoices')
+const templateKinds = tableKinds.filter((k) => k.value !== 'auto')
+function downloadTemplate() {
+  const { columns, rows: sample } = templateExport(templateKind.value)
+  downloadCSV(`Vzor – ${kindLabel(templateKind.value)}`, columns, sample)
+}
 const paidISO = computed(() => (paidOn.value && paidUntil.value ? toISODate(paidUntil.value) : ''))
 
 const rows = computed(() => summaryRows(report.value))
@@ -46,6 +58,8 @@ function reset() {
   search.value = ''
   paidOn.value = false
   paidUntil.value = null
+  kind.value = 'auto'
+  needKind.value = false
 }
 
 async function pick(e) {
@@ -56,13 +70,26 @@ async function pick(e) {
     toast.add({ severity: 'error', summary: 'Súbor je príliš veľký', detail: 'Najviac 50 MB. Exportujte agendy po častiach.', life: 6000 })
     return
   }
+  file.value = f
+  await preview()
+}
+
+// náhľad prenosu; pri tabuľke s faktúrami treba zvoliť vydané alebo prijaté
+async function preview() {
+  if (!file.value) return
   busy.value = true
+  needKind.value = false
   try {
-    report.value = await api.importMigrate(session.companyId, selected.value.id, f)
-    file.value = f
+    report.value = await api.importMigrate(session.companyId, selected.value.id, file.value, { kind: kindParam.value })
+    if (selected.value.kinds && report.value.kind && kind.value === 'auto') kind.value = report.value.kind
   } catch (err) {
     report.value = null
-    toast.add({ severity: 'error', summary: 'Súbor sa nedá načítať', detail: err.message, life: 8000 })
+    if (err instanceof ApiError && err.fieldMap().kind) {
+      needKind.value = true
+    } else {
+      file.value = null
+      toast.add({ severity: 'error', summary: 'Súbor sa nedá načítať', detail: err.message, life: 8000 })
+    }
   } finally {
     busy.value = false
   }
@@ -71,7 +98,7 @@ async function pick(e) {
 async function run() {
   busy.value = true
   try {
-    report.value = await api.importMigrate(session.companyId, selected.value.id, file.value, { apply: true, paidUntil: paidISO.value })
+    report.value = await api.importMigrate(session.companyId, selected.value.id, file.value, { apply: true, paidUntil: paidISO.value, kind: kindParam.value })
     toast.add({ severity: 'success', summary: 'Dáta prenesené', detail: `${newTotal(report.value)} nových záznamov`, life: 5000 })
   } catch (err) {
     toast.add({ severity: 'error', summary: 'Prenos zlyhal', detail: err.message, life: 8000 })
@@ -117,10 +144,23 @@ async function run() {
         <template v-else>
           <input ref="fileInput" type="file" :accept="selected.accept" class="visually-hidden" @change="pick" />
           <div class="actions">
-            <Button icon="pi pi-upload" :label="file ? 'Vybrať iný súbor' : 'Vybrať súbor XML'" :severity="file ? 'secondary' : undefined"
+            <Button icon="pi pi-upload" :label="file ? 'Vybrať iný súbor' : selected.kinds ? 'Vybrať tabuľku' : 'Vybrať súbor XML'" :severity="file ? 'secondary' : undefined"
               :outlined="!!file" size="small" :loading="busy && !file" @click="fileInput.click()" />
             <span v-if="file" class="file">{{ file.name }}</span>
           </div>
+          <div v-if="selected.kinds" class="kind-row">
+            <label for="tab-kind">V tabuľke sú</label>
+            <Select v-model="kind" input-id="tab-kind" :options="tableKinds" option-label="label" option-value="value" size="small"
+              class="kind-select" :invalid="needKind" @change="preview" />
+            <span class="spacer" />
+            <span class="tpl">
+              <label for="tpl-kind" class="tpl-label">Vzor</label>
+              <Select v-model="templateKind" input-id="tpl-kind" :options="templateKinds" option-label="label" option-value="value" size="small" class="kind-select" />
+              <Button icon="pi pi-download" label="Stiahnuť" text size="small" v-tooltip.bottom="'Vzor tabuľky (CSV)'" @click="downloadTemplate" />
+            </span>
+          </div>
+          <Message v-if="needKind" severity="warn" :closable="false">V tabuľke sú faktúry — vyberte, či sú vydané alebo prijaté.</Message>
+          <p v-if="report?.columns?.length" class="hint">Rozpoznané stĺpce: {{ report.columns.join(', ') }}.</p>
         </template>
 
         <template v-if="report">
@@ -284,6 +324,28 @@ async function run() {
   font-size: var(--fs-sm);
   color: var(--ink-soft);
   overflow-wrap: anywhere;
+}
+.kind-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 10px;
+  font-size: var(--fs-sm);
+}
+.kind-row .spacer {
+  flex: 1;
+}
+.kind-select {
+  min-width: 170px;
+}
+.tpl {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tpl-label {
+  color: var(--ink-soft);
 }
 .paid {
   display: flex;

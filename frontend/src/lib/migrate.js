@@ -21,11 +21,58 @@ export const sources = [
   { id: 'superfaktura', name: 'SuperFaktúra', ready: false },
   { id: 'idoklad', name: 'iDoklad', ready: false },
   { id: 'fakturoid', name: 'Fakturoid', ready: false },
-  { id: 'csv', name: 'Excel / CSV', ready: false },
+  {
+    id: 'table',
+    name: 'Excel / CSV',
+    ready: true,
+    kinds: true,
+    accept: '.csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    hint: 'Tabuľka z ľubovoľného programu: v prvom riadku hlavička, potom jeden kontakt, položka alebo faktúra na riadok. Stĺpce sa rozpoznajú podľa názvu — stiahnite si vzor.',
+  },
 ]
+
+/** Obsah tabuľky Excel/CSV. */
+export const tableKinds = [
+  { value: 'auto', label: 'Rozpoznať' },
+  { value: 'contacts', label: 'Adresár' },
+  { value: 'items', label: 'Cenník' },
+  { value: 'invoices', label: 'Vydané faktúry' },
+  { value: 'purchases', label: 'Prijaté faktúry' },
+]
+
+/** Vzory tabuliek: hlavička a ukážkový riadok. */
+export const tableTemplates = {
+  contacts: [
+    ['Názov', 'IČO', 'DIČ', 'IČ DPH', 'Ulica', 'Obec', 'PSČ', 'Štát', 'E-mail', 'Telefón', 'Poznámka'],
+    ['Kováč a syn s.r.o.', '36123455', '2020123457', 'SK2020123457', 'Hlavná 12', 'Nitra', '94901', 'Slovensko', 'fakturacia@kovac.sk', '+421 905 123 456', ''],
+  ],
+  items: [
+    ['Kód', 'Názov', 'MJ', 'Cena bez DPH', 'DPH (%)', 'Poznámka'],
+    ['M1', 'Montáž', 'hod', '40,00', '23', ''],
+  ],
+  invoices: [
+    ['Číslo', 'Odberateľ', 'IČO', 'IČ DPH', 'Obec', 'Štát', 'Vystavená', 'Dodanie', 'Splatnosť', 'Predmet', 'Základ 23 %', 'DPH 23 %', 'Základ 19 %', 'DPH 19 %', 'Základ 5 %', 'DPH 5 %', 'Základ 0 %', 'Spolu', 'Dátum úhrady', 'Pôvodná faktúra'],
+    ['2026001', 'Kováč a syn s.r.o.', '36123455', 'SK2020123457', 'Nitra', 'Slovensko', '2.3.2026', '2.3.2026', '16.3.2026', 'Montáž rozvádzača', '100,00', '23,00', '', '', '', '', '', '123,00', '10.3.2026', ''],
+  ],
+  purchases: [
+    ['Číslo dodávateľa', 'Dodávateľ', 'IČO', 'IČ DPH', 'Obec', 'Vystavená', 'Dodanie', 'Splatnosť', 'Predmet', 'Základ 23 %', 'DPH 23 %', 'Základ 19 %', 'DPH 19 %', 'Základ 0 %', 'Spolu', 'Dátum úhrady'],
+    ['2026001234', 'Elektro Veľkoobchod a.s.', '35757442', 'SK2021757441', 'Zvolen', '5.3.2026', '5.3.2026', '19.3.2026', 'Materiál', '100,00', '23,00', '', '', '', '123,00', ''],
+  ],
+}
+
+/** Stĺpce a riadky vzoru pre export (lib/export.js). */
+export function templateExport(kind) {
+  const [head, ...rows] = tableTemplates[kind]
+  return { columns: head.map((h, i) => ({ header: h, value: (r) => r[i], width: 14 })), rows }
+}
 
 /** Najväčší súbor na import (zhodne so serverom, app.MaxPohodaBytes). */
 export const maxImportBytes = 50 * 1024 * 1024
+
+/** Názov agendy pre vzor a nadpis. */
+export function kindLabel(kind) {
+  return tableKinds.find((k) => k.value === kind)?.label ?? ''
+}
 
 const groups = [
   ['contacts', 'Kontakty'],

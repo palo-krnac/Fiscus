@@ -59,6 +59,8 @@ type MigrateOptions struct {
 	// PaidUntil: vydané aj prijaté faktúry so splatnosťou do tohto dňa
 	// budú uhradené (zdroj úhrady neexportuje, staré roky sú vyrovnané).
 	PaidUntil invoice.Date
+	// Kind je obsah tabuľky Excel/CSV (adresár, cenník, vydané, prijaté).
+	Kind string
 }
 
 type migContact struct {
@@ -77,14 +79,18 @@ type migInvoice struct {
 	Summary  []invoice.Line  // riadky z rekapitulácie DPH (náhrada položiek)
 	Total    money.Dec       // suma zo zdroja (0 = neznáma)
 	Paid     money.Dec       // uhradené podľa zdroja
+	PaidAll  bool            // celá faktúra je uhradená
+	PaidDate invoice.Date    // dátum úhrady (inak splatnosť)
+	Ref      string          // na upozornenia, keď chýba číslo (riadok 5)
 	Err      error
 }
 
 type migPurchase struct {
-	Ref  string // na upozornenia
-	P    purchase.Purchase
-	Paid bool
-	Err  error
+	Ref      string // na upozornenia
+	P        purchase.Purchase
+	Paid     bool
+	PaidDate invoice.Date
+	Err      error
 }
 
 type migration struct {
@@ -99,9 +105,17 @@ type migration struct {
 	Warnings []string // upozornenia z prevodu (neznámy štát…)
 }
 
+// agendy na počty preskočených záznamov
+const (
+	agContacts  = "contacts"
+	agItems     = "items"
+	agInvoices  = "invoices"
+	agPurchases = "purchases"
+)
+
 type migSkip struct {
-	Purchase bool
-	Text     string
+	Agenda string
+	Text   string
 }
 
 func (a *App) requireMigrate(ctx context.Context, companyID int64) error {
@@ -223,6 +237,11 @@ func (a *App) migrate(ctx context.Context, companyID int64, m migration, opt Mig
 	sort.SliceStable(list, func(i, j int) bool { return !list[i].Credit && list[j].Credit })
 	for _, mi := range list {
 		num := strings.TrimSpace(mi.Number)
+		if mi.Err != nil && num == "" && mi.Ref != "" {
+			rep.Invoices.Skipped++
+			rep.warn("Faktúra (%s): %v", mi.Ref, mi.Err)
+			continue
+		}
 		if num == "" {
 			rep.Invoices.Skipped++
 			rep.warn("Vydaná faktúra bez čísla sa preskočila")
@@ -283,7 +302,11 @@ func (a *App) migrate(ctx context.Context, companyID int64, m migration, opt Mig
 				rep.Purchases.Skipped++
 				rep.warn("Prijatá faktúra %s od %s: %v", p.SupplierNumber, p.Supplier.Name, err)
 			} else if paid {
-				if _, err := a.MarkPurchasePaid(ctx, companyID, saved.ID, a.paidOn(p.DueDate)); err != nil {
+				on := a.paidOn(p.DueDate)
+				if !mp.PaidDate.IsZero() {
+					on = mp.PaidDate
+				}
+				if _, err := a.MarkPurchasePaid(ctx, companyID, saved.ID, on); err != nil {
 					rep.warn("Prijatá faktúra %s od %s: prenesená, ale neuhradená: %v", p.SupplierNumber, p.Supplier.Name, err)
 				}
 			}
@@ -291,9 +314,14 @@ func (a *App) migrate(ctx context.Context, companyID int64, m migration, opt Mig
 	}
 
 	for _, s := range m.Skips {
-		if s.Purchase {
+		switch s.Agenda {
+		case agContacts:
+			rep.Contacts.Skipped++
+		case agItems:
+			rep.Items.Skipped++
+		case agPurchases:
 			rep.Purchases.Skipped++
-		} else {
+		default:
 			rep.Invoices.Skipped++
 		}
 		rep.warn("%s", s.Text)
@@ -395,9 +423,13 @@ func (a *App) migInvoiceSave(ctx context.Context, companyID int64, inv *invoice.
 	inv.Number = strings.TrimSpace(mi.Number)
 	inv.Status = invoice.StatusIssued
 	total := inv.Summary.Total
-	paid := !total.IsZero() && mi.Paid.Sign() == total.Sign() && absDec(mi.Paid).Cmp(absDec(total)) >= 0
+	paid := mi.PaidAll || (!total.IsZero() && mi.Paid.Sign() == total.Sign() && absDec(mi.Paid).Cmp(absDec(total)) >= 0)
 	if paid || (!opt.PaidUntil.IsZero() && !inv.DueDate.After(opt.PaidUntil)) {
-		if err := inv.AddPayment(invoice.Payment{Date: a.paidOn(inv.DueDate), Amount: inv.Remaining(), Source: "import"}); err != nil {
+		on := a.paidOn(inv.DueDate)
+		if !mi.PaidDate.IsZero() {
+			on = mi.PaidDate
+		}
+		if err := inv.AddPayment(invoice.Payment{Date: on, Amount: inv.Remaining(), Source: "import"}); err != nil {
 			return err
 		}
 	}
