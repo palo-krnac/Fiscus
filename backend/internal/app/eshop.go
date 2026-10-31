@@ -442,7 +442,10 @@ func shopRate(net, tax money.Dec, date invoice.Date) (vat.Rate, bool) {
 	if tax.IsZero() {
 		return vat.Rate0, true
 	}
-	if net.Sign() <= 0 {
+	if net.Sign() < 0 { // zľava: záporný základ aj daň
+		net, tax = net.Neg(), tax.Neg()
+	}
+	if net.Sign() <= 0 || tax.Sign() < 0 {
 		return vat.Rate0, false
 	}
 	pct := tax.MulRatio(money.FromInt(100), net)
