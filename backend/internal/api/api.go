@@ -212,6 +212,8 @@ func (s *Server) Handler() http.Handler {
 	need("POST /api/companies/{cid}/import/{source}", auth.PermInvoicesWrite, s.importMigrate)
 	need("POST /api/companies/{cid}/contacts/import", auth.PermContactsWrite, s.importContacts)
 	need("POST /api/companies/{cid}/purchases/extract", auth.PermPurchasesWrite, s.extractPurchase)
+	need("POST /api/companies/{cid}/receipts", auth.PermPurchasesWrite, s.scanReceipt)
+	need("GET /api/companies/{cid}/purchases/{id}/file", auth.PermPurchasesRead, s.purchaseFile)
 	need("POST /api/companies/{cid}/purchases/import-ubl", auth.PermPurchasesWrite, s.importUBL)
 	need("PUT /api/companies/{cid}/items/{id}", auth.PermInvoicesWrite, s.saveItem)
 	need("DELETE /api/companies/{cid}/items/{id}", auth.PermInvoicesWrite, s.deleteItem)

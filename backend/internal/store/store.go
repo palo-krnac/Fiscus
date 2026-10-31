@@ -172,6 +172,16 @@ type Logo struct {
 	Updated     time.Time
 }
 
+// PurchaseFile je súbor prijatého dokladu (fotka bločku, sken faktúry).
+type PurchaseFile struct {
+	CompanyID   int64
+	PurchaseID  int64
+	Name        string
+	ContentType string
+	Data        []byte
+	Created     time.Time
+}
+
 // Email je záznam odoslaného (alebo neúspešne odosielaného) e-mailu.
 type Email struct {
 	ID        int64     `json:"id"`
@@ -292,6 +302,11 @@ type Store interface {
 	// SavePurchase vloží (ID == 0) alebo prepíše prijatú faktúru. Nastaví ID.
 	SavePurchase(ctx context.Context, companyID int64, p *purchase.Purchase) error
 	DeletePurchase(ctx context.Context, companyID, id int64) error
+	// Súbor prijatého dokladu (jeden na doklad; uloženie prepíše starý).
+	// GetPurchaseFile vráti ErrNotFound, ak súbor nie je. Zmazanie dokladu
+	// zmaže aj súbor.
+	SavePurchaseFile(ctx context.Context, f PurchaseFile) error
+	GetPurchaseFile(ctx context.Context, companyID, purchaseID int64) (PurchaseFile, error)
 
 	// SaveBankTransactions vloží nové pohyby; pohyby s už známym odtlačkom
 	// (opakovaný import) preskočí. Vráti vložené pohyby (s ID) a počet preskočených.

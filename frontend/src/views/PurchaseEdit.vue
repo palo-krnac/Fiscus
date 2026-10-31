@@ -25,6 +25,7 @@ import { takePurchaseDraft } from '../lib/drafts.js'
 import { currencyOptions, isForeignCurrency, rateHint, rateText } from '../lib/fx.js'
 
 const props = defineProps({ id: String })
+const photoOk = ref(true) // fotka bločku (z mobilu); chýbajúca sa skryje
 const router = useRouter()
 const toast = useToast()
 const confirm = useConfirm()
@@ -495,6 +496,13 @@ const set = (obj, key) => (v) => {
           </div>
         </fieldset>
 
+        <fieldset v-if="p.id && photoOk" class="form-section">
+          <legend>Fotka dokladu</legend>
+          <a :href="api.purchaseFileUrl(session.companyId, p.id)" target="_blank" rel="noopener" class="photo">
+            <img :src="api.purchaseFileUrl(session.companyId, p.id)" alt="Fotka bločku" @error="photoOk = false" />
+          </a>
+        </fieldset>
+
         <fieldset class="form-section">
           <legend>Poznámka</legend>
           <Textarea :model-value="p.note" :disabled="locked" rows="2" auto-resize class="note" @update:model-value="set(p, 'note')($event)" />
@@ -533,6 +541,13 @@ const set = (obj, key) => (v) => {
 </template>
 
 <style scoped>
+.photo img {
+  display: block;
+  max-width: 100%;
+  max-height: 360px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+}
 .ai-note {
   display: flex;
   gap: 10px;

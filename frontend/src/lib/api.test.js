@@ -18,6 +18,17 @@ describe('request', () => {
     expect(JSON.parse(init.body)).toEqual({ a: 1 })
   })
 
+  it('formulár so súbormi pošle ako multipart bez vlastnej hlavičky', async () => {
+    const f = respond(201, { ok: true })
+    const fd = new FormData()
+    fd.append('qr', 'O-1')
+    await request('POST', '/api/r', fd, f)
+    const [, init] = f.mock.calls[0]
+    expect(init.body).toBe(fd)
+    expect(init.headers['Content-Type']).toBeUndefined()
+    expect(init.headers['X-Fiskus']).toBe('1')
+  })
+
   it('chyby polí prevedie na ApiError', async () => {
     const f = respond(422, { error: 'Doklad obsahuje chyby', fields: [{ field: 'customer.name', message: 'Zadajte odberateľa' }] })
     const err = await request('POST', '/api/x', {}, f).catch((e) => e)

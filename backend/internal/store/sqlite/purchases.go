@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/money"
@@ -181,6 +182,9 @@ func (s *Store) SavePurchase(ctx context.Context, companyID int64, p *purchase.P
 }
 
 func (s *Store) DeletePurchase(ctx context.Context, companyID, id int64) error {
+	if _, err := s.db.ExecContext(ctx, "DELETE FROM purchase_files WHERE purchase_id = ? AND company_id = ?", id, companyID); err != nil {
+		return err
+	}
 	res, err := s.db.ExecContext(ctx, "DELETE FROM purchases WHERE id = ? AND company_id = ?", id, companyID)
 	if err != nil {
 		return err
@@ -189,4 +193,30 @@ func (s *Store) DeletePurchase(ctx context.Context, companyID, id int64) error {
 		return store.ErrNotFound
 	}
 	return nil
+}
+
+func (s *Store) SavePurchaseFile(ctx context.Context, f store.PurchaseFile) error {
+	var n int
+	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM purchases WHERE id = ? AND company_id = ?", f.PurchaseID, f.CompanyID).Scan(&n); err != nil {
+		return err
+	}
+	if n == 0 {
+		return store.ErrNotFound
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO purchase_files (purchase_id, company_id, name, content_type, data, created) VALUES (?, ?, ?, ?, ?, ?)
+		ON CONFLICT(purchase_id) DO UPDATE SET name = excluded.name, content_type = excluded.content_type, data = excluded.data, created = excluded.created`,
+		f.PurchaseID, f.CompanyID, f.Name, f.ContentType, f.Data, f.Created.UTC().Format(time.RFC3339))
+	return err
+}
+
+func (s *Store) GetPurchaseFile(ctx context.Context, companyID, purchaseID int64) (store.PurchaseFile, error) {
+	f := store.PurchaseFile{CompanyID: companyID, PurchaseID: purchaseID}
+	var created string
+	err := s.db.QueryRowContext(ctx, "SELECT name, content_type, data, created FROM purchase_files WHERE purchase_id = ? AND company_id = ?",
+		purchaseID, companyID).Scan(&f.Name, &f.ContentType, &f.Data, &created)
+	if errors.Is(err, sql.ErrNoRows) {
+		return f, store.ErrNotFound
+	}
+	f.Created, _ = time.Parse(time.RFC3339, created)
+	return f, err
 }

@@ -53,6 +53,7 @@ type Store struct {
 	items     map[int64]catalog.Item
 	stockDocs map[int64]stock.Doc
 	logos     map[int64]store.Logo
+	files     map[int64]store.PurchaseFile // doklad → súbor
 	emails    []store.Email
 	einvoices []store.EInvoice
 	rates     map[fxKey]fx.Rate
@@ -261,7 +262,34 @@ func (s *Store) DeletePurchase(_ context.Context, companyID, id int64) error {
 		return store.ErrNotFound
 	}
 	delete(s.purchases, id)
+	delete(s.files, id)
 	return nil
+}
+
+func (s *Store) SavePurchaseFile(_ context.Context, f store.PurchaseFile) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, ok := s.purchases[f.PurchaseID]
+	if !ok || p.CompanyID != f.CompanyID {
+		return store.ErrNotFound
+	}
+	if s.files == nil {
+		s.files = map[int64]store.PurchaseFile{}
+	}
+	f.Data = append([]byte(nil), f.Data...)
+	s.files[f.PurchaseID] = f
+	return nil
+}
+
+func (s *Store) GetPurchaseFile(_ context.Context, companyID, purchaseID int64) (store.PurchaseFile, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	f, ok := s.files[purchaseID]
+	if !ok || f.CompanyID != companyID {
+		return store.PurchaseFile{}, store.ErrNotFound
+	}
+	f.Data = append([]byte(nil), f.Data...)
+	return f, nil
 }
 
 func matches(inv invoice.Invoice, f store.InvoiceFilter) bool {

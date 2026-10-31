@@ -14,6 +14,8 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 ## Etapa 1 — fakturácia a DPH pre živnostníka
 - [x] Nastavenia firmy (údaje, IBAN, platiteľ DPH áno/nie, predvolená splatnosť)
 - [x] Úvodné nastavenie novej firmy (údaje z IČO, DPH, jednoduché/podvojné účtovníctvo — menu podľa neho, nová firma alebo prechod z iného programu); prenos dokladov z iného programu iba raz
+- [x] Bločky z mobilu: odfotenie QR kódu bločku eKasa (čítanie v telefóne), doklad z Finančnej správy → uhradený prijatý doklad s fotkou; stránka /m na plochu telefónu (manifest)
+- [ ] Mobil v sieti k desktopu: spárovanie QR kódom, prístup iba pre spárované telefóny
 - [x] Nastavenia po sekciách (firma, DPH, doklady a platby, e-faktúry, e-mail, kalendár, bezpečnosť, používatelia, AI, prenos dát, zálohy, kurzy, legislatíva): menu vľavo, na mobile rozbaľovacie, podľa práv
 - [x] Číselníky: sadzby DPH s obdobím platnosti (kontrola podľa dátumu dodania), číselné rady s vlastným formátom, merné jednotky, spôsoby úhrady, krajiny
 - [x] Logo firmy na faktúre, cenovej ponuke, upomienke a pokladničnom doklade (PNG, JPEG, WebP do 512 kB; SVG nie kvôli bezpečnosti)
