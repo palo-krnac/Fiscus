@@ -17,12 +17,16 @@ import (
 // (Shoptet-Private-API-Token, balík Premium). Zoznam objednávok vracia
 // iba súhrn, položky sú v detaile objednávky. Zásoby: PATCH
 // /api/stocks/{id}/movements s realStock (fyzický stav na sklade).
-// https://api.docs.shoptet.com/shoptet-api/openapi
+// https://api.docs.shoptet.com/shoptet-api/openapi (schéma openapi.yaml
+// z github.com/shoptet/developers)
 
 // ShoptetAPI je adresa Shoptet API (v testoch falošný server).
 var ShoptetAPI = "https://api.myshoptet.com"
 
-type shoptet struct{ c Conn }
+type shoptet struct {
+	c    Conn
+	info *stInfo
+}
 
 func (s *shoptet) auth(r *http.Request) { r.Header.Set("Shoptet-Private-API-Token", s.c.Secret) }
 
@@ -133,7 +137,10 @@ type stOrder struct {
 		ID   json.Number `json:"id"`
 		Name string      `json:"name"`
 	} `json:"status"`
-	Paid            *bool   `json:"paid"`
+	Paid          *bool `json:"paid"`
+	PaymentMethod *struct {
+		Name string `json:"name"`
+	} `json:"paymentMethod"`
 	Email           string  `json:"email"`
 	Phone           string  `json:"phone"`
 	Price           stPrice `json:"price"`
@@ -186,6 +193,9 @@ func (o stOrder) order() Order {
 	out := Order{ID: o.Code, Number: o.Code, Created: parseStTime(o.CreationTime), Status: o.Status.Name,
 		Currency: strings.ToUpper(o.Price.Currency), Total: o.Price.WithVat.dec(),
 		Billing: o.BillingAddress.address(strings.TrimSpace(o.Email), strings.TrimSpace(o.Phone)), Shipping: o.DeliveryAddress.address("", "")}
+	if o.PaymentMethod != nil {
+		out.Payment = paymentOf(o.PaymentMethod.Name)
+	}
 	n := strings.ToLower(o.Status.Name)
 	out.Cancelled = strings.Contains(n, "storn") || strings.Contains(n, "zruš") || strings.Contains(n, "cancel")
 	if o.Paid != nil && *o.Paid && !out.Cancelled {
@@ -196,13 +206,16 @@ func (o stOrder) order() Order {
 		if q.IsZero() {
 			q = money.FromInt(1)
 		}
-		net := it.ItemPrice.WithoutVat.dec().Mul(q).RoundCents()
-		gross := it.ItemPrice.WithVat.dec().Mul(q).RoundCents()
+		// itemPrice je cena celého riadku (s množstvom aj zľavou priceRatio)
+		net := it.ItemPrice.WithoutVat.dec().RoundCents()
+		gross := it.ItemPrice.WithVat.dec().RoundCents()
 		switch it.ItemType {
 		case "product-set-item":
 			continue // súčasť sady: cena je pri sade
 		case "billing":
-			out.Payment = paymentOf(it.Name)
+			if out.Payment == "" {
+				out.Payment = paymentOf(it.Name)
+			}
 		}
 		if it.ItemType == "billing" && net.IsZero() && gross.IsZero() {
 			continue

@@ -138,7 +138,8 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] Shoptet (súkromné API): objednávky → koncepty faktúr, zásoby (realStock) — neoverené
 - [x] Riadenie obchodu z Fiškusu (WooCommerce): prevzatie produktov a zákazníkov, odoslanie cenníka (názov, cena, trieda DPH, vyradenie) iba zmien, nové skladové položky ako koncept; každú hodinu aj so zásobami
 - [x] Riadenie obchodu pre Shopify (zdaniteľný = 23 %, nezdaniteľný = 0 %) a Magento (triedy dane z daňových pravidiel, ceny bez DPH)
-- [ ] Riadenie obchodu pre Shoptet (čaká na schému produktov a zákazníkov) a PrestaShop
+- [x] Riadenie obchodu pre Shoptet podľa oficiálnej schémy openapi.yaml: produkty a varianty, zákazníci, cena v predvolenom cenníku (sadzba + cena bez DPH), názov a skrytie, nový produkt skrytý v prvej kategórii
+- [ ] Riadenie obchodu pre PrestaShop
 - [ ] Upgates (čaká na oficiálnu dokumentáciu)
 
 ## Etapa 4 — mzdy (samostatný návrh)

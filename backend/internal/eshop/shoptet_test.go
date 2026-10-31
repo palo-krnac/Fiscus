@@ -38,7 +38,7 @@ func TestShoptet(t *testing.T) {
  "billingAddress":{"company":"Firma s.r.o.","fullName":"Ján Novák","street":"Hlavná","houseNumber":"12","city":"Žilina","zip":"010 01","countryCode":"SK",
   "companyId":"36000001","vatId":"SK2020000001","taxId":"2020000001"},
  "deliveryAddress":{"fullName":"Ján Novák","street":"Sklad","houseNumber":"5","city":"Martin","zip":"036 01","countryCode":"SK"},
- "items":[{"itemType":"product","code":"REL24","name":"Relé","variantName":"24 V","amount":"2.000","itemPrice":{"withVat":"12.30","withoutVat":"10.00","vat":"2.30","vatRate":"23.00"}},
+ "items":[{"itemType":"product","code":"REL24","name":"Relé","variantName":"24 V","amount":"2.000","itemPrice":{"withVat":"24.60","withoutVat":"20.00","vat":"4.60","vatRate":"23.00"},"unitPrice":{"withVat":"12.30","withoutVat":"10.00"}},
   {"itemType":"shipping","name":"Packeta","amount":"1","itemPrice":{"withVat":"4.92","withoutVat":"4.00","vat":"0.92","vatRate":"23.00"}},
   {"itemType":"billing","name":"Dobierka","amount":"1","itemPrice":{"withVat":"1.23","withoutVat":"1.00","vat":"0.23","vatRate":"23.00"}},
   {"itemType":"discount-coupon","code":"ZLAVA","name":"Kupón","amount":"1","itemPrice":{"withVat":"-2.46","withoutVat":"-2.00","vat":"-0.46","vatRate":"23.00"}}]}},"errors":null}`)
