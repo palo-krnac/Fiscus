@@ -19,6 +19,7 @@ import SecuritySettings from '../components/SecuritySettings.vue'
 import CalendarSyncPanel from '../components/CalendarSyncPanel.vue'
 import EshopSettings from '../components/EshopSettings.vue'
 import DeleteCompany from '../components/DeleteCompany.vue'
+import EmailSettings from '../components/EmailSettings.vue'
 import { currentSetting, errorSection } from '../lib/settingsNav.js'
 import { bookkeepingOptions, migrationNote } from '../lib/setup.js'
 import { useRouter } from 'vue-router'
@@ -284,6 +285,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
       </fieldset>
 
       <EInvoiceSettings v-if="section === 'e-faktury'" />
+      <EmailSettings v-if="section === 'e-mail'" />
       <CalendarSyncPanel v-if="section === 'kalendar'" />
       <SecuritySettings v-if="section === 'bezpecnost'" />
       <EshopSettings v-if="section === 'e-shopy'" />
