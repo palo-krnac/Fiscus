@@ -546,6 +546,9 @@ func (a *App) PushEshopStock(ctx context.Context, companyID int64, id string) (E
 	if err != nil {
 		return rep, err
 	}
+	if info, _ := eshop.InfoOf(list[i].Platform); !info.Stock {
+		return rep, shopErr(eshop.ErrNoStock)
+	}
 	cfg, err := a.loadStock(ctx, companyID)
 	if err != nil {
 		return rep, err

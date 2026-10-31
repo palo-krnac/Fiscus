@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -222,5 +223,20 @@ func TestShopRate(t *testing.T) {
 		if r != tt.want || ok != tt.ok {
 			t.Errorf("shopRate(%s, %s) = %d %v", tt.net, tt.tax, r, ok)
 		}
+	}
+}
+
+func TestEshopNoStockPlatform(t *testing.T) {
+	a, c := newApp(t, edition.Desktop)
+	set, err := a.SaveEshops(ctx, c.ID, []EshopConn{{Platform: eshop.Drupal, URL: "https://obchod.sk", Key: "fiskus", Secret: "heslo"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var se *EshopError
+	if _, err := a.PushEshopStock(ctx, c.ID, set.Conns[0].ID); !errors.As(err, &se) || !errors.Is(err, eshop.ErrNoStock) {
+		t.Errorf("Drupal zásoby: %v", err)
+	}
+	if _, err := a.SaveEshops(ctx, c.ID, []EshopConn{{Platform: eshop.Drupal, URL: "https://obchod.sk", Secret: "heslo"}}); !fieldErr(err, "conns[0].key") {
+		t.Errorf("Drupal bez používateľa: %v", err)
 	}
 }

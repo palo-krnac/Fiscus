@@ -29,6 +29,9 @@ type Platform string
 const (
 	WooCommerce Platform = "woocommerce"
 	Shopify     Platform = "shopify"
+	PrestaShop  Platform = "prestashop"
+	Magento     Platform = "magento"
+	Drupal      Platform = "drupal"
 )
 
 // Info opisuje platformu pre rozhranie: čo treba zadať a kde to v obchode nájsť.
@@ -53,6 +56,15 @@ var Platforms = []Info{
 	{Platform: Shopify, Name: "Shopify", URLHint: "mojobchod.myshopify.com", SecretLbl: "Admin API access token",
 		Help: "Shopify admin → Settings → Apps → Develop apps → vlastná aplikácia s právami read_orders, read_products, write_inventory, read_locations.",
 		Docs: "https://shopify.dev/docs/api/admin-graphql", Stock: true},
+	{Platform: PrestaShop, Name: "PrestaShop", URLHint: "https://mojobchod.sk", SecretLbl: "Kľúč webservice",
+		Help: "PrestaShop → Rozšírené parametre → Webservice: zapnite webservice a pridajte kľúč s právami GET na orders, order_details, order_states, addresses, customers, countries, currencies, products a GET+PUT na stock_availables.",
+		Docs: "https://devdocs.prestashop-project.org/8/webservice/", Stock: true},
+	{Platform: Magento, Name: "Magento / Adobe Commerce", URLHint: "https://mojobchod.sk", SecretLbl: "Access token integrácie",
+		Help: "Magento admin → System → Integrations → Add New Integration s prístupom k Sales (Orders) a Catalog (Inventory) → Activate; skopírujte Access Token. V nastaveniach musí byť povolené použitie tokenu integrácie ako bearer tokenu.",
+		Docs: "https://developer.adobe.com/commerce/webapi/rest/", Stock: true},
+	{Platform: Drupal, Name: "Drupal Commerce", URLHint: "https://mojobchod.sk", KeyLabel: "Používateľ", SecretLbl: "Heslo",
+		Help: "Drupal: zapnite moduly JSON:API a HTTP Basic Authentication a vytvorte používateľa iba s právom čítať objednávky a profily (view commerce_order, view commerce_product). Stav zásob Drupal Commerce bez doplnku nevedie, preto sa zásoby neposielajú.",
+		Docs: "https://docs.drupalcommerce.org/", Stock: false},
 }
 
 // InfoOf vráti opis platformy.
@@ -137,7 +149,9 @@ type Connector interface {
 var (
 	ErrNoSKU    = errors.New("produkt s týmto kódom v obchode nie je")
 	ErrPlatform = errors.New("neznámy druh e-shopu")
-	ErrAuth     = errors.New("obchod odmietol prihlasovacie údaje — skontrolujte kľúč a jeho oprávnenia")
+	// ErrNoStock — platforma stav zásob cez API neprijíma.
+	ErrNoStock = errors.New("tento druh e-shopu neprijíma stav zásob")
+	ErrAuth    = errors.New("obchod odmietol prihlasovacie údaje — skontrolujte kľúč a jeho oprávnenia")
 )
 
 // paymentOf odhadne spôsob úhrady z názvu platobnej metódy obchodu.
@@ -174,6 +188,12 @@ func New(c Conn) (Connector, error) {
 		return &woo{c}, nil
 	case Shopify:
 		return &shopify{c}, nil
+	case PrestaShop:
+		return &presta{c}, nil
+	case Magento:
+		return &magento{c}, nil
+	case Drupal:
+		return &drupal{c}, nil
 	}
 	return nil, ErrPlatform
 }
@@ -248,15 +268,24 @@ func blockedIP(ip net.IP) bool {
 		ip.IsUnspecified() || ip.IsMulticast() || ip.IsInterfaceLocalMulticast()
 }
 
-// call pošle požiadavku a odpoveď (JSON) dekóduje do out.
+// call pošle požiadavku s telom JSON a odpoveď (JSON) dekóduje do out.
 func call(ctx context.Context, hc *http.Client, method, u string, body any, out any, auth func(*http.Request)) (http.Header, error) {
-	var rd io.Reader
+	var raw []byte
 	if body != nil {
 		b, err := json.Marshal(body)
 		if err != nil {
 			return nil, err
 		}
-		rd = bytes.NewReader(b)
+		raw = b
+	}
+	return send(ctx, hc, method, u, "application/json", raw, out, auth)
+}
+
+// send pošle požiadavku s ľubovoľným telom (nil = bez tela).
+func send(ctx context.Context, hc *http.Client, method, u, contentType string, body []byte, out any, auth func(*http.Request)) (http.Header, error) {
+	var rd io.Reader
+	if body != nil {
+		rd = bytes.NewReader(body)
 	}
 	req, err := http.NewRequestWithContext(ctx, method, u, rd)
 	if err != nil {
@@ -264,7 +293,7 @@ func call(ctx context.Context, hc *http.Client, method, u string, body any, out 
 	}
 	req.Header.Set("Accept", "application/json")
 	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Content-Type", contentType)
 	}
 	req.Header.Set("User-Agent", "Fiskus")
 	auth(req)
@@ -281,7 +310,7 @@ func call(ctx context.Context, hc *http.Client, method, u string, body any, out 
 	case res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusForbidden:
 		return nil, ErrAuth
 	case res.StatusCode == http.StatusNotFound:
-		return nil, fmt.Errorf("obchod odpovedal „nenájdené“ (%s) — skontrolujte adresu obchodu", req.URL.Path)
+		return nil, &notFound{req.URL.Path}
 	case res.StatusCode >= 300:
 		return nil, fmt.Errorf("obchod vrátil chybu %d: %s", res.StatusCode, snippet(data))
 	}
@@ -345,3 +374,13 @@ func (r jsonRaw) decode(out any) error {
 	}
 	return json.Unmarshal(r, out)
 }
+
+// errNotFound — obchod odpovedal 404 (errors.Is na *notFound).
+var errNotFound = errors.New("nenájdené")
+
+type notFound struct{ path string }
+
+func (e *notFound) Error() string {
+	return "obchod odpovedal „nenájdené“ (" + e.path + ") — skontrolujte adresu obchodu"
+}
+func (e *notFound) Is(t error) bool { return t == errNotFound }
