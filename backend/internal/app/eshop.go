@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"sort"
 	"strings"
@@ -48,6 +49,9 @@ type EshopConn struct {
 	HasSecret bool   `json:"hasSecret"`
 	// OnlyPaid: faktúra vznikne až z uhradenej objednávky.
 	OnlyPaid bool `json:"onlyPaid"`
+	// Auto: objednávky sa načítajú samé každú hodinu (v mene toho, kto to zapol).
+	Auto      bool   `json:"auto"`
+	LastError string `json:"lastError"`
 	// Since: objednávky od tohto dňa (pri prvom načítaní).
 	Since invoice.Date `json:"since"`
 	// LastSync a LastResult opisujú posledné načítanie objednávok.
@@ -69,6 +73,7 @@ type eshopStored struct {
 	StoredKey    string        `json:"storedKey"`
 	StoredSecret string        `json:"storedSecret"`
 	Cursor       time.Time     `json:"cursor"` // odkiaľ načítať nabudúce
+	AutoUser     int64         `json:"autoUser"`
 	Done         []eshopImport `json:"done"`
 }
 
@@ -196,6 +201,10 @@ func (a *App) SaveEshops(ctx context.Context, companyID int64, in []EshopConn) (
 			bad(i, "secret", "Zadajte "+info.SecretLbl)
 		}
 		s.OnlyPaid = c.OnlyPaid
+		if c.Auto && !s.Auto {
+			s.AutoUser = auth.ActorFrom(ctx).UserID
+		}
+		s.Auto = c.Auto
 		if c.Since != s.Since {
 			s.Since, s.Cursor = c.Since, time.Time{} // nový začiatok: načítať odznova (prenesené sa nezopakujú)
 		}
@@ -388,6 +397,7 @@ func (a *App) SyncEshopOrders(ctx context.Context, companyID int64, id string) (
 		rep.Warnings = append(rep.Warnings, fmt.Sprintf("Načítalo sa prvých %d objednávok — zvyšok príde pri ďalšom načítaní", eshop.MaxOrders))
 	}
 	s.LastSync = a.now().Format(time.RFC3339)
+	s.LastError = ""
 	s.LastResult = fmt.Sprintf("%d nových faktúr", rep.Created)
 	if rep.Waiting > 0 {
 		s.LastResult += fmt.Sprintf(", %d čaká na úhradu", rep.Waiting)
@@ -546,6 +556,9 @@ func (a *App) PushEshopStock(ctx context.Context, companyID int64, id string) (E
 	if err != nil {
 		return rep, err
 	}
+	if info, _ := eshop.InfoOf(list[i].Platform); !info.Stock {
+		return rep, shopErr(eshop.ErrNoStock)
+	}
 	cfg, err := a.loadStock(ctx, companyID)
 	if err != nil {
 		return rep, err
@@ -588,4 +601,72 @@ func (a *App) PushEshopStock(ctx context.Context, companyID int64, id string) (E
 	a.record(ctx, companyID, audit.CatSettings, "update", "eshop_stock", 0,
 		fmt.Sprintf("Zásoby odoslané do e-shopu %s: %d položiek", list[i].Name, rep.Updated), nil, nil)
 	return rep, nil
+}
+
+// eshopActor je používateľ, v mene ktorého beží automatické načítanie.
+func (a *App) eshopActor(ctx context.Context, userID int64) (context.Context, error) {
+	if userID == 0 {
+		if a.Caps.Mode != edition.Desktop {
+			return ctx, ErrForbidden
+		}
+		return auth.WithActor(ctx, auth.Local), nil
+	}
+	u, err := a.Store.GetUser(ctx, userID)
+	if err != nil || !u.Active {
+		return ctx, ErrForbidden
+	}
+	act := actorOf(u, auth.Actor{})
+	act.Name += " · e-shop"
+	return auth.WithActor(ctx, act), nil
+}
+
+// SyncAllEshops načíta objednávky vo všetkých obchodoch s automatickým
+// načítaním (volá ho program každú hodinu). Chyba sa zapíše k obchodu.
+func (a *App) SyncAllEshops(ctx context.Context) {
+	companies, err := a.Store.ListCompanies(ctx)
+	if err != nil {
+		return
+	}
+	for _, co := range companies {
+		list, err := a.loadEshops(ctx, co.ID)
+		if err != nil {
+			continue
+		}
+		for _, s := range list {
+			if !s.Auto {
+				continue
+			}
+			actx, err := a.eshopActor(ctx, s.AutoUser)
+			if err == nil {
+				var rep EshopSyncReport
+				if rep, err = a.SyncEshopOrders(actx, co.ID, s.ID); err == nil {
+					if rep.Created > 0 {
+						log.Printf("e-shop %s (firma %d): %d nových konceptov faktúr", s.Name, co.ID, rep.Created)
+					}
+					continue
+				}
+			}
+			log.Printf("e-shop %s (firma %d): %v", s.Name, co.ID, err)
+			a.eshopFailed(ctx, co.ID, s.ID, err)
+		}
+	}
+}
+
+func (a *App) eshopFailed(ctx context.Context, companyID int64, id string, cause error) {
+	eshopMu.Lock()
+	defer eshopMu.Unlock()
+	list, err := a.loadEshops(ctx, companyID)
+	if err != nil {
+		return
+	}
+	for i := range list {
+		if list[i].ID == id {
+			msg := errorText(cause)
+			if errors.Is(cause, ErrForbidden) {
+				msg = "používateľ, ktorý zapol automatické načítanie, už nemá prístup — zapnite ho znova"
+			}
+			list[i].LastError = a.now().Format(time.RFC3339) + " " + msg
+		}
+	}
+	_ = a.saveEshops(ctx, companyID, list)
 }

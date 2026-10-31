@@ -257,6 +257,7 @@ func main() {
 	go recurringLoop(runCtx, a)
 	go ratesLoop(runCtx, a)
 	go calendarSyncLoop(runCtx, a)
+	go eshopLoop(runCtx, a)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
@@ -356,6 +357,22 @@ func recurringLoop(ctx context.Context, a *app.App) {
 			return
 		case <-t.C:
 			run()
+			t.Reset(time.Hour)
+		}
+	}
+}
+
+// eshopLoop načítava objednávky z e-shopov s automatickým načítaním:
+// pár minút po štarte a potom každú hodinu.
+func eshopLoop(ctx context.Context, a *app.App) {
+	t := time.NewTimer(2 * time.Minute)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			a.SyncAllEshops(ctx)
 			t.Reset(time.Hour)
 		}
 	}
