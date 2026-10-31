@@ -11,6 +11,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/journal"
 	"github.com/palo-krnac/fiscus/backend/internal/money"
+	"github.com/palo-krnac/fiscus/backend/internal/stock"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 )
 
@@ -73,6 +74,11 @@ func (a *App) assetFacts(ctx context.Context, companyID int64, book JournalBook)
 	}
 	t := registerTotals(list, book.Year)
 	f.Tangible, f.Intangible = t.Tangible, t.Intangible
+	sv, err := a.stockValues(ctx, companyID, invoice.MustDate(fmt.Sprintf("%d-12-31", book.Year)))
+	if err != nil {
+		return f, err
+	}
+	f.Material, f.Goods, f.OtherStock = sv[stock.Material], sv[stock.Goods], sv[stock.Product]
 	return f, nil
 }
 

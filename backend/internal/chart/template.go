@@ -18,6 +18,7 @@ const (
 	DocBank     DocKind = "bank"     // bankový výpis
 	DocCash     DocKind = "cash"     // pokladničný doklad
 	DocInternal DocKind = "internal" // interný doklad
+	DocStock    DocKind = "stock"    // skladový doklad
 )
 
 // DocKinds sú druhy dokladov s popisom.
@@ -25,7 +26,7 @@ var DocKinds = []struct {
 	Code  DocKind `json:"code"`
 	Label string  `json:"label"`
 }{
-	{DocSale, "Vydaná faktúra"}, {DocPurchase, "Prijatá faktúra"}, {DocBank, "Banka"}, {DocCash, "Pokladňa"}, {DocInternal, "Interný doklad"},
+	{DocSale, "Vydaná faktúra"}, {DocPurchase, "Prijatá faktúra"}, {DocBank, "Banka"}, {DocCash, "Pokladňa"}, {DocInternal, "Interný doklad"}, {DocStock, "Sklad"},
 }
 
 func (k DocKind) valid() bool {
@@ -279,6 +280,22 @@ var DefaultTemplates = []Template{
 		{Debit, "211", PartTotal}, {Credit, "491", PartTotal}}},
 	{Code: "P-VKLAD", Name: "Pokladňa – príjem z banky", Doc: DocCash, Lines: []TemplateLine{
 		{Debit, "211", PartTotal}, {Credit, "261", PartTotal}}},
+	// sklad (spôsob A): príjem z obstarania, výdaj do nákladov, inventúrne rozdiely
+	{Code: "SK-PRIJEM-TOVAR", Name: "Príjemka tovaru na sklad", Doc: DocStock, Lines: []TemplateLine{{Debit, "132", PartTotal}, {Credit, "131", PartTotal}}},
+	{Code: "SK-PRIJEM-MATERIAL", Name: "Príjemka materiálu na sklad", Doc: DocStock, Lines: []TemplateLine{{Debit, "112", PartTotal}, {Credit, "111", PartTotal}}},
+	{Code: "SK-PRIJEM-VYROBKY", Name: "Príjem vlastných výrobkov na sklad", Doc: DocStock, Lines: []TemplateLine{{Debit, "123", PartTotal}, {Credit, "613", PartTotal}}},
+	{Code: "SK-VYDAJ-TOVAR", Name: "Výdajka – predaný tovar", Doc: DocStock, Lines: []TemplateLine{{Debit, "504", PartTotal}, {Credit, "132", PartTotal}}},
+	{Code: "SK-VYDAJ-MATERIAL", Name: "Výdajka – spotreba materiálu", Doc: DocStock, Lines: []TemplateLine{{Debit, "501", PartTotal}, {Credit, "112", PartTotal}}},
+	{Code: "SK-VYDAJ-VYROBKY", Name: "Výdajka – predané výrobky", Doc: DocStock, Lines: []TemplateLine{{Debit, "613", PartTotal}, {Credit, "123", PartTotal}}},
+	{Code: "SK-VRATENIE-TOVAR", Name: "Vrátený tovar (dobropis)", Doc: DocStock, Lines: []TemplateLine{{Debit, "132", PartTotal}, {Credit, "504", PartTotal}}},
+	{Code: "SK-VRATENIE-MATERIAL", Name: "Vrátený materiál (dobropis)", Doc: DocStock, Lines: []TemplateLine{{Debit, "112", PartTotal}, {Credit, "501", PartTotal}}},
+	{Code: "SK-VRATENIE-VYROBKY", Name: "Vrátené výrobky (dobropis)", Doc: DocStock, Lines: []TemplateLine{{Debit, "123", PartTotal}, {Credit, "613", PartTotal}}},
+	{Code: "SK-MANKO-TOVAR", Name: "Inventúrne manko – tovar", Doc: DocStock, Lines: []TemplateLine{{Debit, "549", PartTotal}, {Credit, "132", PartTotal}}},
+	{Code: "SK-MANKO-MATERIAL", Name: "Inventúrne manko – materiál", Doc: DocStock, Lines: []TemplateLine{{Debit, "549", PartTotal}, {Credit, "112", PartTotal}}},
+	{Code: "SK-MANKO-VYROBKY", Name: "Inventúrne manko – výrobky", Doc: DocStock, Lines: []TemplateLine{{Debit, "549", PartTotal}, {Credit, "123", PartTotal}}},
+	{Code: "SK-PREBYTOK-TOVAR", Name: "Inventúrny prebytok – tovar", Doc: DocStock, Lines: []TemplateLine{{Debit, "132", PartTotal}, {Credit, "648", PartTotal}}},
+	{Code: "SK-PREBYTOK-MATERIAL", Name: "Inventúrny prebytok – materiál", Doc: DocStock, Lines: []TemplateLine{{Debit, "112", PartTotal}, {Credit, "648", PartTotal}}},
+	{Code: "SK-PREBYTOK-VYROBKY", Name: "Inventúrny prebytok – výrobky", Doc: DocStock, Lines: []TemplateLine{{Debit, "123", PartTotal}, {Credit, "648", PartTotal}}},
 	{Code: "ID-ODPISY", Name: "Odpisy dlhodobého hmotného majetku", Doc: DocInternal, Lines: []TemplateLine{
 		{Debit, "551", PartTotal}, {Credit, "082", PartTotal}}},
 	{Code: "ID-ZARADENIE", Name: "Zaradenie majetku do používania", Doc: DocInternal, Lines: []TemplateLine{

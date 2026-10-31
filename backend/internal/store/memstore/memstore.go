@@ -21,6 +21,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/quote"
 	"github.com/palo-krnac/fiscus/backend/internal/recurring"
 	"github.com/palo-krnac/fiscus/backend/internal/reminder"
+	"github.com/palo-krnac/fiscus/backend/internal/stock"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 )
 
@@ -50,6 +51,7 @@ type Store struct {
 	reminders map[int64]reminder.Reminder
 	settings  map[string]string
 	items     map[int64]catalog.Item
+	stockDocs map[int64]stock.Doc
 	logos     map[int64]store.Logo
 	emails    []store.Email
 	einvoices []store.EInvoice

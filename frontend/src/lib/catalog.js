@@ -20,6 +20,7 @@ export function lineFromItem(it, { priceMode = 'net', nonVat = false } = {}) {
     unitPrice: !nonVat && priceMode === 'gross' ? it.priceGross : it.priceNet,
     vatRate: it.vatRate,
     amount: '0',
+    itemId: it.id, // skladová položka sa pri vystavení vydá zo skladu
   }
 }
 
