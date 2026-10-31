@@ -226,6 +226,9 @@ type Store interface {
 	ListCompanies(ctx context.Context) ([]Company, error)
 	CountCompanies(ctx context.Context) (int, error)
 	CreateCompany(ctx context.Context, c Company) (Company, error)
+	// DeleteCompany zmaže firmu so všetkými jej dátami (doklady, adresár,
+	// nastavenia, členstvá, audit). Používatelia ostanú.
+	DeleteCompany(ctx context.Context, id int64) error
 	GetCompany(ctx context.Context, id int64) (Company, error)
 	UpdateCompany(ctx context.Context, c Company) error
 

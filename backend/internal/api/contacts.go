@@ -96,3 +96,24 @@ func (s *Server) deleteContact(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// deleteCompany: DELETE /api/companies/{cid} {"name": "…"} — zmazanie firmy
+// so všetkými dátami (iba správca inštalácie, po zálohe).
+func (s *Server) deleteCompany(w http.ResponseWriter, r *http.Request) {
+	cid, ok := pathID(w, r, "cid")
+	if !ok {
+		return
+	}
+	var in struct {
+		Name string `json:"name"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	out, err := s.App.DeleteCompany(r.Context(), cid, in.Name)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}

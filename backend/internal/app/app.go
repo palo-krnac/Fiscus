@@ -710,3 +710,37 @@ func (a *App) DeleteInvoice(ctx context.Context, companyID, id int64) error {
 	a.record(ctx, companyID, audit.CatInvoices, "delete", "invoice", id, "Zmazaný koncept "+docName(inv), inv, nil)
 	return nil
 }
+
+// DeletedCompany je výsledok zmazania firmy.
+type DeletedCompany struct {
+	Backup string `json:"backup"` // záloha pred zmazaním ("" = zálohy sú vypnuté)
+}
+
+// DeleteCompany zmaže firmu so všetkými dátami (iba správca inštalácie).
+// Na potvrdenie treba zadať presný názov firmy. Pred zmazaním sa vytvorí
+// záloha — ak zlyhá, firma sa nezmaže.
+func (a *App) DeleteCompany(ctx context.Context, id int64, confirmName string) (DeletedCompany, error) {
+	var out DeletedCompany
+	if !auth.ActorFrom(ctx).SuperAdmin {
+		return out, ErrForbidden
+	}
+	c, err := a.Store.GetCompany(ctx, id)
+	if err != nil {
+		return out, err
+	}
+	if strings.TrimSpace(confirmName) != c.Name {
+		return out, mfaFieldErr("name", "Názov nesedí — opíšte presne „"+c.Name+"“")
+	}
+	if a.Backups != nil && a.Backups.Ready() {
+		info, err := a.Backups.Create(ctx, a.now())
+		if err != nil && !errors.Is(err, backup.ErrRemoteCopy) {
+			return out, fmt.Errorf("záloha pred zmazaním zlyhala, firma ostala: %w", err)
+		}
+		out.Backup = info.Path
+	}
+	if err := a.Store.DeleteCompany(ctx, id); err != nil {
+		return out, err
+	}
+	a.record(ctx, 0, audit.CatSettings, "delete", "company", id, "Zmazaná firma "+c.Name+" (IČO "+c.ICO+")", c, nil)
+	return out, nil
+}

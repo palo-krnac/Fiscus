@@ -12,12 +12,13 @@ import FormField from '../components/FormField.vue'
 import IcoInput from '../components/IcoInput.vue'
 import { fillFromRegistry } from '../lib/registry.js'
 import { api, ApiError } from '../lib/api.js'
-import { session, replaceCompany } from '../lib/session.js'
+import { session, replaceCompany, isSuperAdmin } from '../lib/session.js'
 import CompanyLogo from '../components/CompanyLogo.vue'
 import EInvoiceSettings from '../components/EInvoiceSettings.vue'
 import SecuritySettings from '../components/SecuritySettings.vue'
 import CalendarSyncPanel from '../components/CalendarSyncPanel.vue'
 import EshopSettings from '../components/EshopSettings.vue'
+import DeleteCompany from '../components/DeleteCompany.vue'
 import { currentSetting, errorSection } from '../lib/settingsNav.js'
 import { bookkeepingOptions, migrationNote } from '../lib/setup.js'
 import { useRouter } from 'vue-router'
@@ -286,6 +287,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
       <CalendarSyncPanel v-if="section === 'kalendar'" />
       <SecuritySettings v-if="section === 'bezpecnost'" />
       <EshopSettings v-if="section === 'e-shopy'" />
+      <DeleteCompany v-if="section === 'firma' && isSuperAdmin()" />
     </div>
   </div>
 </template>

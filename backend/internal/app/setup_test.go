@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/palo-krnac/fiscus/backend/internal/auth"
 	"github.com/palo-krnac/fiscus/backend/internal/edition"
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
@@ -81,5 +82,31 @@ func TestMigrationOnce(t *testing.T) {
 	co, _ = a.Store.GetCompany(ctx, c.ID)
 	if co.MigratedFrom != "POHODA" {
 		t.Errorf("prepísaný prenos %+v", co)
+	}
+}
+
+func TestDeleteCompany(t *testing.T) {
+	a, c := newApp(t, edition.Desktop)
+	if _, err := a.SaveDraft(ctx, c.ID, validDraft()); err != nil {
+		t.Fatal(err)
+	}
+	admin := auth.WithActor(ctx, auth.Local) // desktop: správca inštalácie
+	if _, err := a.DeleteCompany(admin, c.ID, "Iná firma"); !fieldErr(err, "name") {
+		t.Fatalf("zlý názov: %v", err)
+	}
+	user := auth.WithActor(ctx, auth.Actor{UserID: 5, Name: "Účtovník"})
+	if _, err := a.DeleteCompany(user, c.ID, c.Name); err != ErrForbidden {
+		t.Fatalf("bez práv správcu: %v", err)
+	}
+	if _, err := a.DeleteCompany(admin, c.ID, " "+c.Name+" "); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := a.Store.CountCompanies(ctx); n != 0 {
+		t.Fatalf("firiem %d", n)
+	}
+	// desktop: po zmazaní sa dá založiť nová firma a začína sprievodcom
+	nc, err := a.CreateCompany(ctx, store.Company{Name: "Pavol Krnáč – elektroservis"})
+	if err != nil || nc.SetupDone {
+		t.Fatalf("nová firma %+v %v", nc, err)
 	}
 }
