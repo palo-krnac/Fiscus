@@ -142,6 +142,7 @@ func (s *Server) Handler() http.Handler {
 	need("POST /api/companies/{cid}/invoices", auth.PermInvoicesWrite, s.saveInvoice)
 	need("POST /api/companies/{cid}/invoices/preview", auth.PermInvoicesWrite, s.preview)
 	need("PUT /api/companies/{cid}/invoices/{id}", auth.PermInvoicesWrite, s.saveInvoice)
+	need("DELETE /api/companies/{cid}/invoices/{id}", auth.PermInvoicesWrite, s.deleteInvoice)
 	need("POST /api/companies/{cid}/invoices/{id}/issue", auth.PermInvoicesWrite, s.issue)
 	need("POST /api/companies/{cid}/invoices/{id}/pay", auth.PermInvoicesWrite, s.pay)
 	need("POST /api/companies/{cid}/invoices/{id}/cancel", auth.PermInvoicesWrite, s.cancel)
