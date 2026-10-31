@@ -33,7 +33,14 @@ export const sources = [
     pick: 'Vybrať súbor ZIP',
     hint: 'V iDoklade: Nastavenia → Aplikácie → Export, program POHODA. Vyberte mesiac a vydané faktúry, dobropisy aj prijaté faktúry, potom stiahnite ZIP (pri viacerých mesiacoch nahrajte každý zvlášť). Kontakty sa založia z faktúr.',
   },
-  { id: 'mrp', name: 'MRP', ready: false },
+  {
+    id: 'mrp',
+    name: 'MRP-K/S',
+    ready: true,
+    accept: '.zip,.xml,application/zip,text/xml',
+    pick: 'Vybrať súbor ZIP',
+    hint: 'Z MRP-K/S exportujte vydané faktúry do XML — súbory FAKVY.XML (faktúry), FAKVYPOL.XML (položky) a FV_ADRES.XML (adresy) — a nahrajte ich spolu zabalené v ZIP. Odberateľ sa doplní z adresára podľa IČO.',
+  },
   { id: 'superfaktura', name: 'SuperFaktúra', ready: false },
   { id: 'fakturoid', name: 'Fakturoid', ready: false },
   {

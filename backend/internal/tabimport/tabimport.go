@@ -419,7 +419,7 @@ func (l layout) doc(row []string, line int, defRate vat.Rate) Doc {
 		}
 		// bez stĺpca sadzby: sadzba z pomeru dane a základu
 		if !l.has(cRate) && (hasVAT || !total.IsZero()) {
-			if r, ok := guessRate(base, tax); ok {
+			if r, ok := GuessRate(base, tax); ok {
 				rate = r
 			}
 		}
@@ -461,8 +461,8 @@ func (l layout) doc(row []string, line int, defRate vat.Rate) Doc {
 	return d
 }
 
-// guessRate odhadne sadzbu z pomeru dane a základu (23, 20, 19, 10, 5, 0 %).
-func guessRate(base, tax money.Dec) (vat.Rate, bool) {
+// GuessRate odhadne sadzbu z pomeru dane a základu (23, 20, 19, 10, 5, 0 %).
+func GuessRate(base, tax money.Dec) (vat.Rate, bool) {
 	if base.IsZero() {
 		return 0, false
 	}

@@ -126,7 +126,8 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] Všeobecná tabuľka Excel/CSV z ľubovoľného programu: adresár, cenník, vydané alebo prijaté faktúry (riadok = faktúra, sumy po sadzbách, iba základ a DPH alebo iba suma so sadzbou); stĺpce podľa hlavičky (SK/CZ/EN), dátumy aj z Excelu, úhrada (áno/dátum), dobropisy; vzory na stiahnutie
 - [x] KROS Omega (textový export podľa špecifikácie KROS: partneri T04, skladové karty T03, fakturácia T01, doklady EUD T00 s úhradami a dobropismi)
 - [x] iDoklad: export pre POHODU (ZIP s XML po druhoch dokladov, aj jednotlivé XML); kontakty sa založia z odberateľov a dodávateľov na faktúrach
-- [ ] MRP, potom SuperFaktúra a Fakturoid (API); KROS Alfa; počiatočné stavy
+- [x] MRP-K/S: XML tabuľky vydaných faktúr (FAKVY, FAKVYPOL) a adresára (FV_ADRES), aj v ZIP; odberateľ podľa IČO z adresára, dobropisy, sadzby z pomeru dane a základu
+- [ ] SuperFaktúra a Fakturoid (API); KROS Alfa; prijaté faktúry z MRP; počiatočné stavy
 - [ ] Konektory na e-shopy (Shoptet, WooCommerce, Shopify, PrestaShop, Upgates, Drupal Commerce, Magento): zásoby, ceny, objednávky, faktúry — podľa verejnej dokumentácie, neoverené na živom obchode
 
 ## Etapa 4 — mzdy (samostatný návrh)
