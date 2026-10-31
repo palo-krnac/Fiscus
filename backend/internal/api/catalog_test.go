@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/palo-krnac/fiscus/backend/internal/edition"
@@ -31,4 +32,38 @@ func TestCatalogAPI(t *testing.T) {
 	}
 	e.do("DELETE", fmt.Sprintf("%s/%d", base, it.ID), nil, 204, nil)
 	e.do("DELETE", fmt.Sprintf("%s/%d", base, it.ID), nil, 404, nil)
+}
+
+func TestImportMigrateAPI(t *testing.T) {
+	e := setup(t, edition.Desktop)
+	base := fmt.Sprintf("/api/companies/%d/import/", e.cid)
+	money, err := os.ReadFile("../moneys3/testdata/export.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	type count struct{ New, Existing, Skipped int }
+	var rep struct {
+		Source   string
+		Invoices count
+		Done     bool
+	}
+	tests := []struct {
+		name, url, body string
+		status          int
+	}{
+		{"neznámy zdroj", "kros", "<x/>", 404},
+		{"chybný dátum", "money?paidUntil=31.3.2026", string(money), 400},
+		{"iný formát", "money", `<?xml version="1.0"?><dataPack/>`, 422},
+		{"náhľad", "money?paidUntil=2026-03-31", string(money), 200},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			e.do("POST", base+tc.url, tc.body, tc.status, nil)
+		})
+	}
+	e.do("POST", base+"money?apply=1", string(money), 200, &rep)
+	if rep.Source != "Money S3" || rep.Invoices.New != 3 || !rep.Done {
+		t.Fatalf("prenos: %+v", rep)
+	}
+	e.do("POST", base+"pohoda", string(money), 422, nil) // súbor Money nie je POHODA
 }

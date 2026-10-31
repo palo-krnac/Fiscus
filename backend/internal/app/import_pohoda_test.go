@@ -17,7 +17,7 @@ func TestImportPohoda(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	prev, err := a.ImportPohoda(ctx, c.ID, data, false)
+	prev, err := a.ImportPohoda(ctx, c.ID, data, MigrateOptions{}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +28,7 @@ func TestImportPohoda(t *testing.T) {
 	if list, _ := a.Store.ListContacts(ctx, c.ID, ""); len(list) != 0 {
 		t.Fatal("náhľad nič neukladá")
 	}
-	res, err := a.ImportPohoda(ctx, c.ID, data, true)
+	res, err := a.ImportPohoda(ctx, c.ID, data, MigrateOptions{}, true)
 	if err != nil || !res.Done || res.Invoices.New != 2 || res.Purchases.New != 1 || res.Contacts.New != 2 {
 		t.Fatalf("import: %+v %v", res, err)
 	}
@@ -52,12 +52,12 @@ func TestImportPohoda(t *testing.T) {
 		t.Errorf("prijatá: %+v", purs)
 	}
 	// opakovaný import nič nezdvojí
-	again, err := a.ImportPohoda(ctx, c.ID, data, true)
+	again, err := a.ImportPohoda(ctx, c.ID, data, MigrateOptions{}, true)
 	if err != nil || again.Contacts.Existing != 2 || again.Items.Existing != 1 || again.Invoices.Existing != 2 || again.Purchases.Existing != 1 ||
 		again.Contacts.New+again.Items.New+again.Invoices.New+again.Purchases.New != 0 {
 		t.Fatalf("opakovaný import: %+v", again)
 	}
-	if _, err := a.ImportPohoda(ctx, c.ID, []byte("<x/>"), false); !fieldErr(err, "file") {
+	if _, err := a.ImportPohoda(ctx, c.ID, []byte("<x/>"), MigrateOptions{}, false); !fieldErr(err, "file") {
 		t.Errorf("iný súbor: %v", err)
 	}
 	// nová faktúra vo Fiškuse nedostane číslo prenesenej faktúry

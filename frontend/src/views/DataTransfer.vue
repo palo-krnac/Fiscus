@@ -7,10 +7,13 @@ import InputText from 'primevue/inputtext'
 import IconField from 'primevue/iconfield'
 import InputIcon from 'primevue/inputicon'
 import Message from 'primevue/message'
+import Checkbox from 'primevue/checkbox'
+import DatePicker from 'primevue/datepicker'
 import ExportButton from '../components/ExportButton.vue'
 import { api } from '../lib/api.js'
 import { session, can } from '../lib/session.js'
 import { importWarningColumns } from '../lib/columns.js'
+import { toISODate } from '../lib/format.js'
 import { filterWarnings, maxImportBytes, newTotal, otherText, sources, summaryRows } from '../lib/migrate.js'
 
 const toast = useToast()
@@ -22,6 +25,10 @@ const file = ref(null)
 const report = ref(null)
 const busy = ref(false)
 const search = ref('')
+// faktúry so splatnosťou do dátumu budú uhradené (staré roky sú vyrovnané)
+const paidOn = ref(false)
+const paidUntil = ref(null)
+const paidISO = computed(() => (paidOn.value && paidUntil.value ? toISODate(paidUntil.value) : ''))
 
 const rows = computed(() => summaryRows(report.value))
 const warnings = computed(() => filterWarnings(report.value?.warnings, search.value))
@@ -37,6 +44,8 @@ function reset() {
   file.value = null
   report.value = null
   search.value = ''
+  paidOn.value = false
+  paidUntil.value = null
 }
 
 async function pick(e) {
@@ -49,7 +58,7 @@ async function pick(e) {
   }
   busy.value = true
   try {
-    report.value = await api.importPohoda(session.companyId, f)
+    report.value = await api.importMigrate(session.companyId, selected.value.id, f)
     file.value = f
   } catch (err) {
     report.value = null
@@ -62,7 +71,7 @@ async function pick(e) {
 async function run() {
   busy.value = true
   try {
-    report.value = await api.importPohoda(session.companyId, file.value, true)
+    report.value = await api.importMigrate(session.companyId, selected.value.id, file.value, { apply: true, paidUntil: paidISO.value })
     toast.add({ severity: 'success', summary: 'Dáta prenesené', detail: `${newTotal(report.value)} nových záznamov`, life: 5000 })
   } catch (err) {
     toast.add({ severity: 'error', summary: 'Prenos zlyhal', detail: err.message, life: 8000 })
@@ -101,7 +110,7 @@ async function run() {
         <p class="hint">{{ selected.hint }}</p>
         <p class="hint">
           Prenesú sa kontakty, skladové karty (do cenníka), vydané faktúry s dobropismi a prijaté faktúry v eurách.
-          Čísla dokladov ostanú, uhradené faktúry budú označené ako uhradené. Čo už vo Fiškuse je, sa znova nevytvorí.
+          Čísla dokladov ostanú. Čo už vo Fiškuse je, sa znova nevytvorí.
         </p>
 
         <div v-if="!canWrite" class="note">Na prenos potrebujete právo zapisovať faktúry, prijaté faktúry aj adresár.</div>
@@ -138,8 +147,17 @@ async function run() {
           </table>
           <p v-if="other" class="hint">V súbore sú aj ďalšie agendy, ktoré sa neprenášajú: {{ other }}.</p>
 
+          <div v-if="!report.done" class="paid">
+            <label class="paid-check">
+              <Checkbox v-model="paidOn" binary input-id="paid-on" />
+              <span>Faktúry so splatnosťou do</span>
+            </label>
+            <DatePicker v-model="paidUntil" :disabled="!paidOn" date-format="d. m. yy" size="small" show-icon icon-display="input"
+              placeholder="dátum" aria-label="Uhradené so splatnosťou do" class="paid-date" />
+            <span class="paid-text">sú uhradené (vydané aj prijaté)</span>
+          </div>
           <div v-if="!report.done" class="actions">
-            <Button icon="pi pi-download" label="Preniesť do Fiškusu" size="small" :disabled="nothingNew" :loading="busy" @click="run" />
+            <Button icon="pi pi-download" label="Preniesť do Fiškusu" size="small" :disabled="nothingNew || (paidOn && !paidUntil)" :loading="busy" @click="run" />
             <Button label="Zrušiť" text size="small" @click="reset" />
           </div>
 
@@ -266,6 +284,26 @@ async function run() {
   font-size: var(--fs-sm);
   color: var(--ink-soft);
   overflow-wrap: anywhere;
+}
+.paid {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 12px 0 0;
+  font-size: var(--fs-sm);
+}
+.paid-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.paid-date {
+  width: 150px;
+}
+.paid-text {
+  color: var(--ink-soft);
 }
 .summary {
   width: 100%;
