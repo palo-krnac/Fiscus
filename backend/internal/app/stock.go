@@ -626,6 +626,11 @@ func (a *App) StockFeed(ctx context.Context, companyID int64, token string) ([]F
 	if !checkFeed(cfg, token) {
 		return nil, ErrBadStockFeed
 	}
+	return a.feedItems(ctx, companyID, cfg)
+}
+
+// feedItems sú skladové položky so stavom zásob (pre e-shop).
+func (a *App) feedItems(ctx context.Context, companyID int64, cfg StockConfig) ([]FeedItem, error) {
 	docs, err := a.Store.ListStockDocs(ctx, companyID)
 	if err != nil {
 		return nil, err

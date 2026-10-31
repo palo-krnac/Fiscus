@@ -27,6 +27,7 @@ export const settingsGroups = [
     group: 'Dáta',
     items: [
       { path: '/prenos', label: 'Prenos dát', icon: 'pi-file-import', perm: 'invoices.write' },
+      { path: '/nastavenia/e-shopy', label: 'E-shopy', icon: 'pi-shopping-cart', perm: 'settings.write' },
       { path: '/zalohy', label: 'Zálohy', icon: 'pi-history', superAdmin: true },
     ],
   },
