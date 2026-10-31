@@ -397,7 +397,7 @@ func (a *App) creditNotesOf(ctx context.Context, companyID, originalID int64) ([
 	var out []invoice.Invoice
 	for _, x := range all {
 		if x.Kind == invoice.KindCreditNote && x.Correction != nil && x.Correction.OriginalID == originalID &&
-			x.Status != invoice.StatusDraft {
+			x.Status != invoice.StatusDraft && x.Status != invoice.StatusCancelled {
 			out = append(out, x)
 		}
 	}
@@ -586,8 +586,12 @@ func (a *App) Unpay(ctx context.Context, companyID, id int64) (invoice.Invoice, 
 	})
 }
 
-// Cancel stornuje faktúru.
+// Cancel stornuje faktúru. Dobropis sa stornuje aj so zápočtom: pôvodnej
+// faktúre sa vráti zostatok.
 func (a *App) Cancel(ctx context.Context, companyID, id int64) (invoice.Invoice, error) {
+	if cur, err := a.Store.GetInvoice(ctx, companyID, id); err == nil && cur.Kind == invoice.KindCreditNote {
+		return a.cancelCreditNote(ctx, companyID, cur)
+	}
 	inv, err := a.transition(ctx, companyID, id, "cancel", "Stornovaná ", (*invoice.Invoice).Cancel)
 	if err == nil {
 		a.syncInvoiceStock(ctx, companyID, inv) // storno zruší výdajku
@@ -630,4 +634,71 @@ func (a *App) invoiceNumbers(ctx context.Context, companyID int64) (map[string]b
 		}
 	}
 	return out, nil
+}
+
+func (a *App) cancelCreditNote(ctx context.Context, companyID int64, cn invoice.Invoice) (invoice.Invoice, error) {
+	if err := a.Require(ctx, companyID, auth.PermInvoicesWrite); err != nil {
+		return cn, err
+	}
+	var orig *invoice.Invoice
+	if cn.Correction != nil && cn.Correction.OriginalID != 0 {
+		if o, err := a.Store.GetInvoice(ctx, companyID, cn.Correction.OriginalID); err == nil {
+			orig = &o
+		}
+	}
+	before := cn.Status
+	if err := invoice.CancelCreditNote(&cn, orig); err != nil {
+		if errors.Is(err, invoice.ErrCreditRefunded) {
+			return cn, &invoice.ValidationError{Fields: []invoice.FieldError{{Field: "status", Message: err.Error()}}}
+		}
+		return cn, err
+	}
+	if orig != nil {
+		if err := a.Store.SaveInvoice(ctx, companyID, orig); err != nil {
+			return cn, err
+		}
+	}
+	if err := a.Store.SaveInvoice(ctx, companyID, &cn); err != nil {
+		return cn, err
+	}
+	what := "Stornovaný dobropis " + cn.Number
+	if orig != nil {
+		what += ", faktúre " + orig.Number + " sa vrátil zostatok " + orig.Remaining().Display() + " €"
+	}
+	a.record(ctx, companyID, audit.CatInvoices, "cancel", "invoice", cn.ID, what, before, cn.Status)
+	a.syncInvoiceStock(ctx, companyID, cn)
+	return cn, nil
+}
+
+// DeleteInvoice zmaže koncept (faktúry, dobropisu, zálohovej faktúry).
+// Vystavený doklad sa nemaže — stornuje sa alebo opraví dobropisom.
+// Záloha pripojená ku konceptu vyúčtovacej faktúry sa uvoľní.
+func (a *App) DeleteInvoice(ctx context.Context, companyID, id int64) error {
+	if err := a.Require(ctx, companyID, auth.PermInvoicesWrite); err != nil {
+		return err
+	}
+	inv, err := a.Store.GetInvoice(ctx, companyID, id)
+	if err != nil {
+		return err
+	}
+	if err := inv.CanDelete(); err != nil {
+		return &invoice.ValidationError{Fields: []invoice.FieldError{{Field: "status", Message: err.Error()}}}
+	}
+	all, err := a.Store.ListInvoices(ctx, companyID, store.InvoiceFilter{})
+	if err != nil {
+		return err
+	}
+	for _, p := range all {
+		if p.Advance != nil && p.Advance.FinalID == id {
+			p.Advance.FinalID, p.Advance.FinalNumber = 0, ""
+			if err := a.Store.SaveInvoice(ctx, companyID, &p); err != nil {
+				return err
+			}
+		}
+	}
+	if err := a.Store.DeleteInvoice(ctx, companyID, id); err != nil {
+		return err
+	}
+	a.record(ctx, companyID, audit.CatInvoices, "delete", "invoice", id, "Zmazaný koncept "+docName(inv), inv, nil)
+	return nil
 }

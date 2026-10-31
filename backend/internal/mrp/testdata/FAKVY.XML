@@ -5,88 +5,101 @@
       <rows>
         <row>
           <fields>
-            <idfak>1</idfak>
-            <druh>F</druh>
-            <cislo>2026100001</cislo>
-            <varsymb>2026100001</varsymb>
-            <ico>36123455</ico>
-            <stat_dph>SK</stat_dph>
-            <vatnumber>SK2020123457</vatnumber>
-            <zakl0>0</zakl0>
-            <zakl1>0</zakl1>
-            <zakl2>140.9</zakl2>
-            <mimodph>0</mimodph>
-            <dph1>0</dph1>
-            <dph2>32.41</dph2>
-            <datvystave>2026-03-02</datvystave>
-            <datzdanpln>2026-03-02</datzdanpln>
-            <datsplatno>2026-03-16</datsplatno>
-            <datdodani>2026-03-02</datdodani>
-            <mena>EUR</mena>
-            <cenysdph>F</cenysdph>
-            <zlava>0</zlava>
-            <poznamka>Montáž rozvádzaèa</poznamka>
+            <IDFAK>1</IDFAK>
+            <DRUH>F</DRUH>
+            <CISLO>2026100001</CISLO>
+            <VARSYMB>2026100001</VARSYMB>
+            <ICO>36123455</ICO>
+            <TYPDPH>41</TYPDPH>
+            <REZIM_DPH>0</REZIM_DPH>
+            <ZAKL0>0</ZAKL0>
+            <ZAKL1>0</ZAKL1>
+            <ZAKL2>140.9</ZAKL2>
+            <MIMODPH>0</MIMODPH>
+            <DPH1>0</DPH1>
+            <DPH2>32.41</DPH2>
+            <DATVYSTAVE>2026-03-02</DATVYSTAVE>
+            <DATZDANPLN>2026-03-02</DATZDANPLN>
+            <DATSPLATNO>2026-03-16</DATSPLATNO>
+            <DATDODANI>2026-03-02</DATDODANI>
+            <MENA>EUR</MENA>
+            <TYP_DOKL></TYP_DOKL>
+            <CENYSDPH>F</CENYSDPH>
+            <ZLAVA>0</ZLAVA>
+            <POZNAMKA>Montáž rozvádzaèa</POZNAMKA>
           </fields>
         </row>
         <row>
           <fields>
-            <idfak>2</idfak>
-            <druh>D</druh>
-            <cislo>2026100002</cislo>
-            <varsymb>2026100002</varsymb>
-            <ico>36123455</ico>
-            <vatnumber>SK2020123457</vatnumber>
-            <zakl2>-12.18</zakl2>
-            <dph2>-2.8</dph2>
-            <dobropis_pro>2026100001</dobropis_pro>
-            <datvystave>2026-03-20</datvystave>
-            <datzdanpln>2026-03-20</datzdanpln>
-            <datsplatno>2026-04-03</datsplatno>
-            <mena>EUR</mena>
-            <cenysdph>F</cenysdph>
+            <IDFAK>2</IDFAK>
+            <DRUH>F</DRUH>
+            <CISLO>2026100002</CISLO>
+            <VARSYMB>2026100002</VARSYMB>
+            <ICO>36123455</ICO>
+            <ZAKL2>-12.18</ZAKL2>
+            <DPH2>-2.8</DPH2>
+            <TYP_DOKL>D</TYP_DOKL>
+            <ORIGCIS2>2026100001</ORIGCIS2>
+            <DATVYSTAVE>2026-03-20</DATVYSTAVE>
+            <DATZDANPLN>2026-03-20</DATZDANPLN>
+            <DATSPLATNO>2026-04-03</DATSPLATNO>
+            <MENA>EUR</MENA>
+            <CENYSDPH>F</CENYSDPH>
           </fields>
         </row>
         <row>
           <fields>
-            <idfak>3</idfak>
-            <druh>F</druh>
-            <cislo>2026100003</cislo>
-            <ico>36123455</ico>
-            <zakl0>0</zakl0>
-            <zakl1>10</zakl1>
-            <zakl2>100</zakl2>
-            <dph1>1.9</dph1>
-            <dph2>23</dph2>
-            <datvystave>2026-04-01</datvystave>
-            <datzdanpln>2026-03-31</datzdanpln>
-            <datsplatno>2026-04-15</datsplatno>
-            <mena>EUR</mena>
-            <icoprij></icoprij>
+            <IDFAK>3</IDFAK>
+            <DRUH>F</DRUH>
+            <CISLO>2026100003</CISLO>
+            <ICO>X0001</ICO>
+            <ZAKL0>0</ZAKL0>
+            <ZAKL1>10</ZAKL1>
+            <ZAKL2>100</ZAKL2>
+            <DPH1>1.9</DPH1>
+            <DPH2>23</DPH2>
+            <DATVYSTAVE>2026-04-01</DATVYSTAVE>
+            <DATZDANPLN>2026-03-31</DATZDANPLN>
+            <DATSPLATNO>2026-04-15</DATSPLATNO>
+            <MENA>EUR</MENA>
+            <ZLAVA>5</ZLAVA>
           </fields>
         </row>
         <row>
           <fields>
-            <idfak>4</idfak>
-            <druh>F</druh>
-            <cislo>2026100004</cislo>
-            <ico></ico>
-            <zakl0>460</zakl0>
-            <datvystave>2026-04-10</datvystave>
-            <datsplatno>2026-04-24</datsplatno>
-            <mena>USD</mena>
-            <celk_zahr>500</celk_zahr>
+            <IDFAK>4</IDFAK>
+            <DRUH>F</DRUH>
+            <CISLO>2026100004</CISLO>
+            <ICO>36123455</ICO>
+            <ZAKL0>460</ZAKL0>
+            <DATVYSTAVE>2026-04-10</DATVYSTAVE>
+            <DATSPLATNO>2026-04-24</DATSPLATNO>
+            <MENA>USD</MENA>
+            <CELK_ZAHR>500</CELK_ZAHR>
           </fields>
         </row>
         <row>
           <fields>
-            <idfak>5</idfak>
-            <druh>F</druh>
-            <cislo>2026100005</cislo>
-            <ico></ico>
-            <zakl2>10</zakl2>
-            <dph2>2.3</dph2>
-            <datvystave>2026-04-12</datvystave>
-            <mena>EUR</mena>
+            <IDFAK>5</IDFAK>
+            <DRUH>X</DRUH>
+            <CISLO>2026900001</CISLO>
+            <ICO>36123455</ICO>
+            <ZAKL2>100</ZAKL2>
+            <DPH2>23</DPH2>
+            <DATVYSTAVE>2026-04-12</DATVYSTAVE>
+            <MENA>EUR</MENA>
+          </fields>
+        </row>
+        <row>
+          <fields>
+            <IDFAK>6</IDFAK>
+            <DRUH>F</DRUH>
+            <CISLO>2026100006</CISLO>
+            <ICO>99999999</ICO>
+            <ZAKL2>10</ZAKL2>
+            <DPH2>2.3</DPH2>
+            <DATVYSTAVE>2026-04-12</DATVYSTAVE>
+            <MENA>EUR</MENA>
           </fields>
         </row>
       </rows>
