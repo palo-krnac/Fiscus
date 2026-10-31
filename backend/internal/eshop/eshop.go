@@ -59,8 +59,8 @@ var Platforms = []Info{
 		Help: "Shopify admin → Settings → Apps → Develop apps → vlastná aplikácia s právami read_orders, write_products, write_inventory, read_locations a read_customers. Shopify nemá sadzbu DPH pri produkte: zdaniteľný = 23 %, nezdaniteľný = 0 %.",
 		Docs: "https://shopify.dev/docs/api/admin-graphql", Stock: true, Catalog: true},
 	{Platform: Shoptet, Name: "Shoptet", URLHint: "https://mojobchod.sk", SecretLbl: "Súkromný API token",
-		Help: "Shoptet admin → Prepojenia → Súkromné API (balík Premium): vytvorte token s právami na objednávky (čítanie), e-shop a sklady (zápis).",
-		Docs: "https://api.docs.shoptet.com/shoptet-api/openapi", Stock: true},
+		Help: "Shoptet admin → Prepojenia → Súkromné API (balík Premium): vytvorte token s právami na objednávky (čítanie), e-shop, kategórie a zákazníkov (čítanie), produkty, cenníky a sklady (zápis).",
+		Docs: "https://api.docs.shoptet.com/shoptet-api/openapi", Stock: true, Catalog: true},
 	{Platform: PrestaShop, Name: "PrestaShop", URLHint: "https://mojobchod.sk", SecretLbl: "Kľúč webservice",
 		Help: "PrestaShop → Rozšírené parametre → Webservice: zapnite webservice a pridajte kľúč s právami GET na orders, order_details, order_states, addresses, customers, countries, currencies, products a GET+PUT na stock_availables.",
 		Docs: "https://devdocs.prestashop-project.org/8/webservice/", Stock: true},
@@ -200,7 +200,7 @@ func New(c Conn) (Connector, error) {
 	case Drupal:
 		return &drupal{c}, nil
 	case Shoptet:
-		return &shoptet{c}, nil
+		return &shoptet{c: c}, nil
 	}
 	return nil, ErrPlatform
 }
