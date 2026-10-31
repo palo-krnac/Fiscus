@@ -6,11 +6,13 @@
 package pohoda
 
 import (
+	"archive/zip"
 	"bytes"
 	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
+	"path"
 	"strings"
 
 	"github.com/palo-krnac/fiscus/backend/internal/xmlenc"
@@ -256,4 +258,55 @@ func firstNonEmpty(ss ...string) string {
 		}
 	}
 	return ""
+}
+
+// ErrNoXML — v archíve ZIP nie je žiadny súbor XML.
+var ErrNoXML = errors.New("v archíve ZIP nie je žiadny súbor XML")
+
+// ParseArchive prečíta jeden XML export alebo archív ZIP s viacerými
+// (napr. export z iDokladu „idokladImportPohoda.zip“ — jeden súbor na
+// druh dokladu) a záznamy spojí. maxBytes obmedzí rozbalený obsah.
+func ParseArchive(data []byte, maxBytes int64) (Data, error) {
+	if !bytes.HasPrefix(data, []byte("PK\x03\x04")) {
+		return Parse(data)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return Data{}, fmt.Errorf("poškodený archív ZIP: %w", err)
+	}
+	out := Data{Other: map[string]int{}}
+	var total int64
+	files := 0
+	for _, zf := range zr.File {
+		if zf.FileInfo().IsDir() || !strings.EqualFold(path.Ext(zf.Name), ".xml") {
+			continue
+		}
+		rc, err := zf.Open()
+		if err != nil {
+			return out, fmt.Errorf("%s: %w", zf.Name, err)
+		}
+		b, err := io.ReadAll(io.LimitReader(rc, maxBytes-total+1))
+		rc.Close()
+		if err != nil {
+			return out, fmt.Errorf("%s: %w", zf.Name, err)
+		}
+		if total += int64(len(b)); total > maxBytes {
+			return out, fmt.Errorf("rozbalený archív je väčší ako %d MB", maxBytes>>20)
+		}
+		d, err := Parse(b)
+		if err != nil {
+			return out, fmt.Errorf("%s: %w", path.Base(zf.Name), err)
+		}
+		files++
+		out.Contacts = append(out.Contacts, d.Contacts...)
+		out.Stocks = append(out.Stocks, d.Stocks...)
+		out.Invoices = append(out.Invoices, d.Invoices...)
+		for k, v := range d.Other {
+			out.Other[k] += v
+		}
+	}
+	if files == 0 {
+		return out, ErrNoXML
+	}
+	return out, nil
 }

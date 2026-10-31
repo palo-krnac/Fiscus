@@ -1,7 +1,10 @@
 package pohoda
 
 import (
+	"archive/zip"
+	"bytes"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -41,5 +44,61 @@ func TestParse(t *testing.T) {
 	}
 	if _, err := Parse([]byte(`nie je xml`)); err == nil {
 		t.Error("neplatné XML")
+	}
+}
+
+func zipOf(t *testing.T, files map[string][]byte) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for name, b := range files {
+		w, err := zw.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.Write(b)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+func TestParseArchive(t *testing.T) {
+	raw, err := os.ReadFile("testdata/export.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	single, err := Parse(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name     string
+		data     []byte
+		max      int64
+		invoices int
+		err      string
+	}{
+		{"jeden XML", raw, 1 << 20, len(single.Invoices), ""},
+		{"ZIP z iDokladu", zipOf(t, map[string][]byte{"iDoklad2PohodaExportIssuedInvoice.xml": raw, "iDoklad2PohodaExportReceivedInvoice.XML": raw, "info.txt": []byte("x")}),
+			1 << 20, 2 * len(single.Invoices), ""},
+		{"ZIP bez XML", zipOf(t, map[string][]byte{"a.txt": []byte("x")}), 1 << 20, 0, "nie je žiadny súbor XML"},
+		{"príliš veľký", zipOf(t, map[string][]byte{"a.xml": raw}), 100, 0, "väčší ako"},
+		{"iný XML v ZIP", zipOf(t, map[string][]byte{"a.xml": []byte("<MoneyData/>")}), 1 << 20, 0, "a.xml"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d, err := ParseArchive(tc.data, tc.max)
+			if tc.err != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.err) {
+					t.Errorf("chyba %v, chcem %q", err, tc.err)
+				}
+				return
+			}
+			if err != nil || len(d.Invoices) != tc.invoices {
+				t.Errorf("%d faktúr, %v", len(d.Invoices), err)
+			}
+		})
 	}
 }

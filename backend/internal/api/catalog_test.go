@@ -71,4 +71,7 @@ func TestImportMigrateAPI(t *testing.T) {
 	e.do("POST", base+"omega", string(money), 422, nil)
 	omega, _ := os.ReadFile("../omega/testdata/export.txt")
 	e.do("POST", base+"omega", string(omega), 200, nil)
+	e.do("POST", base+"idoklad", string(money), 422, nil)
+	pohoda, _ := os.ReadFile("../pohoda/testdata/export.xml")
+	e.do("POST", base+"idoklad", string(pohoda), 200, nil)
 }
