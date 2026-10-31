@@ -1,0 +1,60 @@
+# Tento súbor nie je spôsob zverejnenia dokumentácie — platforma si berie
+# `docs/` priamo z vetvy `main`. Je tu ako DÔKAZ: rovnaké súbory sa bez úprav
+# zostavia v MkDocs Material, čo sľubuje dialekt Sourcebook (pravidlá
+# fabrikaERP). Ak sa tu niektorá stránka prestane zostavovať, dialekt je
+# porušený.
+site_name: Fiškus
+site_description: Slovenský účtovný program na štúdium a výučbu účtovníctva.
+docs_dir: docs
+exclude_docs: |
+  reference/
+
+theme:
+  name: material
+  language: sk
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - tables
+  - fenced_code
+  - attr_list
+  - toc:
+      permalink: true
+
+nav:
+  - Prehľad: index.md
+  - Začíname:
+      - zaciname/index.md
+      - zaciname/instalacia.md
+      - zaciname/uvodne-nastavenie.md
+      - zaciname/prenos-dat.md
+  - Výučba: vyucba/index.md
+  - Predaj:
+      - predaj/index.md
+      - predaj/faktury.md
+      - predaj/zalohy.md
+      - predaj/ponuky.md
+      - predaj/upomienky.md
+      - predaj/cennik.md
+  - Nákup: nakup/index.md
+  - Sklad:
+      - sklad/index.md
+      - sklad/karta-produktu.md
+      - sklad/doklady.md
+      - sklad/ocenenie.md
+  - Peniaze: peniaze/index.md
+  - Dane: dane/index.md
+  - Účtovníctvo:
+      - uctovnictvo/index.md
+      - uctovnictvo/jednoduche.md
+      - uctovnictvo/podvojne.md
+      - uctovnictvo/majetok.md
+  - E-shopy: eshopy/index.md
+  - Mobil: mobil/index.md
+  - Nastavenia a bezpečnosť: nastavenia/index.md
+  - Plán vývoja: ROADMAP.md
+  - Prehľad zmien: changelog.md

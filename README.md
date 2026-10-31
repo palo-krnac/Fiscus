@@ -1,8 +1,128 @@
 # Fiškus
 
-Slovenský účtovný program pre živnostníkov a malé firmy. Beží ako **desktopová aplikácia** (jedna inštalácia, offline, jedna firma) aj ako **webová aplikácia na serveri** (viac firiem, prístup z prehliadača). Obe verzie majú jeden kód aj jeden frontend.
+**Slovenský účtovný program určený na študijné účely a na výučbu účtovníctva.**
+Celá cesta dokladu — od faktúry cez úhradu v banke, zápis v denníku a priznanie
+k DPH až po závierku — v jednom programe, ktorý sa dá vyskúšať na ukážkovej
+firme bez rizika, že niečo pokazíte.
 
-## Edície a ceny
+Fiškus beží ako **desktopová aplikácia** (Windows, macOS, Linux — jedna firma,
+offline) aj ako **webová aplikácia na serveri** (viac používateľov a firiem,
+prístup z prehliadača). Obe verzie majú jeden kód aj jedno rozhranie.
+
+> **Prečo na výučbu.** V učebnici je zápis, ale chýbajú súvislosti. Vo Fiškuse
+> študent vystaví faktúru a o minútu ju nájde v kontrolnom výkaze, v knihe
+> pohľadávok, po úhrade v peňažnom denníku a na konci roka vo výkaze. Každé
+> číslo sa dá rozkliknúť až na doklad, z ktorého vzniklo.
+>
+> Fiškus počíta podľa slovenských predpisov a výpočty sú pokryté testami, no nie
+> je certifikovaný softvér. Pri použití na skutočnú firmu si výstupy nechajte
+> skontrolovať účtovníkom.
+
+📘 **Dokumentácia:** [docs/](docs/index.md) — návody po oblastiach a
+[Fiškus vo výučbe](docs/vyucba/index.md) s úlohami na hodinu.
+
+## Rýchly štart
+
+```bash
+make demo        # ukážková firma „Demo elektroservis“, http://127.0.0.1:8080
+```
+
+Ukážkové dáta sú iba v pamäti, po reštarte sú znova pôvodné. Inštalačky pre
+Windows, macOS a Linux sú vo [vydaniach](https://github.com/palo-krnac/Fiscus/releases).
+
+## Funkcie
+
+### Predaj
+- **Faktúry** od konceptu po úhradu, číselné rady bez dier, DPH 23 / 19 / 5 / 0 %, ceny s DPH aj bez DPH, cudzia mena s kurzom ECB
+- **Úprava vystavenej faktúry** s auditom, kým nie je uhradená, priznaná ani opravená — potom iba **dobropis** (celý aj čiastočný, kontrola limitu)
+- **Zálohové faktúry**, daňový doklad k prijatej platbe, vyúčtovanie s odpočtom po sadzbách (aj čiastočné úhrady, cudzia mena, zahraničie, prenesenie)
+- **Cenové ponuky** s prijatím cez odkaz, **pravidelná fakturácia**, **upomienky** s úrokom z omeškania a paušálnou náhradou
+- Tlač a PDF s **PAY by square**, odoslanie e-mailom, **e-faktúra** UBL 2.1 / Peppol
+- Osobitné režimy: tuzemské prenesenie (§ 69 ods. 12), dodanie do EÚ, vývoz, trojstranný obchod
+
+### Nákup
+- **Prijaté faktúry** z rekapitulácie DPH, odpočet / bez odpočtu, prenesenie, pomerné odpočítanie (§ 50), dovoz, DPH pri vozidlách (§ 85n)
+- Vyťaženie údajov z PDF a fotky (Claude API — AI iba navrhuje)
+- **Bločky eKasa z mobilu**: odfotenie QR kódu, doklad z Finančnej správy, uhradený nákup s fotkou
+
+### Sklad
+- **Karta produktu**: EAN s kontrolou, kategória, značka, dodávateľ a jeho kód, nákupná cena, hmotnosť, technické parametre, popis a až **10 obrázkov**
+- **Viac skladov**, stav a hodnota po skladoch, všetky pohyby s hľadaním a exportom
+- Príjemky, výdajky, **presuny**, inventúrne rozdiely; ocenenie **váženým priemerom alebo FIFO**
+- Výdajka z vystavenej faktúry, vrátenie k dobropisu, príjemka k prijatej faktúre
+- Zaúčtovanie spôsobom A (112, 123, 132 a protiúčty), zásoby vo výkaze o majetku
+
+### Peniaze
+- **Banka**: výpisy camt.053, GPC, CSV, Excel; automatické párovanie podľa VS a sumy; platobné príkazy SEPA
+- **Pokladňa**: PPD / VPD, viac pokladní, cudzia mena, DPH na blokoch a tržbách z e-kasy
+
+### Dane
+- **Priznanie k DPH** (DPHv25), **kontrolný výkaz** (KVDPHv25), **súhrnný výkaz** (SVDPHv20) ako XML pre eDane; opravné a dodatočné priznanie
+- **Kalendár termínov** s lehotami posunutými na pracovný deň, odber do mobilu, Google Kalendár a Outlook
+
+### Účtovníctvo
+- **Jednoduché**: peňažný denník podľa opatrenia MF SR, knihy pohľadávok a záväzkov, výkazy Úč FO 1-01 a 2-01, uzávierka, podklady pre DP typ B
+- **Podvojné**: účtový rozvrh, predkontácie, automatické účtovanie, účtovný denník, hlavná kniha, strediská a zákazky, kurzové rozdiely, závierka MÚJ
+- **Majetok** s daňovými odpismi (§ 22 – 29 ZDP), **kniha jázd** s ročným vyúčtovaním
+
+### E-shopy
+- WooCommerce, Shopify, Shoptet, PrestaShop, Magento, Drupal Commerce: objednávky → koncepty faktúr, zásoby do obchodu
+- **Riadenie obchodu z Fiškusu**: cenník, ceny, DPH a zásoby sa posielajú do obchodu (iba zmeny)
+
+### Prenos dát
+- POHODA, Money S3, KROS Omega, MRP, iDoklad, SuperFaktúra, Fakturoid, ľubovoľná tabuľka Excel/CSV
+- Adresár z vCard, Outlooku a Google Kontaktov; počiatočné stavy účtov z tabuľky
+
+### Bezpečnosť a správa
+- Používatelia a **roly** pre každú firmu, povinné **2FA** na serveri, PIN na desktope
+- **Audit** všetkých zmien s nemenným reťazcom odtlačkov
+- **Šifrované zálohy** s rotáciou a kópiou do cloudu (WebDAV, S3)
+- Legislatíva ako dáta (sadzby DPH, ECB, úroky, sviatky), **AI asistent cez MCP**
+- **Mobil v sieti**: telefón spárovaný s desktopom QR kódom
+
+Podrobný stav po etapách: [plán vývoja](docs/ROADMAP.md).
+
+## Dokumentácia
+
+Dokumentácia je v priečinku [`docs/`](docs/index.md), napísaná v dialekte
+**Sourcebook** podľa pravidiel fabrikaERP: obyčajný Markdown s front matter,
+admonície v zápise MkDocs (`!!! note`) aj Docusaurus (`:::note`) a bloky
+`cards` a `table`.
+
+### Ako to funguje
+
+- **`main` je pravda.** Zverejňuje sa iba to, čo je v `main`.
+- **Verzia je značka**, nie vetva: `git tag docs/0.2 && git push origin docs/0.2`
+  zmrazí dokumentáciu k danému dňu.
+- **Úprava v platforme** sa vráti ako vetva a pull request; do `main` nič
+  nepíše potichu.
+- Každý súbor sa musí zostaviť v **MkDocs Material aj Docusaure bez úprav**.
+  `mkdocs.yml` je tu ako dôkaz (kontroluje ho CI), nie ako spôsob zverejnenia:
+
+```sh
+pip install mkdocs-material && mkdocs build --strict
+```
+
+### Štruktúra
+
+```
+docs/
+  index.md          prehľad, na čo je Fiškus
+  zaciname/         inštalácia, úvodné nastavenie, prenos dát
+  vyucba/           Fiškus na hodine — úlohy podľa tém
+  predaj/           faktúry, zálohy, ponuky, upomienky, cenník
+  nakup/            prijaté faktúry, bločky
+  sklad/            karta produktu, doklady, ocenenie a účtovanie
+  peniaze/          banka, pokladňa
+  dane/             DPH, kontrolný a súhrnný výkaz, kalendár
+  uctovnictvo/      jednoduché, podvojné, majetok, kniha jázd
+  eshopy/  mobil/  nastavenia/
+  ROADMAP.md        plán vývoja
+  changelog.md      prehľad zmien
+  reference/        podklady (zoznamy funkcií iných systémov), nezverejňujú sa
+```
+
+## Edície
 
 | Edícia | Cena | Pre koho |
 |---|---|---|
@@ -76,7 +196,7 @@ backend/    Go — API, účtovná logika, SQLite
   internal/store/      rozhranie úložiska + memstore + sqlite
   internal/backup/     šifrované zálohy, rotácia, overenie, obnova
   internal/api/        HTTP/JSON API
-docs/       plán a referenčné podklady
+docs/       dokumentácia (dialekt Sourcebook, mkdocs.yml ako dôkaz), plán vývoja
 ```
 
 Zásady:
@@ -152,4 +272,4 @@ Pri obnove sa pôvodná databáza uloží ako `.pred-obnovou`, takže sa nič ne
 
 Balenie je v priečinku `packaging/`. Pri zmene balenia v pull requeste sa inštalátory zostavia a overia (inštalácia na Windows, obsah balíka .deb) bez zverejnenia. Podpisovanie (Windows Authenticode, Apple notarizácia) zatiaľ chýba — vyžaduje certifikáty.
 
-Plán funkcií: [docs/ROADMAP.md](docs/ROADMAP.md).
+Plán funkcií: [docs/ROADMAP.md](docs/ROADMAP.md). Dokumentácia: [docs/](docs/index.md).
