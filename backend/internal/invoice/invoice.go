@@ -86,6 +86,9 @@ type Line struct {
 	UnitPrice   money.Dec `json:"unitPrice"`
 	Rate        vat.Rate  `json:"vatRate"`
 	Amount      money.Dec `json:"amount"` // vypočítané: množstvo × cena
+	// ItemID je položka cenníka, z ktorej riadok vznikol (skladová položka
+	// sa pri vystavení vydá zo skladu); 0 = voľný text.
+	ItemID int64 `json:"itemId,omitempty"`
 	// Reverse: tuzemské prenesenie daňovej povinnosti pri položke (§ 69 ods. 12);
 	// Commodity je kód colného sadzobníka (plodiny, kovy) pre kontrolný výkaz.
 	Reverse   DomesticRC `json:"reverse,omitempty"`

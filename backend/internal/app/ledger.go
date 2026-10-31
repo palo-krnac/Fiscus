@@ -18,6 +18,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/ledger"
 	"github.com/palo-krnac/fiscus/backend/internal/money"
 	"github.com/palo-krnac/fiscus/backend/internal/purchase"
+	"github.com/palo-krnac/fiscus/backend/internal/stock"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 )
 
@@ -739,6 +740,11 @@ func (a *App) ledgerSources(ctx context.Context, companyID int64, year int, p *p
 		}
 		out = append(out, post)
 	}
+	sp, err := a.stockPostings(ctx, companyID, year, p)
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, sp...)
 	return out, nil
 }
 
@@ -772,6 +778,8 @@ func postingDoc(key string) (chart.DocKind, bool) {
 		return chart.DocBank, true
 	case "cash":
 		return chart.DocCash, true
+	case "stock":
+		return chart.DocStock, true
 	}
 	return "", false
 }
@@ -994,4 +1002,71 @@ func (a *App) OpeningProposal(ctx context.Context, companyID int64, year int) ([
 		return nil, err
 	}
 	return ledger.OpeningFromClosing(prev.Accounts), nil
+}
+
+// stockPostings zaúčtuje skladové doklady roka: za každý druh zásoby
+// v doklade jeden zápis (príjem, výdaj, vrátenie, manko, prebytok).
+func (a *App) stockPostings(ctx context.Context, companyID int64, year int, p *poster) ([]ledger.Posting, error) {
+	docs, err := a.Store.ListStockDocs(ctx, companyID)
+	if err != nil || len(docs) == 0 {
+		return nil, err
+	}
+	cfg, err := a.loadStock(ctx, companyID)
+	if err != nil {
+		return nil, err
+	}
+	suffix := map[stock.ItemKind]string{stock.Goods: "TOVAR", stock.Material: "MATERIAL", stock.Product: "VYROBKY"}
+	_, costed, _ := stock.Valuate(docs, cfg.Method)
+	var out []ledger.Posting
+	for _, d := range costed {
+		if d.Date.Year() != year || d.Kind == stock.Transfer {
+			continue // presun medzi skladmi nemení účet zásob
+		}
+		type group struct {
+			kind stock.ItemKind
+			sign int
+		}
+		sums := map[group]money.Dec{}
+		var order []group
+		for _, l := range d.Lines {
+			si, ok := cfg.item(l.ItemID)
+			if !ok {
+				si.Kind = stock.Goods
+			}
+			g := group{si.Kind, 1}
+			if d.Kind == stock.Count && l.Quantity.Sign() < 0 {
+				g.sign = -1
+			}
+			if _, ok := sums[g]; !ok {
+				order = append(order, g)
+			}
+			sums[g] = sums[g].Add(l.Total)
+		}
+		for _, g := range order {
+			op := "PRIJEM"
+			switch {
+			case d.Kind == stock.Issue:
+				op = "VYDAJ"
+			case d.Kind == stock.Receipt && d.Return:
+				op = "VRATENIE"
+			case d.Kind == stock.Count && g.sign < 0:
+				op = "MANKO"
+			case d.Kind == stock.Count:
+				op = "PREBYTOK"
+			}
+			key := fmt.Sprintf("stock:%d:%s", d.ID, g.kind)
+			if d.Kind == stock.Count {
+				key += map[int]string{1: ":+", -1: ":-"}[g.sign]
+			}
+			text := strings.TrimSpace(d.Note)
+			if d.LinkNumber != "" {
+				text = strings.TrimSpace("k dokladu " + d.LinkNumber + " " + text)
+			}
+			post := ledger.Posting{Key: key, Date: d.Date, Doc: chart.DocStock, Number: d.Number, Partner: d.Partner, Text: text,
+				Amount: sums[g], Link: "/sklad", Template: "SK-" + op + "-" + suffix[g.kind]}
+			p.set(key, chart.Amounts{Total: sums[g], Base: sums[g]})
+			out = append(out, post)
+		}
+	}
+	return out, nil
 }

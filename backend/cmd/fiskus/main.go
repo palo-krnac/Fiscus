@@ -29,6 +29,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/api"
 	"github.com/palo-krnac/fiscus/backend/internal/app"
 	"github.com/palo-krnac/fiscus/backend/internal/backup"
+	"github.com/palo-krnac/fiscus/backend/internal/calsync"
 	"github.com/palo-krnac/fiscus/backend/internal/demo"
 	"github.com/palo-krnac/fiscus/backend/internal/desktop"
 	"github.com/palo-krnac/fiscus/backend/internal/edition"
@@ -153,6 +154,10 @@ func main() {
 	a := app.New(st, caps)
 	a.PublicURL = *publicURL
 	a.ECBURL = *ecbURL
+	// prihlasovacie údaje aplikácie pre Google Kalendár a Outlook (inak ich
+	// hlavný správca zadá v programe; tajomstvo sa nikdy nevypisuje)
+	a.CalSync = calsync.Config{GoogleClientID: os.Getenv("FISKUS_GOOGLE_CLIENT_ID"),
+		GoogleClientSecret: os.Getenv("FISKUS_GOOGLE_CLIENT_SECRET"), MicrosoftClientID: os.Getenv("FISKUS_MICROSOFT_CLIENT_ID")}
 	if *ecbURL != "" {
 		a.ECBRateURL = *ecbRateURL
 	}
@@ -251,6 +256,7 @@ func main() {
 	runCtx, stopRecurring := context.WithCancel(context.Background())
 	go recurringLoop(runCtx, a)
 	go ratesLoop(runCtx, a)
+	go calendarSyncLoop(runCtx, a)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
@@ -351,6 +357,22 @@ func recurringLoop(ctx context.Context, a *app.App) {
 		case <-t.C:
 			run()
 			t.Reset(time.Hour)
+		}
+	}
+}
+
+// calendarSyncLoop prenáša termíny do prepojených kalendárov Google
+// a Outlook: chvíľu po štarte a potom každých 30 minút.
+func calendarSyncLoop(ctx context.Context, a *app.App) {
+	t := time.NewTimer(30 * time.Second)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			a.SyncAllCalendars(ctx)
+			t.Reset(30 * time.Minute)
 		}
 	}
 }

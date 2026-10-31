@@ -110,7 +110,8 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [ ] Daňové priznanie k dani z príjmov (typ A/B pre FO, PO)
 
 ## Etapa 3 — sklad a majetok
-- [ ] Sklad, prepojenie s e-shopom
+- [x] Sklad: skladové položky z cenníka, viac skladov, príjemky, výdajky, inventúrne rozdiely, ocenenie váženým priemerom, výdajka z vystavenej faktúry a vrátenie k dobropisu, zaúčtovanie (132/131, 504/132…), zásoby vo výkaze o majetku
+- [x] Sklad: FIFO alebo vážený priemer v nastaveniach, presun medzi skladmi, príjemka k prijatej faktúre, odkaz pre e-shop (zásoby JSON/CSV, objednávky → výdajky)
 - [x] Register dlhodobého majetku s daňovými odpismi (§ 22 – 29 ZDP): skupiny 0 – 6, rovnomerné a zrýchlené odpisovanie, pomerná časť v roku zaradenia, podiel na podnikaní, vyradenie (ZC do výdavkov), odpisový plán, väzba na prijatú faktúru, hľadanie a export
 - [x] Odpisy z registra jedným tlačidlom do uzávierky roka (stĺpec e6); zostatkové ceny do výkazu o majetku a záväzkoch (r. 01, 02) a tabuľky 1a DP typ B
 - [ ] Účtovné odpisy, technické zhodnotenie, prerušenie odpisovania, prenájom (§ 27 ods. 2)
@@ -121,8 +122,8 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 
 ## Prenos dát z iných programov
 - [x] POHODA (XML export, aj Windows-1250): adresár, zásoby do cenníka, vydané faktúry a dobropisy s pôvodnými číslami a úhradami, prijaté faktúry; náhľad pred prenosom, opakovaný prenos nevytvorí duplicity, číselný rad pokračuje za prenesenými číslami
-- [ ] Money S3 (XML), KROS Alfa/Omega, SuperFaktúra, iDoklad, Fakturoid, všeobecný Excel/CSV
-- [ ] Konektory na e-shopy (Shoptet, WooCommerce, Shopify, PrestaShop, Upgates, Magento) — podľa verejnej dokumentácie, neoverené na živom obchode
+- [ ] Money S3 (XML), KROS Alfa/Omega, SuperFaktúra, iDoklad, Fakturoid (API), všeobecný Excel/CSV; počiatočné stavy
+- [ ] Konektory na e-shopy (Shoptet, WooCommerce, Shopify, PrestaShop, Upgates, Drupal Commerce, Magento): zásoby, ceny, objednávky, faktúry — podľa verejnej dokumentácie, neoverené na živom obchode
 
 ## Etapa 4 — mzdy (samostatný návrh)
 - [ ] Sociálna poisťovňa, zdravotné poisťovne, preddavky na daň, ročné zúčtovanie
@@ -134,4 +135,5 @@ Slovenské špecifiká, ktoré MyÚčto nemá: RÚZ, tri identifikátory (IČO /
 - [x] Kalendár (mesiac aj zoznam): priznanie k DPH a KV, SV (ak sú dodania do EÚ), daň z príjmov, daň z motorových vozidiel — lehoty posunuté na pracovný deň podľa dní pracovného pokoja (upraviteľné v Legislatíve); splatnosti vydaných a prijatých faktúr, pravidelné faktúry, koniec platnosti ponúk; zmeškané termíny; podané priznanie označené
 - [x] Vlastné opakované termíny (odvody, preddavky, STK, poistky) s rýchlym výberom a označením „splnené“
 - [x] Odber do mobilu a kalendára (iCalendar, tajný odkaz iba na čítanie, pripomienky 3 dni a 1 deň vopred), súbor .ics, odznak v menu
+- [x] Prepojenie kalendára termínov s Google Kalendárom a Outlookom (Microsoft 365, Outlook.com) cez ich API — funguje aj v desktopovej verzii
 - [ ] Upozornenie e-mailom pred lehotou, termíny miezd (etapa 4)

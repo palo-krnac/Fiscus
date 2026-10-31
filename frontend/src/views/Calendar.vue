@@ -3,7 +3,7 @@
 // faktúr, pravidelné faktúry, ponuky a vlastné termíny. Termíny zostavuje
 // server (app.Calendar); tu sa iba zobrazujú, filtrujú a exportujú.
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import SelectButton from 'primevue/selectbutton'
 import InputText from 'primevue/inputtext'
@@ -24,6 +24,7 @@ import {
 } from '../lib/calendar.js'
 
 const router = useRouter()
+const route = useRoute()
 const toast = useToast()
 
 const now = new Date()
@@ -62,6 +63,15 @@ async function load() {
   }
 }
 onMounted(load)
+// návrat z prihlásenia do Google alebo Microsoftu
+onMounted(() => {
+  const r = route.query.sync
+  if (!r) return
+  if (r === 'ok') toast.add({ severity: 'success', summary: 'Kalendár prepojený', detail: 'Termíny sa prenášajú do kalendára „Fiškus“.', life: 5000 })
+  else toast.add({ severity: 'error', summary: 'Kalendár sa neprepojil', detail: String(r), life: 9000 })
+  feedOpen.value = true
+  router.replace({ query: {} })
+})
 watch(ym, load, { deep: true })
 watch(() => session.companyId, load)
 
@@ -154,7 +164,7 @@ const fmtShort = (iso) => {
         <template #option="{ option }"><i :class="option.icon" /><span class="mode-label">{{ option.label }}</span></template>
       </SelectButton>
       <Button label="Vlastné termíny" icon="pi pi-bookmark" severity="secondary" outlined size="small" @click="ownOpen = true" />
-      <Button label="Do mobilu" icon="pi pi-mobile" size="small" @click="feedOpen = true" />
+      <Button label="Google, Outlook, mobil" icon="pi pi-calendar-plus" size="small" @click="feedOpen = true" />
     </header>
 
     <section v-if="overdue.length" class="overdue" aria-labelledby="od-title">

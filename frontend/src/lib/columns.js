@@ -547,3 +547,36 @@ export const dimColumns = [
 ]
 
 export const importWarningColumns = [t('Č.', (r) => r.n, 6), t('Upozornenie', (r) => r.text, 90)]
+const stockKind = (r) => (r.return ? 'Príjemka – vrátenie' : { receipt: 'Príjemka', issue: 'Výdajka', count: 'Inventúrny rozdiel', transfer: 'Presun' }[r.kind] ?? r.kind)
+const num = (header, value) => ({ header, value: (r) => Number(value(r)), type: 'number', width: 12 })
+
+/** Skladové karty. */
+export const stockCardColumns = [
+  t('Kód', (r) => r.code, 10),
+  t('Položka', (r) => r.name, 36),
+  t('Druh', (r) => ({ goods: 'tovar', material: 'materiál', product: 'výrobky' })[r.kind] ?? r.kind, 10),
+  t('Sklad', (r) => r.warehouse, 8),
+  num('Množstvo', (r) => r.quantity),
+  t('MJ', (r) => r.unit, 6),
+  money('Priemerná cena', (r) => r.avgCost),
+  money('Hodnota', (r) => r.value),
+  num('Minimum', (r) => r.min),
+  t('Pod minimom', (r) => yes(r.low), 10),
+]
+
+/** Skladové doklady — riadky z lib/stock.js docRows. */
+export const stockDocColumns = [
+  date('Dátum', (r) => r.date),
+  t('Číslo', (r) => r.number, 12),
+  t('Druh', stockKind, 18),
+  t('Sklad', (r) => r.warehouse, 8),
+  t('Do skladu', (r) => r.to, 8),
+  t('Partner', (r) => r.partner, 26),
+  t('Doklad', (r) => r.linkNumber, 14),
+  t('Položka', (r) => r.line.name, 32),
+  num('Množstvo', (r) => r.line.quantity),
+  t('MJ', (r) => r.line.unit, 6),
+  money('Cena za MJ', (r) => r.line.unitCost),
+  money('Spolu', (r) => r.line.total),
+  t('Poznámka', (r) => r.note, 24),
+]

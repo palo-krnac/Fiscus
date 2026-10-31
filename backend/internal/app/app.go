@@ -3,11 +3,14 @@
 package app
 
 import (
+	"net/http"
+
 	"context"
 	"crypto/ed25519"
 	"errors"
 	"fmt"
 	"github.com/palo-krnac/fiscus/backend/internal/backup"
+	"github.com/palo-krnac/fiscus/backend/internal/calsync"
 	"github.com/palo-krnac/fiscus/backend/internal/postman"
 	"strings"
 	"sync"
@@ -50,6 +53,13 @@ type App struct {
 	BackupSetup *BackupSetup
 	// ECBURL je adresa kurzov ECB ("" = nesťahovať); FetchRates ju v testoch nahradí.
 	ECBURL string
+	// CalSync sú prihlasovacie údaje aplikácie pre Google Kalendár
+	// a Outlook zadané pri spustení (inak z nastavení); CalSyncEndpoints
+	// a HTTP nahradia testy.
+	CalSync          calsync.Config
+	CalSyncEndpoints map[calsync.Provider]calsync.Endpoints
+	HTTP             *http.Client
+	calSync          calSyncState
 	// ECBRateURL je séria základnej úrokovej sadzby ECB (CSV) pre úrok
 	// z omeškania ("" = nesťahovať, sadzby sa zadávajú ručne).
 	ECBRateURL string
@@ -493,6 +503,7 @@ func (a *App) Issue(ctx context.Context, companyID, id int64) (invoice.Invoice, 
 	}
 	a.record(ctx, companyID, audit.CatInvoices, "issue", "invoice", inv.ID,
 		what+inv.Number+" pre "+inv.Customer.Name+", "+inv.Summary.Total.Display()+" €", nil, inv)
+	a.syncInvoiceStock(ctx, companyID, inv)
 	if inv.Kind == invoice.KindCreditNote {
 		if err := a.offsetCreditNote(ctx, companyID, &inv); err != nil {
 			return inv, err
@@ -577,7 +588,11 @@ func (a *App) Unpay(ctx context.Context, companyID, id int64) (invoice.Invoice, 
 
 // Cancel stornuje faktúru.
 func (a *App) Cancel(ctx context.Context, companyID, id int64) (invoice.Invoice, error) {
-	return a.transition(ctx, companyID, id, "cancel", "Stornovaná ", (*invoice.Invoice).Cancel)
+	inv, err := a.transition(ctx, companyID, id, "cancel", "Stornovaná ", (*invoice.Invoice).Cancel)
+	if err == nil {
+		a.syncInvoiceStock(ctx, companyID, inv) // storno zruší výdajku
+	}
+	return inv, err
 }
 
 func (a *App) transition(ctx context.Context, companyID, id int64, action, what string, fn func(*invoice.Invoice) error) (invoice.Invoice, error) {
