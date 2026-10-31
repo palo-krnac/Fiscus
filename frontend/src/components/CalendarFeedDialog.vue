@@ -9,6 +9,7 @@ import { useToast } from 'primevue/usetoast'
 import { api } from '../lib/api.js'
 import { session } from '../lib/session.js'
 import { feedURLs, localOnly } from '../lib/calendar.js'
+import CalendarSyncPanel from './CalendarSyncPanel.vue'
 
 const visible = defineModel('visible', { type: Boolean, default: false })
 const toast = useToast()
@@ -71,15 +72,19 @@ const fmt = (unix) => (unix ? new Date(unix * 1000).toLocaleString('sk-SK', { da
 </script>
 
 <template>
-  <Dialog v-model:visible="visible" modal header="Termíny v mobile a v kalendári" class="feed-dialog" :style="{ width: 'min(560px, 96vw)' }">
+  <Dialog v-model:visible="visible" modal header="Termíny v kalendári a v mobile" class="feed-dialog" :style="{ width: 'min(600px, 96vw)' }">
+    <CalendarSyncPanel />
+
+    <h3 class="sub">Odber cez adresu (mobil, Apple Kalendár)</h3>
     <p class="lead">
       Daňové lehoty, splatnosti faktúr a vlastné termíny sa objavia v kalendári v telefóne, v Google Kalendári alebo
       v Outlooku a budú sa samy obnovovať. Pri lehotách prídu pripomienky 3 dni a 1 deň vopred.
     </p>
 
     <p v-if="local" class="warn">
-      <i class="pi pi-info-circle" /> Fiškus beží iba na tomto počítači, Google ani telefón sa k nemu cez internet nedostanú.
-      Odber funguje v kalendári na tomto počítači (Apple Kalendár, Outlook). Do telefónu termíny preneste
+      <i class="pi pi-info-circle" /> Fiškus beží iba na tomto počítači, Google ani telefón si adresu cez internet nestiahnu —
+      použite prepojenie vyššie (telefón s rovnakým účtom Google alebo Microsoft ukáže termíny tiež). Odber cez adresu funguje
+      v kalendári na tomto počítači (Apple Kalendár, Outlook). Jednorazovo môžete termíny preniesť aj
       <a :href="api.calendarICSURL(session.companyId)" download>súborom .ics</a> — ten sa však sám neobnovuje.
     </p>
 
@@ -120,6 +125,10 @@ const fmt = (unix) => (unix ? new Date(unix * 1000).toLocaleString('sk-SK', { da
 </template>
 
 <style scoped>
+.sub {
+  margin: 4px 0 6px;
+  font-size: var(--fs-md);
+}
 .lead {
   margin: 0 0 10px;
 }

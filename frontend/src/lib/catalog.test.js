@@ -25,7 +25,7 @@ describe('cenník', () => {
     [{ priceMode: 'gross' }, '59.04'],
     [{ priceMode: 'gross', nonVat: true }, '48.00'],
   ])('riadok faktúry %o', (opt, price) => {
-    expect(lineFromItem(items[0], opt)).toEqual({ description: 'Programovanie PLC', quantity: '1', unit: 'hod', unitPrice: price, vatRate: 23, amount: '0' })
+    expect(lineFromItem(items[0], opt)).toEqual({ description: 'Programovanie PLC', quantity: '1', unit: 'hod', unitPrice: price, vatRate: 23, amount: '0', itemId: items[0].id })
   })
 })
 

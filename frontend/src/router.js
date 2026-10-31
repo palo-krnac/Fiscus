@@ -35,6 +35,7 @@ import Catalog from './views/Catalog.vue'
 import ChartOfAccounts from './views/ChartOfAccounts.vue'
 import LedgerBook from './views/LedgerBook.vue'
 import DataTransfer from './views/DataTransfer.vue'
+import StockView from './views/StockView.vue'
 import Calendar from './views/Calendar.vue'
 
 // Moduly z etapového plánu — zatiaľ prázdne stránky s popisom.
@@ -83,7 +84,7 @@ export const modules = [
       { path: '/hlavna-kniha', label: 'Denník a hlavná kniha', icon: 'pi-table', ready: true, perm: 'ledger.read' },
       { path: '/majetok', label: 'Majetok', icon: 'pi-briefcase', ready: true, perm: 'ledger.read' },
       { path: '/kniha-jazd', label: 'Kniha jázd', icon: 'pi-car', ready: true, perm: 'ledger.read' },
-      { path: '/sklad', label: 'Sklad', icon: 'pi-box', stage: 3, perm: 'purchases.read' },
+      { path: '/sklad', label: 'Sklad', icon: 'pi-box', ready: true, perm: 'purchases.read' },
     ],
   },
   {
@@ -141,6 +142,7 @@ export const router = createRouter({
     { path: '/vykazy-ju', component: Statements, meta: { title: 'Výkazy jednoduchého účtovníctva', perm: 'ledger.read' } },
     { path: '/pohladavky-zavazky', component: OpenItems, meta: { title: 'Pohľadávky a záväzky', perm: 'ledger.read' } },
     { path: '/dennik', component: JournalBook, meta: { title: 'Peňažný denník', perm: 'ledger.read' } },
+    { path: '/sklad', component: StockView, meta: { title: 'Sklad', perm: 'purchases.read' } },
     { path: '/hlavna-kniha', component: LedgerBook, meta: { title: 'Účtovný denník a hlavná kniha', perm: 'ledger.read' } },
     { path: '/uctovy-rozvrh', component: ChartOfAccounts, meta: { title: 'Účtový rozvrh', perm: 'ledger.read' } },
     { path: '/kniha-jazd', component: Logbook, meta: { title: 'Kniha jázd', perm: 'ledger.read' } },

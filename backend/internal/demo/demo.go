@@ -24,6 +24,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/quote"
 	"github.com/palo-krnac/fiscus/backend/internal/recurring"
 	"github.com/palo-krnac/fiscus/backend/internal/reminder"
+	"github.com/palo-krnac/fiscus/backend/internal/stock"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 	"github.com/palo-krnac/fiscus/backend/internal/vat"
 	"github.com/palo-krnac/fiscus/backend/internal/vatreturn"
@@ -263,6 +264,9 @@ func Seed(ctx context.Context, a *app.App) (store.Company, error) {
 	}
 	if err := seedRecurring(ctx, a, c, contactIDs); err != nil {
 		return c, fmt.Errorf("demo pravidelná fakturácia: %w", err)
+	}
+	if err := seedStock(ctx, a, c, contactIDs); err != nil {
+		return c, fmt.Errorf("demo sklad: %w", err)
 	}
 	if err := seedLedger(ctx, a, c); err != nil {
 		return c, fmt.Errorf("demo účtovníctvo: %w", err)
@@ -767,4 +771,65 @@ func seedLedger(ctx context.Context, a *app.App, c store.Company) error {
 		n++
 	}
 	return nil
+}
+
+// seedStock vedie na sklade kábel a frekvenčné meniče z cenníka: príjemky,
+// výdajku, faktúru s výdajkou zo skladu a inventúrne manko.
+func seedStock(ctx context.Context, a *app.App, c store.Company, contactIDs []int64) error {
+	list, err := a.Store.ListItems(ctx, c.ID)
+	if err != nil {
+		return err
+	}
+	var cable, drive catalog.Item
+	for _, it := range list {
+		switch it.Name {
+		case "Kábel CYKY-J 5x2,5":
+			cable = it
+		case "Frekvenčný menič 4 kW":
+			drive = it
+		}
+	}
+	if cable.ID == 0 || drive.ID == 0 {
+		return nil
+	}
+	if _, err := a.SaveStockConfig(ctx, c.ID, app.StockConfig{
+		Warehouses: []app.Warehouse{{Code: "HL", Name: "Hlavný sklad – Banská Bystrica"}, {Code: "ZV", Name: "Príručný sklad Zvolen"}},
+		Items:      []app.StockItem{{ItemID: cable.ID, Kind: stock.Goods, Min: m.MustParse("100")}, {ItemID: drive.ID, Kind: stock.Goods, Min: m.MustParse("2")}},
+	}); err != nil {
+		return err
+	}
+	today := a.Today()
+	day := func(back int) invoice.Date { return today.AddDays(-back) }
+	for _, d := range []stock.Doc{
+		{Kind: stock.Receipt, Date: day(120), Warehouse: "HL", Partner: "Elektro veľkoobchod BB s.r.o.", Lines: []stock.Line{
+			{ItemID: cable.ID, Quantity: m.MustParse("500"), UnitCost: m.MustParse("1.35")}, {ItemID: drive.ID, Quantity: m.MustParse("6"), UnitCost: m.MustParse("268")}}},
+		{Kind: stock.Receipt, Date: day(40), Warehouse: "HL", Partner: "Elektro veľkoobchod BB s.r.o.", Lines: []stock.Line{
+			{ItemID: drive.ID, Quantity: m.MustParse("4"), UnitCost: m.MustParse("279.90")}}},
+		{Kind: stock.Transfer, Date: day(30), Warehouse: "HL", To: "ZV", Note: "Zásoba na montáže", Lines: []stock.Line{
+			{ItemID: cable.ID, Quantity: m.MustParse("120")}}},
+		{Kind: stock.Issue, Date: day(20), Warehouse: "ZV", Partner: "Montáž – Mlyn Brezno", Lines: []stock.Line{
+			{ItemID: cable.ID, Quantity: m.MustParse("85")}}},
+		{Kind: stock.Count, Date: day(2), Warehouse: "HL", Partner: "Inventúra", Note: "Odpad pri strihaní", Lines: []stock.Line{
+			{ItemID: cable.ID, Quantity: m.MustParse("-3")}}},
+	} {
+		if _, err := a.SaveStockDoc(ctx, c.ID, d); err != nil {
+			return err
+		}
+	}
+	// faktúra s meničmi z cenníka → výdajka zo skladu
+	ct, err := a.Store.GetContact(ctx, c.ID, contactIDs[0])
+	if err != nil {
+		return err
+	}
+	issue := day(3)
+	inv, err := a.SaveDraft(ctx, c.ID, invoice.Invoice{
+		ContactID: ct.ID, Customer: invoice.Party{Name: ct.Name, City: ct.City, ICO: ct.ICO, DIC: ct.DIC, ICDPH: ct.ICDPH, Country: "SK"},
+		SupplyKind: invoice.SupplyGoods, IssueDate: issue, DeliveryDate: issue, DueDate: issue.AddDays(14), Subject: "Dodávka frekvenčných meničov",
+		Lines: []invoice.Line{{Description: drive.Name, Quantity: m.MustParse("7"), Unit: drive.Unit, UnitPrice: drive.Price, Rate: vat.Rate23, ItemID: drive.ID}},
+	})
+	if err != nil {
+		return err
+	}
+	_, err = a.Issue(ctx, c.ID, inv.ID)
+	return err
 }

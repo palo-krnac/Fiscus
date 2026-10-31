@@ -25,6 +25,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/quote"
 	"github.com/palo-krnac/fiscus/backend/internal/recurring"
 	"github.com/palo-krnac/fiscus/backend/internal/reminder"
+	"github.com/palo-krnac/fiscus/backend/internal/stock"
 )
 
 // ErrNotFound — záznam neexistuje (alebo patrí inej firme).
@@ -194,6 +195,13 @@ type Store interface {
 	// v jednej firme → ErrDuplicate.
 	SaveItem(ctx context.Context, companyID int64, it *catalog.Item) error
 	DeleteItem(ctx context.Context, companyID, id int64) error
+
+	// ListStockDocs vráti skladové doklady firmy podľa dátumu a ID.
+	ListStockDocs(ctx context.Context, companyID int64) ([]stock.Doc, error)
+	GetStockDoc(ctx context.Context, companyID, id int64) (stock.Doc, error)
+	// SaveStockDoc vloží (ID == 0) alebo prepíše skladový doklad.
+	SaveStockDoc(ctx context.Context, companyID int64, d *stock.Doc) error
+	DeleteStockDoc(ctx context.Context, companyID, id int64) error
 
 	// Kurzy mien sú spoločné pre všetky firmy. SaveRates vloží alebo prepíše
 	// kurzy; kurz z ECB neprepíše ručne zadaný. RateBefore vráti posledný kurz

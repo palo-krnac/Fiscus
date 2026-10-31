@@ -86,6 +86,10 @@ type AssetFacts struct {
 	Transit     money.Dec `json:"transit"`     // priebežné položky (+/−): výdavok c − príjem c
 	Tangible    money.Dec `json:"tangible"`    // ZC hmotného majetku z registra
 	Intangible  money.Dec `json:"intangible"`  // ZC nehmotného majetku z registra
+	// zásoby zo skladu (vážený priemer)
+	Material   money.Dec `json:"material"`
+	Goods      money.Dec `json:"goods"`
+	OtherStock money.Dec `json:"otherStock"` // výrobky
 }
 
 // TangibleDM je dlhodobý hmotný majetok: register + ručne zadaný mimo registra.
@@ -114,9 +118,9 @@ func AssetStatement(cur, prev AssetValues) []Row {
 	r01 := val(AssetValues.IntangibleDM)
 	r02 := val(AssetValues.TangibleDM)
 	r03 := val(func(v AssetValues) money.Dec { return v.Inputs.FinancialDM })
-	r05 := val(func(v AssetValues) money.Dec { return v.Inputs.Material })
-	r06 := val(func(v AssetValues) money.Dec { return v.Inputs.Goods })
-	r07 := val(func(v AssetValues) money.Dec { return v.Inputs.OtherStock })
+	r05 := val(func(v AssetValues) money.Dec { return v.Facts.Material.Add(v.Inputs.Material) })
+	r06 := val(func(v AssetValues) money.Dec { return v.Facts.Goods.Add(v.Inputs.Goods) })
+	r07 := val(func(v AssetValues) money.Dec { return v.Facts.OtherStock.Add(v.Inputs.OtherStock) })
 	r04 := add(r05, r06, r07)
 	r08 := val(func(v AssetValues) money.Dec { return v.Facts.Receivables.Add(v.Inputs.OtherRecv) })
 	r10 := val(func(v AssetValues) money.Dec { return v.Facts.Cash })
@@ -190,7 +194,7 @@ func TaxReturnB(t Totals, end, begin AssetValues) TaxB {
 		row("1", "Zostatková cena hmotného majetku", AssetValues.TangibleDM),
 		row("2", "Zostatková cena nehmotného majetku", AssetValues.IntangibleDM),
 		row("3", "Zásoby", func(v AssetValues) money.Dec {
-			return v.Inputs.Material.Add(v.Inputs.Goods).Add(v.Inputs.OtherStock)
+			return v.Inputs.Material.Add(v.Inputs.Goods).Add(v.Inputs.OtherStock).Add(v.Facts.Material).Add(v.Facts.Goods).Add(v.Facts.OtherStock)
 		}),
 		row("4", "Pohľadávky", func(v AssetValues) money.Dec { return v.Facts.Receivables.Add(v.Inputs.OtherRecv) }),
 		row("5", "Záväzky", func(v AssetValues) money.Dec {
