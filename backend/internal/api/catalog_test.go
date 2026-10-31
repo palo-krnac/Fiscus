@@ -91,3 +91,17 @@ func TestImportContactsAPI(t *testing.T) {
 	e.do("POST", url+"?apply=1", "Názov;IČO\nFirma;36123455\n", 200, &rep)
 	e.do("POST", url, "\x00\x01", 422, nil)
 }
+
+func TestImportOpeningAPI(t *testing.T) {
+	e := setup(t, edition.Desktop)
+	url := fmt.Sprintf("/api/companies/%d/ledger/opening/import", e.cid)
+	var res struct {
+		Lines    []struct{ Account, Debit, Credit string }
+		Balanced bool
+	}
+	e.do("POST", url, "Účet;MD;D\n211;100;\n411;;100\n", 200, &res)
+	if len(res.Lines) != 2 || !res.Balanced || res.Lines[0].Account != "211" {
+		t.Fatalf("%+v", res)
+	}
+	e.do("POST", url, "Názov;MD\nx;1\n", 422, nil)
+}

@@ -18,6 +18,7 @@ import { useConfirm } from 'primevue/useconfirm'
 import FormField from '../components/FormField.vue'
 import ExportButton from '../components/ExportButton.vue'
 import LedgerLines from '../components/LedgerLines.vue'
+import ImportWarnings from '../components/ImportWarnings.vue'
 import { api, ApiError } from '../lib/api.js'
 import { can, session } from '../lib/session.js'
 import { formatAmount, formatDate, formatMoney, fromISODate, toISODate } from '../lib/format.js'
@@ -183,7 +184,33 @@ const moneyOptions = (key) => [
   ...accountOptions.value.filter((o) => o.value.startsWith(key.startsWith('bank:') ? '22' : '21') && o.value.length > 3),
 ]
 
+// počiatočné stavy z tabuľky (konečná súvaha / predvaha z iného programu)
+const openingInput = ref(null)
+const openingWarnings = ref([])
+async function pickOpening(e) {
+  const file = e.target.files?.[0]
+  e.target.value = ''
+  if (!file) return
+  busy.value = true
+  try {
+    const res = await api.importOpening(session.companyId, file)
+    openingWarnings.value = res.warnings
+    if (!res.lines.length) {
+      toast.add({ severity: 'warn', summary: 'V tabuľke nie sú zostatky', life: 4000 })
+      return
+    }
+    lines.value = editLines(res.lines)
+    toast.add({ severity: res.balanced ? 'success' : 'warn', summary: `Načítaných ${res.lines.length} účtov`,
+      detail: res.balanced ? 'Skontrolujte riadky a uložte.' : 'Strany MD a D sa nerovnajú.', life: 5000 })
+  } catch (err) {
+    toast.add({ severity: 'error', summary: 'Tabuľka sa nedá načítať', detail: err.message, life: 8000 })
+  } finally {
+    busy.value = false
+  }
+}
+
 function openOpening() {
+  openingWarnings.value = []
   lines.value = openingLines(book.value.opening)
   show('opening', null)
 }
@@ -612,8 +639,15 @@ function removeInternal() {
       <!-- počiatočné stavy -->
       <form v-else-if="mode === 'opening'" class="dform" @submit.prevent="save">
         <p class="hint">Zostatky súvahových účtov k 1. 1. {{ year }} (z konečnej súvahy minulého roka). Strana MD sa musí rovnať strane D.</p>
-        <Button :label="`Prevziať konečné stavy ${year - 1}`" icon="pi pi-download" size="small" severity="secondary" outlined class="take"
-          :loading="busy" @click="takeOpening" />
+        <div class="take-row">
+          <Button :label="`Prevziať konečné stavy ${year - 1}`" icon="pi pi-download" size="small" severity="secondary" outlined
+            :loading="busy" @click="takeOpening" />
+          <input ref="openingInput" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            class="visually-hidden" @change="pickOpening" />
+          <Button label="Načítať z tabuľky" icon="pi pi-upload" size="small" severity="secondary" outlined :loading="busy"
+            v-tooltip.bottom="'Konečná súvaha alebo predvaha z iného programu (CSV/Excel): Účet; Názov; MD; D'" @click="openingInput.click()" />
+        </div>
+        <ImportWarnings :warnings="openingWarnings" name="Počiatočné stavy – upozornenia" />
         <LedgerLines v-model="lines" :accounts="accountOptions" />
         <small v-if="errors.lines" class="err">{{ errors.lines }}</small>
         <div class="actions">
@@ -643,6 +677,20 @@ function removeInternal() {
 </template>
 
 <style scoped>
+.take-row {
+  align-self: flex-start;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
 .page {
   padding: 14px 16px 24px;
   max-width: 1080px;
@@ -923,9 +971,6 @@ function removeInternal() {
 .statement td.num {
   white-space: nowrap;
   width: 110px;
-}
-.take {
-  align-self: flex-start;
 }
 .grand {
   border-bottom: 3px double currentColor;
