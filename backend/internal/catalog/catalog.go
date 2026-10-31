@@ -3,6 +3,7 @@
 package catalog
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/palo-krnac/fiscus/backend/internal/invoice"
@@ -22,6 +23,56 @@ type Item struct {
 	Rate      vat.Rate      `json:"vatRate"`
 	Note      string        `json:"note"` // interná poznámka (na faktúru sa nedostane)
 	Archived  bool          `json:"archived"`
+
+	// Skladová karta produktu: identifikácia, zaradenie, nákup a parametre.
+	EAN           string    `json:"ean"`           // čiarový kód (EAN-8/13, GTIN-14)
+	Category      string    `json:"category"`      // kategória (napr. „Káble / Silové“)
+	Brand         string    `json:"brand"`         // výrobca / značka
+	Supplier      string    `json:"supplier"`      // hlavný dodávateľ
+	SupplierCode  string    `json:"supplierCode"`  // kód u dodávateľa
+	PurchasePrice money.Dec `json:"purchasePrice"` // posledná nákupná cena bez DPH
+	Weight        money.Dec `json:"weight"`        // hmotnosť v kg
+	Description   string    `json:"description"`   // popis produktu (e-shop, ponuka)
+	Params        []Param   `json:"params"`        // technické parametre
+}
+
+// Param je parameter produktu (napr. Prierez = 2,5 mm²).
+type Param struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+	Unit  string `json:"unit"`
+}
+
+// Limity skladovej karty.
+const (
+	MaxParams      = 50
+	MaxDescription = 5000
+)
+
+// ValidEAN overí kontrolnú číslicu kódu EAN-8, UPC (12), EAN-13 alebo GTIN-14.
+func ValidEAN(s string) bool {
+	switch len(s) {
+	case 8, 12, 13, 14:
+	default:
+		return false
+	}
+	sum := 0
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c < '0' || c > '9' {
+			return false
+		}
+		d := int(c - '0')
+		if i == len(s)-1 {
+			break
+		}
+		// váhy 3 a 1 striedavo sprava (od číslice pred kontrolnou)
+		if (len(s)-1-i)%2 == 1 {
+			d *= 3
+		}
+		sum += d
+	}
+	return (10-sum%10)%10 == int(s[len(s)-1]-'0')
 }
 
 // Prices sú jednotkové ceny pre editor faktúry v oboch režimoch.
@@ -36,6 +87,20 @@ func (it *Item) Normalize() {
 	it.Name = strings.TrimSpace(it.Name)
 	it.Unit = strings.TrimSpace(it.Unit)
 	it.Note = strings.TrimSpace(it.Note)
+	it.EAN = strings.ReplaceAll(strings.TrimSpace(it.EAN), " ", "")
+	it.Category = strings.TrimSpace(it.Category)
+	it.Brand = strings.TrimSpace(it.Brand)
+	it.Supplier = strings.TrimSpace(it.Supplier)
+	it.SupplierCode = strings.TrimSpace(it.SupplierCode)
+	it.Description = strings.TrimSpace(it.Description)
+	params := []Param{}
+	for _, p := range it.Params {
+		p.Name, p.Value, p.Unit = strings.TrimSpace(p.Name), strings.TrimSpace(p.Value), strings.TrimSpace(p.Unit)
+		if p.Name != "" || p.Value != "" {
+			params = append(params, p)
+		}
+	}
+	it.Params = params
 	if it.Unit == "" {
 		it.Unit = "ks"
 	}
@@ -64,6 +129,39 @@ func (it Item) Validate() error {
 	}
 	if !it.Rate.Known() {
 		add("vatRate", "Neznáma sadzba DPH")
+	}
+	if it.EAN != "" && !ValidEAN(it.EAN) {
+		add("ean", "Neplatný čiarový kód EAN (8, 12, 13 alebo 14 číslic s kontrolnou číslicou)")
+	}
+	for f, v := range map[string]string{"category": it.Category, "brand": it.Brand, "supplier": it.Supplier, "supplierCode": it.SupplierCode} {
+		if len([]rune(v)) > 100 {
+			add(f, "Najviac 100 znakov")
+		}
+	}
+	if it.PurchasePrice.Sign() < 0 {
+		add("purchasePrice", "Nákupná cena nemôže byť záporná")
+	}
+	if it.Weight.Sign() < 0 {
+		add("weight", "Hmotnosť nemôže byť záporná")
+	}
+	if len([]rune(it.Description)) > MaxDescription {
+		add("description", fmt.Sprintf("Popis môže mať najviac %d znakov", MaxDescription))
+	}
+	if len(it.Params) > MaxParams {
+		add("params", fmt.Sprintf("Najviac %d parametrov", MaxParams))
+	}
+	seen := map[string]bool{}
+	for i, p := range it.Params {
+		key := strings.ToLower(p.Name)
+		switch {
+		case p.Name == "":
+			add(fmt.Sprintf("params[%d].name", i), "Zadajte názov parametra")
+		case seen[key]:
+			add(fmt.Sprintf("params[%d].name", i), "Parameter „"+p.Name+"“ je dvakrát")
+		case len([]rune(p.Name)) > 60 || len([]rune(p.Value)) > 200 || len([]rune(p.Unit)) > 20:
+			add(fmt.Sprintf("params[%d].value", i), "Parameter je príliš dlhý")
+		}
+		seen[key] = true
 	}
 	if len(fe) > 0 {
 		return &invoice.ValidationError{Fields: fe}

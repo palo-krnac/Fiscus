@@ -54,6 +54,7 @@ type Store struct {
 	stockDocs map[int64]stock.Doc
 	logos     map[int64]store.Logo
 	files     map[int64]store.PurchaseFile // doklad → súbor
+	images    map[int64]store.ItemImage
 	emails    []store.Email
 	einvoices []store.EInvoice
 	rates     map[fxKey]fx.Rate

@@ -1,10 +1,10 @@
 // Cenník: hľadanie položky a prevod na riadok faktúry (ceny počíta backend).
 import { matches, searchTerms } from './search.js'
 
-/** Aktívne položky zodpovedajúce hľadaniu (kód, názov, poznámka). */
+/** Aktívne položky zodpovedajúce hľadaniu (kód, názov, EAN, kategória, značka, dodávateľ, poznámka). */
 export function filterItems(items, query, { archived = false } = {}) {
   const terms = searchTerms(query)
-  return items.filter((it) => (archived || !it.archived) && matches(terms, [it.code, it.name, it.note, it.unit]))
+  return items.filter((it) => (archived || !it.archived) && matches(terms, [it.code, it.name, it.note, it.unit, it.ean, it.category, it.brand, it.supplier, it.supplierCode]))
 }
 
 /**

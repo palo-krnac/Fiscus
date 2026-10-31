@@ -222,6 +222,12 @@ func (s *Server) Handler() http.Handler {
 	need("POST /api/companies/{cid}/purchases/import-ubl", auth.PermPurchasesWrite, s.importUBL)
 	need("PUT /api/companies/{cid}/items/{id}", auth.PermInvoicesWrite, s.saveItem)
 	need("DELETE /api/companies/{cid}/items/{id}", auth.PermInvoicesWrite, s.deleteItem)
+	need("GET /api/companies/{cid}/items/{id}/card", auth.PermInvoicesRead, s.itemCard)
+	need("POST /api/companies/{cid}/items/{id}/images", auth.PermInvoicesWrite, s.addItemImage)
+	need("PUT /api/companies/{cid}/items/{id}/images/order", auth.PermInvoicesWrite, s.orderItemImages)
+	need("PUT /api/companies/{cid}/items/{id}/stock", auth.PermPurchasesWrite, s.setItemStock)
+	need("GET /api/companies/{cid}/items/{id}/images/{img}", auth.PermInvoicesRead, s.itemImage)
+	need("DELETE /api/companies/{cid}/items/{id}/images/{img}", auth.PermInvoicesWrite, s.deleteItemImage)
 
 	need("GET /api/companies/{cid}/purchases", auth.PermPurchasesRead, s.listPurchases)
 	need("GET /api/companies/{cid}/purchases/payment-order", auth.PermPurchasesWrite, s.paymentCandidates)

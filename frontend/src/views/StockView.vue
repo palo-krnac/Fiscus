@@ -2,7 +2,7 @@
 // Sklad: zásoby na kartách (vážený aritmetický priemer), skladové doklady
 // a nastavenie skladov a skladových položiek. Ocenenie počíta server.
 import { computed, onMounted, ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Textarea from 'primevue/textarea'
@@ -25,6 +25,7 @@ import { localOnly } from '../lib/calendar.js'
 import { apiLines, blankLine, docLabel, docRows, filterCards, filterDocs, itemKindLabels, needsCost } from '../lib/stock.js'
 
 const toast = useToast()
+const router = useRouter()
 const confirm = useConfirm()
 const canWrite = computed(() => can('purchases.write'))
 
@@ -120,6 +121,11 @@ function editDoc(d) {
 }
 
 async function openCard(c) {
+  // karta produktu (obrázky, parametre, všetky sklady); bez práva na cenník iba pohyby
+  if (can('invoices.read')) {
+    router.push({ path: `/cennik/${c.itemId}/karta`, query: { sklad: c.warehouse } })
+    return
+  }
   current.value = c
   mode.value = 'card'
   moves.value = []

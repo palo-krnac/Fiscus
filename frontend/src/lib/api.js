@@ -346,6 +346,13 @@ export const api = {
       ? request('PUT', `/api/companies/${cid}/items/${it.id}`, it)
       : request('POST', `/api/companies/${cid}/items`, it),
   deleteItem: (cid, id) => request('DELETE', `/api/companies/${cid}/items/${id}`),
+  // skladová karta produktu: údaje, obrázky, stav po skladoch, pohyby
+  itemCard: (cid, id) => request('GET', `/api/companies/${cid}/items/${id}/card`),
+  setItemStock: (cid, id, s) => request('PUT', `/api/companies/${cid}/items/${id}/stock`, s),
+  addItemImage: (cid, id, file) => request('POST', `/api/companies/${cid}/items/${id}/images${query({ name: file.name })}`, file),
+  orderItemImages: (cid, id, ids) => request('PUT', `/api/companies/${cid}/items/${id}/images/order`, { ids }),
+  deleteItemImage: (cid, id, img) => request('DELETE', `/api/companies/${cid}/items/${id}/images/${img}`),
+  itemImageURL: (cid, id, img) => `/api/companies/${cid}/items/${id}/images/${img}`,
   // súbor CSV/XLSX; apply=false vráti iba náhľad
   importItems: (cid, file, apply = false) => request('POST', `/api/companies/${cid}/items/import${apply ? '?apply=1' : ''}`, file),
   importOpening: (cid, file) => request('POST', `/api/companies/${cid}/ledger/opening/import`, file),

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/palo-krnac/fiscus/backend/internal/money"
+	"github.com/palo-krnac/fiscus/backend/internal/stock"
 
 	"github.com/palo-krnac/fiscus/backend/internal/audit"
 	"github.com/palo-krnac/fiscus/backend/internal/auth"
@@ -18,6 +20,9 @@ import (
 type ItemRow struct {
 	catalog.Item
 	catalog.Prices
+	// Do zoznamu: stav na sklade (nil = nevedie sa alebo bez práva) a hlavný obrázok.
+	Stock   *money.Dec `json:"stock,omitempty"`
+	ImageID int64      `json:"imageId,omitempty"`
 }
 
 func itemRow(it catalog.Item) ItemRow { return ItemRow{Item: it, Prices: it.Prices()} }
@@ -34,6 +39,33 @@ func (a *App) Items(ctx context.Context, companyID int64) ([]ItemRow, error) {
 	out := make([]ItemRow, len(list))
 	for i, it := range list {
 		out[i] = itemRow(it)
+		if imgs, err := a.Store.ListItemImages(ctx, companyID, it.ID); err == nil && len(imgs) > 0 {
+			out[i].ImageID = imgs[0].ID
+		}
+	}
+	// stav na sklade spolu za všetky sklady (iba kto vidí sklad)
+	if a.Require(ctx, companyID, auth.PermPurchasesRead) == nil {
+		cfg, err := a.loadStock(ctx, companyID)
+		if err != nil {
+			return nil, err
+		}
+		if len(cfg.Items) > 0 {
+			docs, err := a.Store.ListStockDocs(ctx, companyID)
+			if err != nil {
+				return nil, err
+			}
+			cards, _, _ := stock.Valuate(docs, cfg.Method)
+			qty := map[int64]money.Dec{}
+			for k, c := range cards {
+				qty[k.ItemID] = qty[k.ItemID].Add(c.Quantity)
+			}
+			for i := range out {
+				if _, ok := cfg.item(out[i].ID); ok {
+					q := qty[out[i].ID]
+					out[i].Stock = &q
+				}
+			}
+		}
 	}
 	return out, nil
 }
