@@ -10,7 +10,7 @@ export const settingsGroups = [
       { path: '/nastavenia/dph', label: 'DPH', icon: 'pi-percentage', perm: 'settings.write' },
       { path: '/nastavenia/doklady', label: 'Doklady a platby', icon: 'pi-file', perm: 'settings.write' },
       { path: '/nastavenia/e-faktury', label: 'E-faktúry', icon: 'pi-send', perm: 'settings.write' },
-      { path: '/emaily?nastavenie=1', label: 'E-mail (SMTP, texty)', icon: 'pi-envelope', perm: 'settings.write', external: true },
+      { path: '/nastavenia/e-mail', label: 'E-mail (SMTP, texty)', icon: 'pi-envelope', perm: 'settings.write' },
       { path: '/nastavenia/kalendar', label: 'Kalendár', icon: 'pi-calendar', perm: 'settings.write' },
     ],
   },
