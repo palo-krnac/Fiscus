@@ -33,7 +33,7 @@ func vcardMigration(cards []vcard.Card) migration {
 		if warn != "" {
 			m.Warnings = append(m.Warnings, "Vizitka "+warn)
 		}
-		m.Contacts = append(m.Contacts, migContact{Party: p, Phone: c.Phone, Note: contactNote(p.Name, c.Person(), c.Note)})
+		m.Contacts = append(m.Contacts, migContact{Party: p, Phone: c.Phone, Note: c.Note, Persons: contactPersons(p.Name, c.Person(), c.Email, c.Phone)})
 	}
 	return m
 }

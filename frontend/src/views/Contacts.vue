@@ -22,9 +22,11 @@ import { fiskusGridTheme, skGridLocale, gridRows } from '../lib/grid.js'
 import { contactColumns } from '../lib/columns.js'
 import ExportButton from '../components/ExportButton.vue'
 import ImportWarnings from '../components/ImportWarnings.vue'
+import ContactPersons from '../components/ContactPersons.vue'
+import ContactAddresses from '../components/ContactAddresses.vue'
 import Dialog from 'primevue/dialog'
 import { contactAccept, contactsLabel } from '../lib/migrate.js'
-import { filterContacts } from '../lib/contacts.js'
+import { filterContacts, personsText } from '../lib/contacts.js'
 
 const props = defineProps({ id: String })
 const router = useRouter()
@@ -40,7 +42,7 @@ const busy = ref(false)
 
 const blank = () => ({
   name: '', street: '', city: '', zip: '', country: 'SK', ico: '', dic: '', icdph: '',
-  email: '', phone: '', iban: '', dueDays: null, note: '',
+  email: '', phone: '', iban: '', dueDays: null, note: '', persons: [], addresses: [],
 })
 
 // ---- import z vizitiek vCard alebo tabuľky (CSV, Excel, Outlook, Google) ----
@@ -96,7 +98,7 @@ function openFromRoute() {
   if (props.id === 'novy') form.value = blank()
   else if (props.id) {
     const c = contacts.value.find((x) => String(x.id) === props.id)
-    form.value = c ? { ...c, dueDays: c.dueDays || null } : null
+    form.value = c ? { ...structuredClone(c), dueDays: c.dueDays || null, persons: structuredClone(c.persons ?? []), addresses: structuredClone(c.addresses ?? []) } : null
   } else form.value = null
 }
 
@@ -114,6 +116,7 @@ const columnDefs = [
   { field: 'icdph', headerName: 'IČ DPH', width: 130 },
   { field: 'city', headerName: 'Obec', flex: 1, minWidth: 120 },
   { field: 'email', headerName: 'E-mail', flex: 1, minWidth: 160 },
+  { colId: 'persons', headerName: 'Kontaktné osoby', valueGetter: (p) => personsText(p.data), flex: 1, minWidth: 160 },
   {
     field: 'dueDays', headerName: 'Splatnosť', width: 100, type: 'rightAligned',
     valueFormatter: (p) => (p.value ? `${p.value} dní` : '—'),
@@ -123,7 +126,7 @@ const columnDefs = [
 const gridApi = shallowRef(null)
 const narrow = window.matchMedia('(max-width: 760px)')
 function applyResponsive() {
-  gridApi.value?.setColumnsVisible(['icdph', 'email', 'dueDays'], !narrow.matches)
+  gridApi.value?.setColumnsVisible(['icdph', 'email', 'persons', 'dueDays'], !narrow.matches)
   gridApi.value?.sizeColumnsToFit()
 }
 narrow.addEventListener('change', applyResponsive)
@@ -154,7 +157,7 @@ async function save() {
     const saved = await api.saveContact(session.companyId, { ...form.value, dueDays: form.value.dueDays || 0 })
     await load()
     errors.value = {}
-    form.value = { ...saved, dueDays: saved.dueDays || null }
+    form.value = { ...saved, dueDays: saved.dueDays || null, persons: saved.persons ?? [], addresses: saved.addresses ?? [] }
     toast.add({ severity: 'success', summary: wasNew ? 'Kontakt pridaný' : 'Kontakt uložený', life: 2500 })
     if (wasNew) router.replace(`/adresar/${saved.id}`)
   } catch (e) {
@@ -282,6 +285,10 @@ onBeforeUnmount(() => {
             <Textarea v-model="form.note" rows="2" auto-resize />
           </FormField>
         </div>
+        <div class="subs">
+          <ContactPersons v-model="form.persons" :errors="errors" :readonly="!can('contacts.write')" />
+          <ContactAddresses v-model="form.addresses" :errors="errors" :readonly="!can('contacts.write')" />
+        </div>
       </div>
       <footer class="panel-foot">
         <Button v-if="form.id && can('contacts.write')" label="Zmazať" severity="danger" text size="small" @click="remove" />
@@ -312,6 +319,13 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.subs {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
 .visually-hidden {
   position: absolute;
   width: 1px;

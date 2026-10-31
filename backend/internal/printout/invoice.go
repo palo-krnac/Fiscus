@@ -203,21 +203,23 @@ func (s *sheet) panel(fs []field) {
 	s.y = y + h
 }
 
-// parties: dodávateľ a odberateľ v dvoch stĺpcoch.
+// parties: dodávateľ a odberateľ v dvoch stĺpcoch. Pod adresou sú
+// zarovnané popisy a hodnoty — identifikátory, potom kontakt (telefón
+// a e-mail pod sebou); u odberateľa kontaktná osoba a dodacia adresa.
 func (s *sheet) parties(v view, sup Supplier) {
 	co := sup.Company
 	colW := (width - pdf.MM(10)) / 2
 	type block struct {
-		title   string
-		name    string
-		lines   []string
-		ids     []field
-		contact string
+		title    string
+		name     string
+		lines    []string
+		groups   [][]field // skupiny popis/hodnota oddelené medzerou
+		delivery []string  // dodacia adresa (iba odberateľ)
 	}
-	ids := func(ico, dic, icdph string) []field {
+	nonEmpty := func(fs ...field) []field {
 		var out []field
-		for _, f := range []field{{"IČO", ico}, {"DIČ", dic}, {"IČ DPH", icdph}} {
-			if f.value != "" {
+		for _, f := range fs {
+			if strings.TrimSpace(f.value) != "" {
 				out = append(out, f)
 			}
 		}
@@ -232,9 +234,38 @@ func (s *sheet) parties(v view, sup Supplier) {
 	if v.quote {
 		to = "Pre"
 	}
+	custContact := []field{{"E-mail", c.Email}}
+	if p := v.inv.Attention; p != nil {
+		custContact = []field{{"Kontakt", p.Name}, {"Tel.", p.Phone}, {"E-mail", firstText(p.Email, c.Email)}}
+	}
+	var delivery []string
+	if d := v.inv.Delivery; d != nil && !d.IsZero() {
+		if strings.TrimSpace(d.Name) != "" {
+			delivery = append(delivery, d.Name)
+		}
+		delivery = append(delivery, addressLines(d.Street, d.Zip, d.City)...)
+		if party.Foreign(d.Country) {
+			delivery = append(delivery, party.CountryName(d.Country))
+		}
+	}
 	blocks := []block{
-		{"Dodávateľ", co.Name, addressLines(co.Street, co.Zip, co.City), ids(co.ICO, co.DIC, co.ICDPH), joinNonEmpty(", ", co.Email, co.Phone)},
-		{to, c.Name, custLines, ids(c.ICO, c.DIC, c.ICDPH), ""},
+		{"Dodávateľ", co.Name, addressLines(co.Street, co.Zip, co.City), [][]field{
+			nonEmpty(field{"IČO", co.ICO}, field{"DIČ", co.DIC}, field{"IČ DPH", co.ICDPH}),
+			nonEmpty(field{"Tel.", co.Phone}, field{"E-mail", co.Email}),
+		}, nil},
+		{to, c.Name, custLines, [][]field{
+			nonEmpty(field{"IČO", c.ICO}, field{"DIČ", c.DIC}, field{"IČ DPH", c.ICDPH}),
+			nonEmpty(custContact...),
+		}, delivery},
+	}
+	// rovnaká šírka popisov v oboch stĺpcoch — hodnoty sú zarovnané
+	var lw float64
+	for _, b := range blocks {
+		for _, g := range b.groups {
+			for _, f := range g {
+				lw = max(lw, s.f.Regular.Width(f.label, 9.5))
+			}
+		}
 	}
 	y0 := s.y + pdf.MM(7)
 	end := y0
@@ -252,28 +283,41 @@ func (s *sheet) parties(v view, sup Supplier) {
 			s.text(x, y, s.f.Regular, 9.5, ink, l)
 			y += lh(9.5)
 		}
-		if len(b.ids) > 0 {
-			y += pdf.MM(2)
-			var lw float64
-			for _, f := range b.ids {
-				lw = max(lw, s.f.Regular.Width(f.label, 9.5))
+		vx := x + lw + pdf.MM(4)
+		for _, g := range b.groups {
+			if len(g) == 0 {
+				continue
 			}
-			for _, f := range b.ids {
+			y += pdf.MM(2)
+			for _, f := range g {
 				s.text(x, y, s.f.Regular, 9.5, muted, f.label)
-				s.text(x+lw+pdf.MM(4), y, s.f.Regular, 9.5, ink, f.value)
-				y += lh(9.5)
+				for _, l := range s.wrap(s.f.Regular, 9.5, colW-(vx-x), f.value) {
+					s.text(vx, y, s.f.Regular, 9.5, ink, l)
+					y += lh(9.5)
+				}
 			}
 		}
-		if b.contact != "" {
-			y += pdf.MM(2)
-			for _, l := range s.wrap(s.f.Regular, 9.5, colW, b.contact) {
-				s.text(x, y, s.f.Regular, 9.5, muted, l)
+		if len(b.delivery) > 0 {
+			y += pdf.MM(3)
+			s.text(x, y, s.f.Semibold, 8, muted, "Dodacia adresa")
+			y += lh(8) + pdf.MM(1)
+			for _, l := range b.delivery {
+				s.text(x, y, s.f.Regular, 9.5, ink, l)
 				y += lh(9.5)
 			}
 		}
 		end = max(end, y)
 	}
 	s.y = end + pdf.MM(6)
+}
+
+func firstText(ss ...string) string {
+	for _, s := range ss {
+		if strings.TrimSpace(s) != "" {
+			return s
+		}
+	}
+	return ""
 }
 
 // payment: spôsob úhrady, IBAN, variabilný symbol medzi dvoma čiarami.

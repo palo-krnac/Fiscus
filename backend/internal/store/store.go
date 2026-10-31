@@ -88,6 +88,40 @@ type Contact struct {
 	// DueDays prepíše predvolenú splatnosť firmy pre tohto odberateľa (0 = nie).
 	DueDays int    `json:"dueDays"`
 	Note    string `json:"note"`
+	// Persons sú kontaktné osoby firmy, Addresses ďalšie adresy (dodacia,
+	// korešpondenčná, prevádzka) — hlavná adresa vyššie je fakturačná.
+	Persons   []ContactPerson  `json:"persons"`
+	Addresses []ContactAddress `json:"addresses"`
+}
+
+// ContactPerson je kontaktná osoba firmy v adresári.
+type ContactPerson struct {
+	Name    string `json:"name"`
+	Role    string `json:"role,omitempty"` // funkcia: konateľ, účtovníčka, nákup…
+	Email   string `json:"email,omitempty"`
+	Phone   string `json:"phone,omitempty"`
+	Note    string `json:"note,omitempty"`
+	Primary bool   `json:"primary,omitempty"` // predvolená osoba na doklady
+}
+
+// Druhy ďalších adries.
+const (
+	AddressDelivery = "delivery" // dodacia
+	AddressPostal   = "postal"   // korešpondenčná
+	AddressBranch   = "branch"   // prevádzka
+	AddressOther    = "other"
+)
+
+// ContactAddress je ďalšia adresa firmy.
+type ContactAddress struct {
+	Kind    string `json:"kind"`
+	Name    string `json:"name,omitempty"` // príjemca alebo názov prevádzky
+	Street  string `json:"street"`
+	City    string `json:"city"`
+	Zip     string `json:"zip"`
+	Country string `json:"country"`
+	Note    string `json:"note,omitempty"`
+	Default bool   `json:"default,omitempty"` // predvolená dodacia adresa
 }
 
 // InvoiceFilter obmedzuje zoznam faktúr.

@@ -290,6 +290,54 @@ func Run(t *testing.T, newStore Factory) {
 		}
 	})
 
+	t.Run("kontaktné osoby a adresy", func(t *testing.T) {
+		s := newStore(t)
+		a, _ := s.CreateCompany(ctx, store.Company{Name: "Alfa"})
+		c := &store.Contact{Name: "Kováč a syn s.r.o.", Country: "SK",
+			Persons:   []store.ContactPerson{{Name: "Peter Kováč", Role: "konateľ", Email: "peter@kovac.sk", Primary: true}, {Name: "Eva Malá", Role: "účtovníčka"}},
+			Addresses: []store.ContactAddress{{Kind: store.AddressDelivery, Name: "Sklad", Street: "Priemyselná 1", City: "Nitra", Zip: "94901", Country: "SK", Default: true}}}
+		if err := s.SaveContact(ctx, a.ID, c); err != nil {
+			t.Fatal(err)
+		}
+		got, _ := s.GetContact(ctx, a.ID, c.ID)
+		if len(got.Persons) != 2 || got.Persons[0].Role != "konateľ" || !got.Persons[0].Primary || len(got.Addresses) != 1 ||
+			got.Addresses[0].Name != "Sklad" || !got.Addresses[0].Default {
+			t.Fatalf("osoby a adresy: %+v", got)
+		}
+		// zmena kópie nemení uložené dáta
+		got.Persons[0].Name = "Iný"
+		if again, _ := s.GetContact(ctx, a.ID, c.ID); again.Persons[0].Name != "Peter Kováč" {
+			t.Fatal("úložisko vracia zdieľaný zoznam osôb")
+		}
+		// odstránenie osôb a adries
+		got.Persons, got.Addresses = nil, nil
+		if err := s.SaveContact(ctx, a.ID, &got); err != nil {
+			t.Fatal(err)
+		}
+		if again, _ := s.GetContact(ctx, a.ID, c.ID); len(again.Persons) != 0 || len(again.Addresses) != 0 {
+			t.Fatalf("po odstránení: %+v", again)
+		}
+		if list, _ := s.ListContacts(ctx, a.ID, ""); len(list) != 1 || len(list[0].Persons) != 0 {
+			t.Fatalf("zoznam: %+v", list)
+		}
+		// dodacia adresa a kontaktná osoba na faktúre
+		inv := draft("Kováč a syn s.r.o.", "2026-10-01")
+		inv.Delivery = &invoice.Address{Name: "Sklad", Street: "Priemyselná 1", City: "Nitra", Zip: "94901", Country: "SK"}
+		inv.Attention = &invoice.Person{Name: "Peter Kováč", Phone: "+421 905 123 456"}
+		if err := s.SaveInvoice(ctx, a.ID, inv); err != nil {
+			t.Fatal(err)
+		}
+		fi, _ := s.GetInvoice(ctx, a.ID, inv.ID)
+		if fi.Delivery == nil || fi.Delivery.Street != "Priemyselná 1" || fi.Attention == nil || fi.Attention.Phone != "+421 905 123 456" {
+			t.Fatalf("faktúra: %+v %+v", fi.Delivery, fi.Attention)
+		}
+		fi.Delivery, fi.Attention = nil, nil
+		_ = s.SaveInvoice(ctx, a.ID, &fi)
+		if fi2, _ := s.GetInvoice(ctx, a.ID, inv.ID); fi2.Delivery != nil || fi2.Attention != nil {
+			t.Fatal("dodacia adresa ostala")
+		}
+	})
+
 	t.Run("faktúra si pamätá kontakt a režim neplatiteľa", func(t *testing.T) {
 		s := newStore(t)
 		c, _ := s.CreateCompany(ctx, store.Company{Name: "Alfa"})

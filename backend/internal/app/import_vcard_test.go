@@ -2,7 +2,6 @@ package app
 
 import (
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/palo-krnac/fiscus/backend/internal/edition"
@@ -51,11 +50,11 @@ func TestImportContacts(t *testing.T) {
 		by[k.Name] = i
 	}
 	k := list[by["Kováč a syn s.r.o."]]
-	if k.Email != "fakturacia@kovac.sk" || k.City != "Nitra" || k.Zip != "94901" || !strings.Contains(k.Note, "Kontaktná osoba: Peter Kováč") {
+	if k.Email != "fakturacia@kovac.sk" || k.City != "Nitra" || k.Zip != "94901" || len(k.Persons) != 1 || k.Persons[0].Name != "Peter Kováč" || !k.Persons[0].Primary {
 		t.Errorf("vCard: %+v", k)
 	}
 	n := list[by["Novák s.r.o."]]
-	if n.IBAN != "SK31 1200 0000 1987 4263 7541" || n.Phone != "+421 900 111 222" || !strings.Contains(n.Note, "Ján Novák") || n.Zip != "01001" {
+	if n.IBAN != "SK31 1200 0000 1987 4263 7541" || n.Phone != "+421 900 111 222" || len(n.Persons) != 1 || n.Persons[0].Name != "Ján Novák" || n.Zip != "01001" {
 		t.Errorf("Outlook: %+v", n)
 	}
 }

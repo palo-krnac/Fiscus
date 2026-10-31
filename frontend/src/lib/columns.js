@@ -10,6 +10,7 @@ import { assetStatus, disposalOptions, periodLabel } from './assets.js'
 import { tripTime } from './logbook.js'
 import { kindLabel as calendarKind, repeatLabel, stateOf } from './calendar.js'
 import { docKindLabel, emailStatus } from './emails.js'
+import { addressText, personsText } from './contacts.js'
 import { eurBalance, eurSummary, isForeignCurrency, purchaseEUR, sourceLabel } from './fx.js'
 
 const t = (header, value, width) => ({ header, value, width })
@@ -86,6 +87,8 @@ export const contactColumns = [
   t('Telefón', (r) => r.phone, 16),
   t('IBAN', (r) => r.iban, 28),
   { header: 'Splatnosť (dni)', value: (r) => r.dueDays || '', type: 'number', width: 10 },
+  t('Kontaktné osoby', (r) => personsText(r), 36),
+  t('Dodacie adresy', (r) => (r.addresses ?? []).filter((a) => a.kind === 'delivery').map(addressText).join(' | '), 40),
   t('Poznámka', (r) => r.note, 30),
 ]
 

@@ -127,6 +127,7 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] KROS Omega (textový export podľa špecifikácie KROS: partneri T04, skladové karty T03, fakturácia T01, doklady EUD T00 s úhradami a dobropismi)
 - [x] iDoklad: export pre POHODU (ZIP s XML po druhoch dokladov, aj jednotlivé XML); kontakty sa založia z odberateľov a dodávateľov na faktúrach
 - [x] MRP-K/S: XML tabuľky vydaných faktúr (FAKVY, FAKVYPOL) a adresára (FV_ADRES), aj v ZIP; odberateľ podľa IČO z adresára, dobropisy, sadzby z pomeru dane a základu
+- [x] Adresár: kontaktné osoby (funkcia, e-mail, telefón, predvolená) a ďalšie adresy (dodacia, korešpondenčná, prevádzka) — na faktúre kontaktná osoba a dodacia adresa z adresára alebo ručne, na tlači aj v PDF; importy ukladajú osobu ako osobu
 - [x] Import kontaktov priamo v Adresári: vizitky vCard (.vcf, verzie 2.1–4.0) a tabuľky vrátane exportov z Outlooku a Google Kontaktov (meno a priezvisko, pracovná alebo domáca adresa, IBAN); kontaktná osoba do poznámky
 - [x] Počiatočné stavy účtov z tabuľky (konečná súvaha alebo predvaha z iného programu: Účet; Názov; MD; D alebo jeden stĺpec so zostatkom) — návrh do editora, 211000 → 211, upozornenie na chýbajúce účty a nevyrovnané strany
 - [x] SuperFaktúra a Fakturoid: ich export pre účtovníka (POHODA, Money S3, KROS Omega alebo MRP) — formát sa rozpozná sám, aj v ZIP; kontakty z faktúr

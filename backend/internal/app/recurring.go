@@ -262,7 +262,7 @@ func (a *App) RunRecurring(ctx context.Context) (RecurringResult, error) {
 
 // generate vytvorí faktúru za obdobie, prípadne ju vystaví, a posunie rozvrh.
 func (a *App) generate(ctx context.Context, companyID int64, t *recurring.Template, period, issue invoice.Date, manual bool) (invoice.Invoice, error) {
-	inv, err := a.saveDraft(ctx, companyID, t.Build(period, issue))
+	inv, err := a.saveDraft(ctx, companyID, a.withDocExtras(ctx, companyID, t.Build(period, issue)))
 	if err != nil {
 		return inv, err
 	}

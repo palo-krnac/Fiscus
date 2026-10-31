@@ -68,6 +68,7 @@ type migContact struct {
 	Phone   string
 	IBAN    string
 	Note    string
+	Persons []store.ContactPerson
 	fromDoc bool // z faktúry: ak už je, nepočíta sa
 }
 
@@ -199,7 +200,7 @@ func (a *App) migrate(ctx context.Context, companyID int64, m migration, opt Mig
 		rep.Contacts.New++
 		if apply {
 			if _, err := a.SaveContact(ctx, companyID, store.Contact{Name: p.Name, Street: p.Street, City: p.City, Zip: p.Zip, Country: p.Country,
-				ICO: p.ICO, DIC: p.DIC, ICDPH: p.ICDPH, Email: p.Email, Phone: c.Phone, IBAN: c.IBAN, Note: c.Note}); err != nil {
+				ICO: p.ICO, DIC: p.DIC, ICDPH: p.ICDPH, Email: p.Email, Phone: c.Phone, IBAN: c.IBAN, Note: c.Note, Persons: c.Persons}); err != nil {
 				rep.Contacts.New--
 				rep.Contacts.Skipped++
 				rep.warn("Adresár %s: %v", p.Name, err)
@@ -529,6 +530,16 @@ func migSubject(s string) string {
 		s = string(r[:invoice.SubjectMax])
 	}
 	return s
+}
+
+// contactPersons vráti kontaktnú osobu firmy (predvolenú), ak sa meno
+// líši od názvu kontaktu — inak je kontakt sám osobou.
+func contactPersons(name, person, email, phone string) []store.ContactPerson {
+	person = strings.TrimSpace(person)
+	if person == "" || strings.EqualFold(person, strings.TrimSpace(name)) {
+		return nil
+	}
+	return []store.ContactPerson{{Name: person, Email: strings.TrimSpace(email), Phone: strings.TrimSpace(phone), Primary: true}}
 }
 
 // contactNote doplní do poznámky kontaktnú osobu, ak sa líši od názvu.
