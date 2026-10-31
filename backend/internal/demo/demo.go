@@ -805,9 +805,7 @@ func seedStock(ctx context.Context, a *app.App, c store.Company, contactIDs []in
 			{ItemID: cable.ID, Quantity: m.MustParse("500"), UnitCost: m.MustParse("1.35")}, {ItemID: drive.ID, Quantity: m.MustParse("6"), UnitCost: m.MustParse("268")}}},
 		{Kind: stock.Receipt, Date: day(40), Warehouse: "HL", Partner: "Elektro veľkoobchod BB s.r.o.", Lines: []stock.Line{
 			{ItemID: drive.ID, Quantity: m.MustParse("4"), UnitCost: m.MustParse("279.90")}}},
-		{Kind: stock.Receipt, Date: day(35), Warehouse: "ZV", Partner: "Presun z hlavného skladu", Note: "Zásoba na montáže", Lines: []stock.Line{
-			{ItemID: cable.ID, Quantity: m.MustParse("120"), UnitCost: m.MustParse("1.35")}}},
-		{Kind: stock.Issue, Date: day(30), Warehouse: "HL", Partner: "Presun do skladu Zvolen", Lines: []stock.Line{
+		{Kind: stock.Transfer, Date: day(30), Warehouse: "HL", To: "ZV", Note: "Zásoba na montáže", Lines: []stock.Line{
 			{ItemID: cable.ID, Quantity: m.MustParse("120")}}},
 		{Kind: stock.Issue, Date: day(20), Warehouse: "ZV", Partner: "Montáž – Mlyn Brezno", Lines: []stock.Line{
 			{ItemID: cable.ID, Quantity: m.MustParse("85")}}},

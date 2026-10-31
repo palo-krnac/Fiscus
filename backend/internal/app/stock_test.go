@@ -126,3 +126,116 @@ func TestStock(t *testing.T) {
 		t.Errorf("vyradenie položky s pohybmi: %v", err)
 	}
 }
+
+func TestStockFIFOTransferFeed(t *testing.T) {
+	a, c := newApp(t, edition.Desktop)
+	it, _ := a.SaveItem(ctx, c.ID, catalog.Item{Code: "K5", Name: "Kábel", Unit: "m", Price: m.MustParse("2"), PriceMode: vat.PriceNet, Rate: vat.Rate23})
+	cfg := StockConfig{Warehouses: []Warehouse{{Code: "HL", Name: "Hlavný"}, {Code: "ZV", Name: "Zvolen"}}, Items: []StockItem{{ItemID: it.ID, Kind: stock.Goods}}, Method: stock.FIFO}
+	if _, err := a.SaveStockConfig(ctx, c.ID, cfg); err != nil {
+		t.Fatal(err)
+	}
+	p, _, err := a.SavePurchase(ctx, c.ID, validPurchase())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ln := func(q, cost string) []stock.Line {
+		return []stock.Line{{ItemID: it.ID, Quantity: m.MustParse(q), UnitCost: m.MustParse(cost)}}
+	}
+	r1, err := a.SaveStockDoc(ctx, c.ID, stock.Doc{Kind: stock.Receipt, Date: invoice.MustDate("2026-10-01"), Warehouse: "HL", LinkKind: "purchase", LinkID: p.ID, Lines: ln("100", "1")})
+	if err != nil || r1.LinkNumber != p.Number || r1.Partner != p.Supplier.Name {
+		t.Fatalf("príjemka k prijatej faktúre: %+v %v", r1, err)
+	}
+	if _, err := a.SaveStockDoc(ctx, c.ID, stock.Doc{Kind: stock.Receipt, Date: invoice.MustDate("2026-10-02"), Warehouse: "HL", LinkKind: "purchase", LinkID: 999, Lines: ln("1", "1")}); !fieldErr(err, "linkId") {
+		t.Errorf("neexistujúca faktúra: %v", err)
+	}
+	_, _ = a.SaveStockDoc(ctx, c.ID, stock.Doc{Kind: stock.Receipt, Date: invoice.MustDate("2026-10-03"), Warehouse: "HL", Lines: ln("50", "1.30")})
+	tr, err := a.SaveStockDoc(ctx, c.ID, stock.Doc{Kind: stock.Transfer, Date: invoice.MustDate("2026-10-05"), Warehouse: "HL", To: "ZV", Lines: ln("120", "0")})
+	if err != nil || tr.Number != "PS2026001" {
+		t.Fatalf("presun: %+v %v", tr, err)
+	}
+	v, _ := a.Stock(ctx, c.ID)
+	vals := map[string]string{}
+	for _, cd := range v.Cards {
+		vals[cd.Warehouse] = cd.Quantity.String() + "/" + cd.Value.String()
+	}
+	// FIFO: do Zvolena 100 × 1,00 + 20 × 1,30 = 126; v HL ostane 30 × 1,30
+	if vals["HL"] != "30.00/39.00" || vals["ZV"] != "120.00/126.00" || v.Method != stock.FIFO {
+		t.Fatalf("FIFO a presun: %v", vals)
+	}
+	// prepnutie na priemer prepočíta celú históriu
+	cfg.Method = stock.Average
+	if _, err := a.SaveStockConfig(ctx, c.ID, cfg); err != nil {
+		t.Fatal(err)
+	}
+	v, _ = a.Stock(ctx, c.ID)
+	for _, cd := range v.Cards {
+		if cd.Warehouse == "HL" && cd.Value.String() != "33.00" { // 30 × 165/150
+			t.Errorf("priemer: %+v", cd)
+		}
+	}
+	// presun sa neúčtuje
+	book, _ := a.Ledger(ctx, c.ID, 2026)
+	for _, ps := range book.Postings {
+		if ps.Number == "PS2026001" {
+			t.Errorf("presun v denníku: %+v", ps)
+		}
+	}
+	// odkaz pre e-shop
+	if _, err := a.StockFeed(ctx, c.ID, "fks_nic"); err != ErrBadStockFeed {
+		t.Errorf("bez odkazu: %v", err)
+	}
+	token, err := a.CreateStockFeed(ctx, c.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	feed, err := a.StockFeed(ctx, c.ID, token)
+	if err != nil || len(feed) != 1 || feed[0].Code != "K5" || feed[0].Quantity.String() != "150.00" || feed[0].Warehouses["ZV"].String() != "120.00" || feed[0].PriceGross.String() != "2.46" {
+		t.Fatalf("zásoby pre e-shop: %+v %v", feed, err)
+	}
+	if v, _ = a.Stock(ctx, c.ID); !v.FeedActive {
+		t.Error("odkaz je aktívny")
+	}
+	saved, _ := a.SaveStockConfig(ctx, c.ID, cfg)
+	if saved.FeedHash != "" {
+		t.Error("odtlačok odkazu sa nevracia")
+	}
+	if _, err := a.StockFeed(ctx, c.ID, token); err != nil {
+		t.Errorf("uloženie nastavenia nezruší odkaz: %v", err)
+	}
+	// objednávka z e-shopu: iba so zapnutým povolením, podľa kódu, opakovane bez duplicity
+	order := ShopOrder{Order: "E-1001", Customer: "Ján Kupec", Lines: []ShopOrderLine{{Code: "k5", Quantity: m.MustParse("10")}, {Code: "K5", Quantity: m.MustParse("2")}}}
+	if _, err := a.ShopOrderIssue(ctx, c.ID, token, order); err != ErrOrdersOff {
+		t.Errorf("bez povolenia: %v", err)
+	}
+	cfg.Orders = true
+	if _, err := a.SaveStockConfig(ctx, c.ID, cfg); err != nil {
+		t.Fatal(err)
+	}
+	d1, err := a.ShopOrderIssue(ctx, c.ID, token, order)
+	if err != nil || d1.Kind != stock.Issue || len(d1.Lines) != 2 || d1.LinkNumber != "E-1001" {
+		t.Fatalf("objednávka: %+v %v", d1, err)
+	}
+	order.Lines = order.Lines[:1]
+	d2, err := a.ShopOrderIssue(ctx, c.ID, token, order)
+	if err != nil || d2.ID != d1.ID || len(d2.Lines) != 1 {
+		t.Fatalf("opakovaná objednávka: %+v %v", d2, err)
+	}
+	if _, err := a.ShopOrderIssue(ctx, c.ID, token, ShopOrder{Order: "E-2", Lines: []ShopOrderLine{{Code: "XX", Quantity: m.MustParse("1")}}}); !fieldErr(err, "lines[0].code") {
+		t.Errorf("neznámy kód: %v", err)
+	}
+	if err := a.DeleteStockDoc(ctx, c.ID, d1.ID); !fieldErr(err, "kind") {
+		t.Errorf("výdajka z objednávky sa ručne nemaže: %v", err)
+	}
+	if _, err := a.ShopOrderIssue(ctx, c.ID, token, ShopOrder{Order: "E-1001", Cancel: true}); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ = a.Stock(ctx, c.ID); len(v.Docs) != 3 {
+		t.Errorf("po zrušení objednávky: %d dokladov", len(v.Docs))
+	}
+	if err := a.RevokeStockFeed(ctx, c.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.StockFeed(ctx, c.ID, token); err != ErrBadStockFeed {
+		t.Errorf("zrušený odkaz: %v", err)
+	}
+}

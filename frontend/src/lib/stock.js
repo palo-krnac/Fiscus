@@ -1,7 +1,7 @@
 // Sklad: zobrazenie kariet a dokladov, filtre. Ocenenie počíta server.
 import { matches, searchTerms } from './search.js'
 
-export const kindLabels = { receipt: 'Príjemka', issue: 'Výdajka', count: 'Inventúrny rozdiel' }
+export const kindLabels = { receipt: 'Príjemka', issue: 'Výdajka', count: 'Inventúrny rozdiel', transfer: 'Presun' }
 export const itemKindLabels = { goods: 'tovar', material: 'materiál', product: 'výrobky' }
 
 /** Názov dokladu: „Príjemka“, pri vrátení „Príjemka – vrátenie“. */
@@ -23,7 +23,7 @@ export function filterDocs(docs, { search = '', kind = '', warehouse = '' } = {}
       (d) =>
         (!kind || d.kind === kind) &&
         (!warehouse || d.warehouse === warehouse) &&
-        matches(terms, [d.number, d.partner, d.note, d.linkNumber, docLabel(d), ...d.lines.map((l) => l.name)]),
+        matches(terms, [d.number, d.partner, d.note, d.linkNumber, d.to, docLabel(d), ...d.lines.map((l) => l.name)]),
     )
     .slice()
     .reverse()

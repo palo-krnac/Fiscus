@@ -17,10 +17,29 @@ import (
 type Kind string
 
 const (
-	Receipt Kind = "receipt" // príjemka
-	Issue   Kind = "issue"   // výdajka
-	Count   Kind = "count"   // inventúrny rozdiel (+ prebytok, − manko)
+	Receipt  Kind = "receipt"  // príjemka
+	Issue    Kind = "issue"    // výdajka
+	Count    Kind = "count"    // inventúrny rozdiel (+ prebytok, − manko)
+	Transfer Kind = "transfer" // presun medzi skladmi
 )
+
+// Method je spôsob ocenenia úbytku zásob (§ 25 ods. 4 písm. a) zákona
+// o účtovníctve).
+type Method string
+
+const (
+	Average Method = "avg"  // vážený aritmetický priemer
+	FIFO    Method = "fifo" // prvá cena na ocenenie prírastku = prvá na ocenenie úbytku
+)
+
+// Methods sú spôsoby ocenenia s popisom.
+var Methods = []struct {
+	Code  Method `json:"code"`
+	Label string `json:"label"`
+}{{Average, "vážený aritmetický priemer"}, {FIFO, "FIFO (prvý do skladu, prvý zo skladu)"}}
+
+// Valid vráti true pre známy spôsob.
+func (m Method) Valid() bool { return m == Average || m == FIFO }
 
 // Kinds sú druhy dokladov s popisom a predponou čísla.
 var Kinds = []struct {
@@ -28,7 +47,7 @@ var Kinds = []struct {
 	Label  string `json:"label"`
 	Prefix string `json:"prefix"`
 }{
-	{Receipt, "Príjemka", "PR"}, {Issue, "Výdajka", "VY"}, {Count, "Inventúrny rozdiel", "IR"},
+	{Receipt, "Príjemka", "PR"}, {Issue, "Výdajka", "VY"}, {Count, "Inventúrny rozdiel", "IR"}, {Transfer, "Presun", "PS"},
 }
 
 // Prefix vráti predponu čísla dokladu.
@@ -73,17 +92,19 @@ type Line struct {
 
 // Doc je skladový doklad.
 type Doc struct {
-	ID         int64        `json:"id"`
-	CompanyID  int64        `json:"companyId"`
-	Number     string       `json:"number"`
-	Kind       Kind         `json:"kind"`
-	Date       invoice.Date `json:"date"`
-	Warehouse  string       `json:"warehouse"`
-	Partner    string       `json:"partner"`
-	Note       string       `json:"note"`
-	LinkKind   string       `json:"linkKind,omitempty"` // invoice | purchase
-	LinkID     int64        `json:"linkId,omitempty"`
-	LinkNumber string       `json:"linkNumber,omitempty"`
+	ID        int64        `json:"id"`
+	CompanyID int64        `json:"companyId"`
+	Number    string       `json:"number"`
+	Kind      Kind         `json:"kind"`
+	Date      invoice.Date `json:"date"`
+	Warehouse string       `json:"warehouse"`
+	// To je cieľový sklad presunu.
+	To         string `json:"to,omitempty"`
+	Partner    string `json:"partner"`
+	Note       string `json:"note"`
+	LinkKind   string `json:"linkKind,omitempty"` // invoice | purchase
+	LinkID     int64  `json:"linkId,omitempty"`
+	LinkNumber string `json:"linkNumber,omitempty"`
 	// Auto: výdajku vytvoril Fiškus z vystavenej faktúry (upravuje sa s ňou).
 	Auto bool `json:"auto,omitempty"`
 	// Return: príjem vrátenej zásoby (dobropis) — ocení sa priemernou cenou.
@@ -107,6 +128,15 @@ func (d *Doc) Validate() error {
 	if d.Warehouse == "" {
 		bad("warehouse", "Vyberte sklad")
 	}
+	d.To = strings.TrimSpace(d.To)
+	switch {
+	case d.Kind != Transfer:
+		d.To = ""
+	case d.To == "":
+		bad("to", "Vyberte cieľový sklad")
+	case d.To == d.Warehouse:
+		bad("to", "Cieľový sklad musí byť iný")
+	}
 	if len(d.Lines) == 0 {
 		bad("lines", "Pridajte aspoň jednu položku")
 	}
@@ -125,7 +155,7 @@ func (d *Doc) Validate() error {
 		if l.UnitCost.Sign() < 0 {
 			bad(f("unitCost"), "Cena nemôže byť záporná")
 		}
-		if d.Kind == Issue || (d.Kind == Receipt && d.Return) {
+		if d.Kind == Issue || d.Kind == Transfer || (d.Kind == Receipt && d.Return) {
 			l.UnitCost, l.Total = money.Zero, money.Zero // ocení sa priemerom
 		} else if d.Kind == Receipt || l.Quantity.Sign() > 0 {
 			l.Total = l.Quantity.Mul(l.UnitCost).RoundCents()
@@ -200,73 +230,142 @@ func order(docs []Doc) []Doc {
 	return out
 }
 
-// Valuate ocení doklady váženým aritmetickým priemerom: vráti stav kariet,
-// doklady s doplnenými cenami výdaja a problémy. Výdaj nad stav sa ocení
-// poslednou priemernou cenou a hlási sa ako problém.
-func Valuate(docs []Doc) (map[Key]*Card, []Doc, []Problem) {
-	cards := map[Key]*Card{}
+// layer je vrstva zásoby pri FIFO: množstvo a jeho hodnota.
+type layer struct{ qty, value money.Dec }
+
+// state je stav karty počas ocenenia.
+type state struct {
+	*Card
+	layers   []layer
+	lastCost money.Dec // posledná cena za jednotku (vrátenie, prebytok bez ceny pri FIFO)
+}
+
+func (c *state) add(m Method, q, total money.Dec) {
+	c.Quantity, c.Value = c.Quantity.Add(q), c.Value.Add(total)
+	if m == FIFO {
+		c.layers = append(c.layers, layer{q, total})
+	}
+	if c.Quantity.Sign() > 0 {
+		c.AvgCost = c.Value.MulRatio(money.FromInt(1), c.Quantity)
+	}
+	if q.Sign() > 0 {
+		c.lastCost = total.MulRatio(money.FromInt(1), q)
+	}
+}
+
+// take vyberie množstvo: vráti ocenenie a či na sklade chýbalo.
+func (c *state) take(m Method, q money.Dec) (cost money.Dec, short bool) {
+	if m == FIFO {
+		rest := q
+		for rest.Sign() > 0 && len(c.layers) > 0 {
+			l := &c.layers[0]
+			if l.qty.Cmp(rest) <= 0 {
+				cost, rest = cost.Add(l.value), rest.Sub(l.qty)
+				c.lastCost = l.value.MulRatio(money.FromInt(1), l.qty)
+				c.layers = c.layers[1:]
+				continue
+			}
+			part := l.value.MulRatio(rest, l.qty).RoundCents()
+			c.lastCost = l.value.MulRatio(money.FromInt(1), l.qty)
+			l.qty, l.value = l.qty.Sub(rest), l.value.Sub(part)
+			cost, rest = cost.Add(part), money.Zero
+		}
+		if rest.Sign() > 0 {
+			short = true
+			cost = cost.Add(rest.Mul(c.lastCost)).RoundCents()
+		}
+	} else {
+		switch c.Quantity.Cmp(q) {
+		case 0:
+			cost = c.Value
+		case 1:
+			cost = c.Value.MulRatio(q, c.Quantity).RoundCents()
+		default:
+			short = true
+			cost = q.Mul(c.AvgCost).RoundCents()
+			if c.Quantity.Sign() > 0 {
+				cost = c.Value.Add(q.Sub(c.Quantity).Mul(c.AvgCost)).RoundCents()
+			}
+		}
+	}
+	c.Quantity, c.Value = c.Quantity.Sub(q), c.Value.Sub(cost)
+	if c.Quantity.Sign() <= 0 {
+		c.layers = nil
+		if c.Quantity.IsZero() {
+			c.Value = money.Zero
+		}
+	}
+	if c.Quantity.Sign() > 0 {
+		c.AvgCost = c.Value.MulRatio(money.FromInt(1), c.Quantity)
+	}
+	return cost, short
+}
+
+// Valuate ocení doklady zvoleným spôsobom (vážený priemer alebo FIFO):
+// vráti stav kariet, doklady s doplnenými cenami výdaja a problémy. Výdaj
+// nad stav sa ocení poslednou známou cenou a hlási sa ako problém.
+func Valuate(docs []Doc, m Method) (map[Key]*Card, []Doc, []Problem) {
+	if !m.Valid() {
+		m = Average
+	}
+	states := map[Key]*state{}
+	get := func(k Key) *state {
+		c := states[k]
+		if c == nil {
+			c = &state{Card: &Card{Key: k}}
+			states[k] = c
+		}
+		return c
+	}
 	var probs []Problem
 	out := order(docs)
 	for di := range out {
 		d := &out[di]
-		lines := append([]Line(nil), d.Lines...)
-		d.Lines = lines
+		d.Lines = append([]Line(nil), d.Lines...)
 		for li := range d.Lines {
 			l := &d.Lines[li]
-			k := Key{d.Warehouse, l.ItemID}
-			c := cards[k]
-			if c == nil {
-				c = &Card{Key: k}
-				cards[k] = c
-			}
-			in := d.Kind == Receipt || (d.Kind == Count && l.Quantity.Sign() > 0)
+			c := get(Key{d.Warehouse, l.ItemID})
 			q := l.Quantity
 			if q.Sign() < 0 {
 				q = q.Neg()
 			}
-			if in {
-				if d.Return || (d.Kind == Count && l.UnitCost.IsZero()) {
-					// vrátenie a prebytok bez ceny: priemernou cenou
-					l.UnitCost = c.AvgCost
-					l.Total = q.Mul(c.AvgCost).RoundCents()
-				}
-				c.Quantity, c.Value = c.Quantity.Add(q), c.Value.Add(l.Total)
-				if c.Quantity.Sign() > 0 {
-					c.AvgCost = c.Value.MulRatio(money.FromInt(1), c.Quantity)
-				}
+			mv := func(c *state, qty, total money.Dec) {
 				c.Moves = append(c.Moves, Move{DocID: d.ID, Number: d.Number, Kind: d.Kind, Date: d.Date, Partner: d.Partner,
-					Quantity: q, UnitCost: l.UnitCost, Total: l.Total, Balance: c.Quantity, Value: c.Value})
+					Quantity: qty, UnitCost: l.UnitCost, Total: total, Balance: c.Quantity, Value: c.Value})
+			}
+			if d.Kind == Receipt || (d.Kind == Count && l.Quantity.Sign() > 0) {
+				if d.Return || (d.Kind == Count && l.UnitCost.IsZero()) {
+					// vrátenie a prebytok bez ceny: priemernou (pri FIFO poslednou) cenou
+					unit := c.AvgCost
+					if m == FIFO && c.lastCost.Sign() > 0 {
+						unit = c.lastCost
+					}
+					l.UnitCost, l.Total = unit, q.Mul(unit).RoundCents()
+				}
+				c.add(m, q, l.Total)
+				mv(c, q, l.Total)
 				continue
 			}
-			// výdaj: priemernou cenou; posledný kus odnesie celý zostatok hodnoty
-			var cost money.Dec
-			switch c.Quantity.Cmp(q) {
-			case 0:
-				cost = c.Value
-			case 1:
-				cost = c.Value.MulRatio(q, c.Quantity).RoundCents()
-			default:
-				cost = q.Mul(c.AvgCost).RoundCents()
-				if c.Quantity.Sign() > 0 {
-					cost = c.Value.Add(q.Sub(c.Quantity).Mul(c.AvgCost)).RoundCents()
-				}
-				probs = append(probs, Problem{DocID: d.ID, Number: d.Number, Message: fmt.Sprintf("%s: výdaj %s %s, na sklade %s je iba %s",
-					l.Name, q.Display(), l.Unit, d.Warehouse, c.Quantity.Display())})
+			cost, short := c.take(m, q)
+			if short {
+				probs = append(probs, Problem{DocID: d.ID, Number: d.Number, Message: fmt.Sprintf("%s: výdaj %s %s, na sklade %s chýba %s",
+					l.Name, q.Display(), l.Unit, d.Warehouse, c.Quantity.Neg().Display())})
 			}
 			l.Total, l.UnitCost = cost, money.Zero
 			if q.Sign() > 0 {
 				l.UnitCost = cost.MulRatio(money.FromInt(1), q)
 			}
-			if d.Kind == Count {
-				l.Total = cost // manko kladnou sumou
+			mv(c, q.Neg(), cost.Neg())
+			if d.Kind == Transfer {
+				to := get(Key{d.To, l.ItemID})
+				to.add(m, q, cost)
+				mv(to, q, cost)
 			}
-			c.Quantity, c.Value = c.Quantity.Sub(q), c.Value.Sub(cost)
-			if c.Quantity.IsZero() {
-				c.Value = money.Zero
-			}
-			c.Moves = append(c.Moves, Move{DocID: d.ID, Number: d.Number, Kind: d.Kind, Date: d.Date, Partner: d.Partner,
-				Quantity: q.Neg(), UnitCost: l.UnitCost, Total: cost.Neg(), Balance: c.Quantity, Value: c.Value})
 		}
+	}
+	cards := map[Key]*Card{}
+	for k, c := range states {
+		cards[k] = c.Card
 	}
 	for i := range out {
 		out[i].Total = money.Zero

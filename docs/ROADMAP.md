@@ -111,7 +111,9 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 
 ## Etapa 3 — sklad a majetok
 - [x] Sklad: skladové položky z cenníka, viac skladov, príjemky, výdajky, inventúrne rozdiely, ocenenie váženým priemerom, výdajka z vystavenej faktúry a vrátenie k dobropisu, zaúčtovanie (132/131, 504/132…), zásoby vo výkaze o majetku
-- [ ] Sklad ďalej: príjemka z prijatej faktúry s položkami, presun medzi skladmi jedným dokladom, prepojenie s e-shopom, FIFO
+- [x] Sklad: FIFO alebo vážený priemer v nastaveniach, presun medzi skladmi, príjemka k prijatej faktúre, odkaz pre e-shop (zásoby JSON/CSV, objednávky → výdajky)
+- [ ] Konektory na e-shopy: Shoptet, WooCommerce, PrestaShop, Shopify, Upgates, Drupal Commerce (industrio.online), Magento — zásoby, ceny, objednávky, faktúry
+- [ ] Importy z účtovných programov: Pohoda (XML), Money S3 (XML), KROS (Omega, Alfa), SuperFaktúra, iDoklad, Fakturoid (API), všeobecný Excel/CSV — adresár, cenník, faktúry, prijaté faktúry, počiatočné stavy
 - [x] Register dlhodobého majetku s daňovými odpismi (§ 22 – 29 ZDP): skupiny 0 – 6, rovnomerné a zrýchlené odpisovanie, pomerná časť v roku zaradenia, podiel na podnikaní, vyradenie (ZC do výdavkov), odpisový plán, väzba na prijatú faktúru, hľadanie a export
 - [x] Odpisy z registra jedným tlačidlom do uzávierky roka (stĺpec e6); zostatkové ceny do výkazu o majetku a záväzkoch (r. 01, 02) a tabuľky 1a DP typ B
 - [ ] Účtovné odpisy, technické zhodnotenie, prerušenie odpisovania, prenájom (§ 27 ods. 2)

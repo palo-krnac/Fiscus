@@ -1016,11 +1016,11 @@ func (a *App) stockPostings(ctx context.Context, companyID int64, year int, p *p
 		return nil, err
 	}
 	suffix := map[stock.ItemKind]string{stock.Goods: "TOVAR", stock.Material: "MATERIAL", stock.Product: "VYROBKY"}
-	_, costed, _ := stock.Valuate(docs)
+	_, costed, _ := stock.Valuate(docs, cfg.Method)
 	var out []ledger.Posting
 	for _, d := range costed {
-		if d.Date.Year() != year {
-			continue
+		if d.Date.Year() != year || d.Kind == stock.Transfer {
+			continue // presun medzi skladmi nemení účet zásob
 		}
 		type group struct {
 			kind stock.ItemKind
