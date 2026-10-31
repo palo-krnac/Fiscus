@@ -78,3 +78,16 @@ func TestImportMigrateAPI(t *testing.T) {
 	mrpZip, _ := os.ReadFile("../mrp/testdata/export.zip")
 	e.do("POST", base+"mrp", string(mrpZip), 200, nil)
 }
+
+func TestImportContactsAPI(t *testing.T) {
+	e := setup(t, edition.Desktop)
+	url := fmt.Sprintf("/api/companies/%d/contacts/import", e.cid)
+	vcf, _ := os.ReadFile("../vcard/testdata/kontakty.vcf")
+	var rep struct{ Contacts struct{ New, Existing int } }
+	e.do("POST", url, string(vcf), 200, &rep)
+	if rep.Contacts.New != 2 {
+		t.Fatalf("náhľad: %+v", rep)
+	}
+	e.do("POST", url+"?apply=1", "Názov;IČO\nFirma;36123455\n", 200, &rep)
+	e.do("POST", url, "\x00\x01", 422, nil)
+}

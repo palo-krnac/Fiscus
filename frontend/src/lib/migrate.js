@@ -44,6 +44,14 @@ export const sources = [
   { id: 'superfaktura', name: 'SuperFaktúra', ready: false },
   { id: 'fakturoid', name: 'Fakturoid', ready: false },
   {
+    id: 'vcard',
+    name: 'Kontakty (vCard)',
+    ready: true,
+    accept: '.vcf,text/vcard,text/x-vcard',
+    pick: 'Vybrať súbor VCF',
+    hint: 'Vizitky z telefónu, Google Kontaktov, Outlooku alebo Apple Kontaktov (export do .vcf). Názov kontaktu je firma, inak meno osoby; osoba pri firme sa zapíše do poznámky.',
+  },
+  {
     id: 'table',
     name: 'Excel / CSV',
     ready: true,
@@ -53,6 +61,16 @@ export const sources = [
     hint: 'Tabuľka z ľubovoľného programu: v prvom riadku hlavička, potom jeden kontakt, položka alebo faktúra na riadok. Stĺpce sa rozpoznajú podľa názvu — stiahnite si vzor.',
   },
 ]
+
+/** Prípony súborov s kontaktmi (Adresár → Import). */
+export const contactAccept = '.vcf,.csv,.xlsx,text/vcard,text/x-vcard,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+
+/** Text tlačidla prenosu: „Pridať 3 kontakty“. */
+export function contactsLabel(n) {
+  if (n === 1) return 'Pridať 1 kontakt'
+  if (n >= 2 && n <= 4) return `Pridať ${n} kontakty`
+  return `Pridať ${n} kontaktov`
+}
 
 /** Obsah tabuľky Excel/CSV. */
 export const tableKinds = [

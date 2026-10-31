@@ -31,6 +31,8 @@ const (
 // Party sú údaje partnera z riadku.
 type Party struct {
 	Name, Street, City, Zip, Country, ICO, DIC, ICDPH, Email, Phone, Note string
+	Person                                                                string // meno a priezvisko kontaktnej osoby (Outlook, Google)
+	IBAN                                                                  string
 }
 
 // Amount je základ a daň jednej sadzby.
@@ -103,6 +105,9 @@ const (
 	cType
 	cOriginal
 	cPrice // stĺpec ceny cenníka (rozpozná tabuľku cenníka)
+	cFirst
+	cLast
+	cIBAN
 )
 
 var colNames = map[int]string{cName: "Názov", cStreet: "Ulica", cCity: "Obec", cZip: "PSČ", cCountry: "Štát", cICO: "IČO", cDIC: "DIČ",
@@ -149,6 +154,19 @@ func init() {
 	add(cPaidDate, "datum uhrady", "uhradena dna", "datum zaplatenia", "datum uhrazeni", "paid date", "payment date", "zaplatene dna")
 	add(cType, "druh", "typ", "typ dokladu", "druh dokladu", "type", "document type")
 	add(cOriginal, "povodna faktura", "opravuje", "k fakture", "opravovana faktura", "puvodni doklad", "original invoice", "dobropis k")
+	add(cFirst, "meno osoby", "krstne meno", "first name", "given name", "jmeno osoby", "krestni jmeno")
+	add(cLast, "priezvisko", "last name", "family name", "surname", "prijmeni")
+	add(cIBAN, "iban", "bankovy ucet", "cislo uctu", "ucet", "bank account", "bankovni ucet")
+	// Outlook a Google Kontakty (anglicky aj slovensky)
+	add(cName, "organization name", "organization 1 - name", "spolocnost", "company name", "display name", "zobrazovane meno")
+	add(cEmail, "e-mail address", "e-mail 1 - value", "email address", "e-mailova adresa", "primary email")
+	add(cPhone, "business phone", "mobile phone", "phone 1 - value", "primary phone", "home phone", "telefon do prace", "mobilny telefon",
+		"telefon domov")
+	add(cStreet, "business street", "home street", "address 1 - street", "ulica (praca)", "ulica (domov)")
+	add(cCity, "business city", "home city", "address 1 - city", "mesto (praca)", "mesto (domov)")
+	add(cZip, "business postal code", "home postal code", "address 1 - postal code", "psc (praca)", "psc (domov)")
+	add(cCountry, "business country/region", "home country/region", "address 1 - country", "krajina/oblast (praca)", "krajina/oblast (domov)")
+	add(cNote, "notes", "poznamky")
 	add(cPrice, "cena", "cena bez dph", "cena s dph", "jednotkova cena", "price")
 }
 
@@ -159,15 +177,16 @@ var (
 )
 
 type layout struct {
-	col      map[int]int // stĺpec → index
-	baseRate map[int]int // sadzba → index stĺpca so základom
+	col      map[int][]int // stĺpec → indexy (prvá neprázdna hodnota)
+	baseRate map[int]int   // sadzba → index stĺpca so základom
 	vatRate  map[int]int
 }
 
-func (l layout) has(c int) bool { _, ok := l.col[c]; return ok }
+func (l layout) has(c int) bool { return len(l.col[c]) > 0 }
 
 func readLayout(head []string) layout {
-	l := layout{col: map[int]int{}, baseRate: map[int]int{}, vatRate: map[int]int{}}
+	l := layout{col: map[int][]int{}, baseRate: map[int]int{}, vatRate: map[int]int{}}
+	keys := map[int]string{}
 	for i, h := range head {
 		k := strings.TrimSuffix(strings.TrimSpace(catalog.Key(h)), ":")
 		k = strings.TrimSpace(strings.NewReplacer("€", "", "(eur)", "", "eur", "").Replace(k))
@@ -182,13 +201,32 @@ func readLayout(head []string) layout {
 			continue
 		}
 		if c, ok := aliases[k]; ok {
-			if _, dup := l.col[c]; !dup {
-				l.col[c] = i
-			}
+			l.col[c] = append(l.col[c], i)
+			keys[i] = k
 		}
 	}
+	// Outlook po slovensky: „Meno“ vedľa „Priezvisko“ je krstné meno
+	if l.has(cLast) {
+		var rest []int
+		for _, i := range l.col[cName] {
+			if keys[i] == "meno" || keys[i] == "jmeno" {
+				l.col[cFirst] = append(l.col[cFirst], i)
+			} else {
+				rest = append(rest, i)
+			}
+		}
+		l.col[cName] = rest
+	}
+	// názov firmy má prednosť pred menom osoby
+	sort.SliceStable(l.col[cName], func(a, b int) bool {
+		return companyKeys[keys[l.col[cName][a]]] && !companyKeys[keys[l.col[cName][b]]]
+	})
 	return l
 }
+
+// companyKeys sú hlavičky s názvom firmy (prednosť pred menom osoby).
+var companyKeys = map[string]bool{"firma": true, "nazov firmy": true, "obchodne meno": true, "company": true, "company name": true,
+	"organization name": true, "organization 1 - name": true, "spolocnost": true, "obchodni jmeno": true, "nazov": true}
 
 // Detect odhadne druh tabuľky z hlavičky: cenník, adresár; pri faktúrach
 // nevie, či sú vydané alebo prijaté (vráti "").
@@ -203,7 +241,7 @@ func Detect(rows [][]string) string {
 		return ""
 	case l.has(cPrice):
 		return KindItems
-	case l.has(cName):
+	case l.has(cName) || l.has(cFirst) || l.has(cLast):
 		return KindContacts
 	}
 	return ""
@@ -220,9 +258,9 @@ func Parse(rows [][]string, kind string, defRate vat.Rate) (Sheet, error) {
 	}
 	l := readLayout(rows[0])
 	sh := Sheet{Kind: kind}
-	for c, i := range l.col {
+	for c, ii := range l.col {
 		if n, ok := colNames[c]; ok {
-			sh.Columns = append(sh.Columns, fmt.Sprintf("%d:%s", i, n))
+			sh.Columns = append(sh.Columns, fmt.Sprintf("%d:%s", ii[0], n))
 		}
 	}
 	for r, i := range l.baseRate {
@@ -239,7 +277,7 @@ func Parse(rows [][]string, kind string, defRate vat.Rate) (Sheet, error) {
 	for i := range sh.Columns {
 		sh.Columns[i] = strings.SplitN(sh.Columns[i], ":", 2)[1]
 	}
-	if !l.has(cName) {
+	if !l.has(cName) && !l.has(cFirst) && !l.has(cLast) {
 		return sh, fmt.Errorf("v hlavičke chýba stĺpec s názvom partnera (Názov, Odberateľ, Dodávateľ, Firma…)")
 	}
 	switch kind {
@@ -282,11 +320,12 @@ func blank(row []string) bool {
 }
 
 func (l layout) get(row []string, c int) string {
-	i, ok := l.col[c]
-	if !ok || i >= len(row) {
-		return ""
+	for _, i := range l.col[c] {
+		if i < len(row) && strings.TrimSpace(row[i]) != "" {
+			return strings.TrimSpace(row[i])
+		}
 	}
-	return strings.TrimSpace(row[i])
+	return ""
 }
 
 func cell(row []string, i int) string {
@@ -298,7 +337,12 @@ func cell(row []string, i int) string {
 
 func (l layout) party(row []string) Party {
 	g := func(c int) string { return l.get(row, c) }
-	p := Party{Name: g(cName), Street: g(cStreet), City: g(cCity), Zip: strings.ReplaceAll(g(cZip), " ", ""), Country: g(cCountry),
+	name := g(cName)
+	person := strings.Join(strings.Fields(g(cFirst)+" "+g(cLast)), " ")
+	if name == "" {
+		name = person
+	}
+	p := Party{Name: name, Person: person, IBAN: strings.ToUpper(strings.ReplaceAll(g(cIBAN), " ", "")), Street: g(cStreet), City: g(cCity), Zip: strings.ReplaceAll(g(cZip), " ", ""), Country: g(cCountry),
 		ICO: strings.ReplaceAll(g(cICO), " ", ""), DIC: strings.ReplaceAll(g(cDIC), " ", ""), ICDPH: strings.ToUpper(strings.ReplaceAll(g(cICDPH), " ", "")),
 		Email: g(cEmail), Phone: g(cPhone), Note: g(cNote)}
 	// IČO z Excelu ako číslo stratí úvodné nuly

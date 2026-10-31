@@ -21,6 +21,9 @@ import { session, can } from '../lib/session.js'
 import { fiskusGridTheme, skGridLocale, gridRows } from '../lib/grid.js'
 import { contactColumns } from '../lib/columns.js'
 import ExportButton from '../components/ExportButton.vue'
+import ImportWarnings from '../components/ImportWarnings.vue'
+import Dialog from 'primevue/dialog'
+import { contactAccept, contactsLabel } from '../lib/migrate.js'
 import { filterContacts } from '../lib/contacts.js'
 
 const props = defineProps({ id: String })
@@ -39,6 +42,43 @@ const blank = () => ({
   name: '', street: '', city: '', zip: '', country: 'SK', ico: '', dic: '', icdph: '',
   email: '', phone: '', iban: '', dueDays: null, note: '',
 })
+
+// ---- import z vizitiek vCard alebo tabuľky (CSV, Excel, Outlook, Google) ----
+const importInput = ref(null)
+const importFile = ref(null)
+const importPreview = ref(null)
+const importing = ref(false)
+async function pickImport(e) {
+  const file = e.target.files?.[0]
+  e.target.value = ''
+  if (!file) return
+  if (file.size > 50 * 1024 * 1024) {
+    toast.add({ severity: 'error', summary: 'Súbor je príliš veľký', detail: 'Najviac 50 MB.', life: 5000 })
+    return
+  }
+  importing.value = true
+  try {
+    importPreview.value = await api.importContacts(session.companyId, file)
+    importFile.value = file
+  } catch (err) {
+    toast.add({ severity: 'error', summary: 'Súbor sa nedá načítať', detail: err.message, life: 8000 })
+  } finally {
+    importing.value = false
+  }
+}
+async function runImport() {
+  importing.value = true
+  try {
+    const res = await api.importContacts(session.companyId, importFile.value, true)
+    toast.add({ severity: 'success', summary: 'Kontakty pridané', detail: `${res.contacts.new} nových`, life: 4000 })
+    importPreview.value = null
+    load()
+  } catch (err) {
+    toast.add({ severity: 'error', summary: 'Import zlyhal', detail: err.message, life: 8000 })
+  } finally {
+    importing.value = false
+  }
+}
 
 async function load() {
   loading.value = true
@@ -175,6 +215,9 @@ onBeforeUnmount(() => {
         <h1>Adresár</h1>
         <span class="count">{{ contacts.length }}</span>
         <div class="spacer" />
+        <input ref="importInput" type="file" :accept="contactAccept" class="visually-hidden" @change="pickImport" />
+        <Button v-if="can('contacts.write')" icon="pi pi-upload" label="Import" severity="secondary" outlined size="small" :loading="importing && !importPreview"
+          v-tooltip.bottom="'Načítať kontakty z vizitiek (.vcf), Excelu alebo CSV (aj export z Outlooku a Google Kontaktov)'" @click="importInput.click()" />
         <ExportButton name="Adresár" :columns="contactColumns" :rows="() => gridRows(gridApi, rows)" />
         <Button v-if="can('contacts.write')" size="small" @click="router.push('/adresar/novy')">
           <i class="pi pi-plus" /><span>Nový kontakt</span><kbd class="hint">N</kbd>
@@ -247,10 +290,46 @@ onBeforeUnmount(() => {
         <Button v-if="can('contacts.write')" label="Uložiť" icon="pi pi-check" size="small" :loading="busy" @click="save" />
       </footer>
     </aside>
+
+    <Dialog :visible="!!importPreview" modal header="Import kontaktov" :style="{ width: '44rem' }" :breakpoints="{ '760px': '96vw' }"
+      @update:visible="(v) => !v && (importPreview = null)">
+      <template v-if="importPreview">
+        <p class="imp-sum">
+          <span class="tag" data-tone="paid"><span class="tag-text">{{ importPreview.contacts.new }} nových</span></span>
+          <span v-if="importPreview.contacts.existing" class="tag" data-tone="issued"><span class="tag-text">{{ importPreview.contacts.existing }} už v adresári</span></span>
+          <span v-if="importPreview.contacts.skipped" class="tag" data-tone="overdue"><span class="tag-text">{{ importPreview.contacts.skipped }} sa preskočí</span></span>
+        </p>
+        <p class="imp-help">Kontakt s rovnakým IČO (bez IČO s rovnakým názvom) sa nevytvorí znova a existujúce kontakty sa nemenia.</p>
+        <ImportWarnings :warnings="importPreview.warnings ?? []" name="Import kontaktov – upozornenia" />
+      </template>
+      <template #footer>
+        <Button label="Zrušiť" severity="secondary" text size="small" @click="importPreview = null" />
+        <Button :label="contactsLabel(importPreview?.contacts.new ?? 0)" icon="pi pi-check" size="small" :loading="importing"
+          :disabled="!importPreview?.contacts.new" @click="runImport" />
+      </template>
+    </Dialog>
   </div>
 </template>
 
 <style scoped>
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+.imp-sum {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 8px;
+}
+.imp-help {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--ink-soft);
+}
 .contacts {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

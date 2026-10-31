@@ -1,0 +1,22 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:Peter Kováč
+N:Kováč;Peter;;;
+ORG:Kováč a syn s.r.o.;Obchod
+item1.EMAIL;TYPE=INTERNET:sukromny@kovac.sk
+EMAIL;TYPE=INTERNET,WORK:fakturacia@kovac.sk
+TEL;TYPE=CELL:+421 905 123 456
+TEL;TYPE=WORK:+421 37 123 456
+ADR;TYPE=HOME:;;Doma 1;Nitra;;94901;Slovensko
+ADR;TYPE=WORK:;;Hlavná 12\nBudova B;Nitra;;949 01;Slovensko
+NOTE:Stály odberateľ\, platí včas
+END:VCARD
+BEGIN:VCARD
+VERSION:4.0
+FN:Eva Malá
+N:Malá;Eva;;;
+EMAIL;PREF=1:eva@mala.sk
+TEL;VALUE=uri;TYPE=cell:tel:+421900111222
+NOTE:Dlhá poznámka, ktorá je zalo
+ mená na dva riadky
+END:VCARD
