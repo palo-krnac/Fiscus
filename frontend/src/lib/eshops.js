@@ -2,12 +2,12 @@
 
 /** Nové napojenie (Since prázdne = server dá posledných 30 dní). */
 export function blankConn(platform = 'woocommerce') {
-  return { id: '', platform, name: '', url: '', key: '', secret: '', hasKey: false, hasSecret: false, onlyPaid: true, since: '' }
+  return { id: '', platform, name: '', url: '', key: '', secret: '', hasKey: false, hasSecret: false, onlyPaid: true, auto: false, since: '' }
 }
 
 /** Údaje na uloženie: bez stavových polí; prázdny kľúč a tajomstvo server ponechá. */
 export function toSave(conns) {
-  return conns.map(({ id, platform, name, url, key, secret, onlyPaid, since }) => ({
+  return conns.map(({ id, platform, name, url, key, secret, onlyPaid, auto, since }) => ({
     id,
     platform,
     name,
@@ -15,6 +15,7 @@ export function toSave(conns) {
     key: key ?? '',
     secret: secret ?? '',
     onlyPaid: !!onlyPaid,
+    auto: !!auto,
     since: since || '',
   }))
 }
@@ -54,4 +55,12 @@ export function stockSummary(r) {
   if (r.missing?.length) parts.push(`v obchode chýba ${r.missing.length}: ${r.missing.slice(0, 8).join(', ')}${r.missing.length > 8 ? '…' : ''}`)
   if (r.errors?.length) parts.push(`chyby: ${r.errors.length}`)
   return parts.join(' · ')
+}
+
+/** Posledná chyba automatického načítania: „čas text“ → { when, text }. */
+export function splitError(s) {
+  if (!s) return null
+  const i = s.indexOf(' ')
+  const when = formatWhen(s.slice(0, i))
+  return when ? { when, text: s.slice(i + 1) } : { when: '', text: s }
 }

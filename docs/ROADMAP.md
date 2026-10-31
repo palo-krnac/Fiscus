@@ -134,7 +134,8 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] SuperFaktúra a Fakturoid: ich export pre účtovníka (POHODA, Money S3, KROS Omega alebo MRP) — formát sa rozpozná sám, aj v ZIP; kontakty z faktúr
 - [ ] KROS Alfa; prijaté faktúry z MRP; priame napojenie cez API (Fakturoid, iDoklad, SuperFaktúra)
 - [x] Napojenie e-shopov WooCommerce a Shopify (neoverené na živom obchode): objednávky → koncepty faktúr (zákazník, IČO, kontaktná osoba, dodacia adresa, väzba na cenník podľa kódu, sadzba DPH z dane), „iba uhradené“, bez duplicít; stav zásob zo skladu do obchodu; na serveri zákaz volaní do vnútornej siete
-- [ ] Ďalšie e-shopy (Shoptet, PrestaShop, Upgates, Drupal Commerce, Magento), automatické načítanie podľa plánu
+- [x] PrestaShop, Magento / Adobe Commerce, Drupal Commerce (neoverené); automatické načítanie objednávok každú hodinu s chybou pri obchode
+- [ ] Shoptet a Upgates (čaká na overenie polí z oficiálnej dokumentácie)
 
 ## Etapa 4 — mzdy (samostatný návrh)
 - [ ] Sociálna poisťovňa, zdravotné poisťovne, preddavky na daň, ročné zúčtovanie

@@ -240,3 +240,32 @@ func TestEshopNoStockPlatform(t *testing.T) {
 		t.Errorf("Drupal bez používateľa: %v", err)
 	}
 }
+
+func TestSyncAllEshops(t *testing.T) {
+	a, c := newApp(t, edition.Desktop)
+	shop := &fakeWoo{stock: map[string]float64{}, skus: map[string]int{}}
+	srv := httptest.NewServer(shop)
+	defer srv.Close()
+	a.HTTP = eshop.Client(true)
+	shop.orders = []map[string]any{wooOrder(201, "processing", "EUR", []map[string]any{{"name": "Práca", "quantity": 1, "total": "20.00", "total_tax": "4.60"}})}
+	set, err := a.SaveEshops(ctx, c.ID, []EshopConn{{Platform: eshop.WooCommerce, URL: srv.URL, Key: "ck_test", Secret: "cs_test", Auto: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.SyncAllEshops(ctx)
+	got, _ := a.Eshops(ctx, c.ID)
+	if got.Conns[0].Imported != 1 || got.Conns[0].LastError != "" {
+		t.Fatalf("automatické načítanie: %+v", got.Conns[0])
+	}
+	// zlý kľúč → chyba sa zapíše k obchodu
+	conn := set.Conns[0]
+	conn.Secret = "zly"
+	if _, err := a.SaveEshops(ctx, c.ID, []EshopConn{conn}); err != nil {
+		t.Fatal(err)
+	}
+	a.SyncAllEshops(ctx)
+	got, _ = a.Eshops(ctx, c.ID)
+	if !strings.Contains(got.Conns[0].LastError, "prihlasovacie údaje") {
+		t.Errorf("chyba: %q", got.Conns[0].LastError)
+	}
+}

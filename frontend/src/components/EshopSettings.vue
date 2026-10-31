@@ -11,7 +11,7 @@ import FormField from './FormField.vue'
 import { api, ApiError } from '../lib/api.js'
 import { can, session } from '../lib/session.js'
 import { formatMoney } from '../lib/format.js'
-import { blankConn, connErrors, formatWhen, orderStatus, stockSummary, toSave } from '../lib/eshops.js'
+import { blankConn, connErrors, formatWhen, orderStatus, splitError, stockSummary, toSave } from '../lib/eshops.js'
 
 const toast = useToast()
 const platforms = ref([])
@@ -135,7 +135,15 @@ async function run(c, what) {
           <Checkbox v-model="c.onlyPaid" binary />
           <span>Faktúra až z uhradenej objednávky<small>Neuhradené počkajú na ďalšie načítanie</small></span>
         </label>
+        <label class="check">
+          <Checkbox v-model="c.auto" binary />
+          <span>Načítavať automaticky každú hodinu<small>Kým beží Fiškus; koncepty počkajú na kontrolu</small></span>
+        </label>
       </div>
+      <p v-if="splitError(c.lastError)" class="auto-error">
+        <i class="pi pi-exclamation-triangle" aria-hidden="true" />
+        Automatické načítanie {{ splitError(c.lastError).when }} zlyhalo: {{ splitError(c.lastError).text }}
+      </p>
       <p class="help">
         {{ info(c.platform).help }}
         <a v-if="info(c.platform).docs" :href="info(c.platform).docs" target="_blank" rel="noopener">Dokumentácia API</a>
@@ -147,6 +155,7 @@ async function run(c, what) {
           <Button v-if="can('invoices.write')" label="Načítať objednávky" icon="pi pi-download" size="small" :loading="busy === 'orders' + c.id" :disabled="dirty || !!busy" @click="run(c, 'orders')" />
           <Button v-if="can('purchases.write') && info(c.platform).stock" label="Poslať zásoby" icon="pi pi-upload" size="small" outlined :loading="busy === 'stock' + c.id" :disabled="dirty || !!busy" @click="run(c, 'stock')" />
           <span v-if="dirty" class="muted">Najprv uložte zmeny.</span>
+          <span v-else-if="!info(c.platform).stock" class="muted">Tento obchod stav zásob cez API neprijíma.</span>
           <span v-else-if="c.lastStock" class="muted">Zásoby odoslané {{ formatWhen(c.lastStock) }}</span>
         </template>
       </div>
@@ -241,6 +250,11 @@ async function run(c, what) {
   display: block;
   color: var(--ink-faint);
   font-size: var(--fs-xs);
+}
+.auto-error {
+  margin-top: 8px;
+  font-size: var(--fs-sm);
+  color: var(--tone-overdue);
 }
 .help {
   margin-top: 8px;
