@@ -134,6 +134,31 @@ func Run(t *testing.T, newStore Factory) {
 		}
 	})
 
+	t.Run("zmazanie faktúry", func(t *testing.T) {
+		s := newStore(t)
+		a, _ := s.CreateCompany(ctx, store.Company{Name: "Alfa"})
+		b, _ := s.CreateCompany(ctx, store.Company{Name: "Beta"})
+		inv := draft("Odberateľ", "2026-10-01")
+		keep := draft("Iný", "2026-10-02")
+		_ = s.SaveInvoice(ctx, a.ID, inv)
+		_ = s.SaveInvoice(ctx, a.ID, keep)
+		if err := s.DeleteInvoice(ctx, b.ID, inv.ID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatalf("firma B zmazala faktúru firmy A: %v", err)
+		}
+		if err := s.DeleteInvoice(ctx, a.ID, inv.ID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.GetInvoice(ctx, a.ID, inv.ID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatalf("faktúra ostala: %v", err)
+		}
+		if err := s.DeleteInvoice(ctx, a.ID, inv.ID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatalf("druhé zmazanie: %v", err)
+		}
+		if k, err := s.GetInvoice(ctx, a.ID, keep.ID); err != nil || len(k.Lines) != 1 {
+			t.Fatalf("iná faktúra sa poškodila: %+v %v", k, err)
+		}
+	})
+
 	t.Run("filter", func(t *testing.T) {
 		s := newStore(t)
 		c, _ := s.CreateCompany(ctx, store.Company{Name: "Alfa"})

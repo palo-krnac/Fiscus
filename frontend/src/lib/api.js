@@ -276,6 +276,7 @@ export const api = {
   pay: (cid, id, date, amount) =>
     request('POST', `${inv(cid)}/${id}/pay`, date || amount ? { ...(date ? { date } : {}), ...(amount ? { amount } : {}) } : undefined),
   cancel: (cid, id) => request('POST', `${inv(cid)}/${id}/cancel`),
+  deleteInvoice: (cid, id) => request('DELETE', `${inv(cid)}/${id}`),
   creditNote: (cid, id) => request('POST', `${inv(cid)}/${id}/credit-note`),
   settleAdvance: (cid, id) => request('POST', `${inv(cid)}/${id}/settle`),
   // dodatočné daňové doklady k platbám zálohy (dodanie do 15 dní sa nestihlo)
