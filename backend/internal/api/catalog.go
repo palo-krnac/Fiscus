@@ -1,11 +1,13 @@
 package api
 
 import (
+	"context"
 	"io"
 	"net/http"
 
 	"github.com/palo-krnac/fiscus/backend/internal/app"
 	"github.com/palo-krnac/fiscus/backend/internal/catalog"
+	"github.com/palo-krnac/fiscus/backend/internal/invoice"
 )
 
 func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
@@ -76,16 +78,35 @@ func (s *Server) importItems(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, res)
 }
 
-// importPohoda: POST …/import/pohoda — telo je XML export z POHODY;
-// ?apply=1 prenos vykoná, inak vráti náhľad.
-func (s *Server) importPohoda(w http.ResponseWriter, r *http.Request) {
+// importMigrate: POST …/import/{source} — prenos dát z iného programu
+// (pohoda, money); telo je XML export. ?apply=1 prenos vykoná, inak vráti
+// náhľad; ?paidUntil=RRRR-MM-DD označí faktúry so splatnosťou do toho dňa
+// ako uhradené.
+func (s *Server) importMigrate(w http.ResponseWriter, r *http.Request) {
 	cid, _ := pathID(w, r, "cid")
-	data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, app.MaxPohodaBytes))
+	run := map[string]func(context.Context, int64, []byte, app.MigrateOptions, bool) (app.ImportReport, error){
+		"pohoda": s.App.ImportPohoda,
+		"money":  s.App.ImportMoney,
+	}[r.PathValue("source")]
+	if run == nil {
+		writeErr(w, http.StatusNotFound, "Neznámy zdroj prenosu", nil)
+		return
+	}
+	var opt app.MigrateOptions
+	if v := r.URL.Query().Get("paidUntil"); v != "" {
+		d, err := invoice.ParseDate(v)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "Chybný dátum", []invoice.FieldError{{Field: "paidUntil", Message: "Zadajte dátum v tvare RRRR-MM-DD"}})
+			return
+		}
+		opt.PaidUntil = d
+	}
+	data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, app.MaxMigrateBytes))
 	if err != nil {
 		writeErr(w, http.StatusRequestEntityTooLarge, "Súbor je príliš veľký (najviac 50 MB)", nil)
 		return
 	}
-	res, err := s.App.ImportPohoda(r.Context(), cid, data, r.URL.Query().Get("apply") == "1")
+	res, err := run(r.Context(), cid, data, opt, r.URL.Query().Get("apply") == "1")
 	if err != nil {
 		fail(w, err)
 		return

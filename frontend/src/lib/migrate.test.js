@@ -34,7 +34,12 @@ describe('prenos dát', () => {
   ])('hľadanie v upozorneniach „%s“', (q, n) => {
     expect(filterWarnings(report.warnings, q)).toHaveLength(n)
   })
-  it('POHODA je hotová', () => {
-    expect(sources.find((s) => s.id === 'pohoda').ready).toBe(true)
+  it.each(['pohoda', 'money'])('zdroj %s je hotový', (id) => {
+    const s = sources.find((x) => x.id === id)
+    expect(s.ready).toBe(true)
+    expect(s.accept).toContain('.xml')
+  })
+  it('agendy Money S3', () => {
+    expect(otherText({ ObjPrij: 3, PokDokl: 1 })).toBe('prijaté objednávky 3, pokladničné doklady 1')
   })
 })

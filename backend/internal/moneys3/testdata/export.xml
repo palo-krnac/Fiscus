@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="windows-1250"?>
+<MoneyData KodAgendy="" HospRokOd="2026-01-01" HospRokDo="2026-12-31" description="adresár, zásoby, faktúry" ExpZkratka="_FP+FV" ExpDate="2026-10-30" ExpTime="10:12:00" VyberZaznamu="0">
+<SeznamFirem>
+<Firma>
+<Nazev>Kováč a syn s.r.o.</Nazev>
+<Adresa><Ulice>Hlavná 12</Ulice><Misto>Nitra</Misto><PSC>94901</PSC><Stat>Slovenská republika</Stat></Adresa>
+<ObchNazev>Kováč a syn s.r.o.</ObchNazev>
+<ICO>36123455</ICO>
+<DIC>SK2020123457</DIC>
+<DICSK>2020123457</DICSK>
+<Tel><Pred>+421</Pred><Cislo>905 123 456</Cislo></Tel>
+<EMail>fakturacia@kovac.sk</EMail>
+<Poznamka>Stály odberateľ</Poznamka>
+</Firma>
+<Firma>
+<Nazev>Ján Šťastný</Nazev>
+<Adresa><Ulice>Lipová 3</Ulice><Misto>Žilina</Misto><PSC>01001</PSC><Stat>Slovensko</Stat></Adresa>
+</Firma>
+<Firma>
+<Nazev></Nazev>
+</Firma>
+</SeznamFirem>
+<SeznamZasoba>
+<Zasoba>
+<KmKarta><Popis>Relé 24 V</Popis><Zkrat>REL24</Zkrat><Katalog>REL-24</Katalog><MJ>ks</MJ></KmKarta>
+<PC><Cena1><Cena>12.18</Cena><SDPH>0</SDPH></Cena1></PC>
+</Zasoba>
+</SeznamZasoba>
+<SeznamFaktVyd>
+<FaktVyd>
+<Doklad>2026001</Doklad>
+<Popis>Montáž rozvádzača</Popis>
+<Vystaveno>2026-03-02</Vystaveno>
+<DatUcPr>2026-03-02</DatUcPr>
+<PlnenoDPH>2026-03-02</PlnenoDPH>
+<Splatno>2026-03-16</Splatno>
+<VarSymbol>2026001</VarSymbol>
+<PuvDoklad />
+<Druh>N</Druh>
+<Dobropis>0</Dobropis>
+<SazbaDPH1>19</SazbaDPH1>
+<SazbaDPH2>23</SazbaDPH2>
+<SouhrnDPH><Zaklad0>0</Zaklad0><Zaklad5>0</Zaklad5><Zaklad22>140.9</Zaklad22><DPH5>0</DPH5><DPH22>32.41</DPH22>
+<SeznamDalsiSazby><DalsiSazba><Popis>druhá znížená</Popis><HladinaDPH>1</HladinaDPH><Sazba>5</Sazba><Zaklad>0</Zaklad><DPH>0</DPH></DalsiSazba></SeznamDalsiSazby></SouhrnDPH>
+<Celkem>173.31</Celkem>
+<DodOdb>
+<ObchNazev>Kováč a syn s.r.o.</ObchNazev>
+<ObchAdresa><Ulice>Hlavná 12</Ulice><Misto>Nitra</Misto><PSC>94901</PSC><Stat>Slovenská republika</Stat></ObchAdresa>
+<FaktNazev>Kováč a syn s.r.o.</FaktNazev>
+<ICO>36123455</ICO>
+<DIC>SK2020123457</DIC>
+<FaktAdresa><Ulice>Hlavná 12</Ulice><Misto>Nitra</Misto><PSC>94901</PSC><Stat>Slovenská republika</Stat></FaktAdresa>
+<Nazev>Kováč a syn s.r.o.</Nazev>
+<PlatceDPH>1</PlatceDPH>
+</DodOdb>
+<SeznamPolozek>
+<Polozka><Popis>Práca elektrikára</Popis><PocetMJ>2</PocetMJ><Cena>40</Cena><CenaTyp>0</CenaTyp><SazbaDPH>23</SazbaDPH><Sleva>0</Sleva><MJ>h</MJ></Polozka>
+<Polozka><Popis>Relé 24 V</Popis><PocetMJ>5</PocetMJ><Cena>12.18</Cena><CenaTyp>0</CenaTyp><SazbaDPH>23</SazbaDPH><Sleva>0</Sleva>
+<SklPolozka><KmKarta><Popis>Relé 24 V</Popis><Katalog>REL-24</Katalog><MJ>ks</MJ></KmKarta></SklPolozka></Polozka>
+</SeznamPolozek>
+<MojeFirma><Nazev>Demo elektroservis</Nazev><MenaKod>EUR</MenaKod></MojeFirma>
+</FaktVyd>
+<FaktVyd>
+<Doklad>2026002</Doklad>
+<Popis>Vrátenie relé</Popis>
+<Vystaveno>2026-03-20</Vystaveno>
+<PlnenoDPH>2026-03-20</PlnenoDPH>
+<Splatno>2026-04-03</Splatno>
+<VarSymbol>2026002</VarSymbol>
+<PuvDoklad>2026001</PuvDoklad>
+<Druh>N</Druh>
+<Dobropis>1</Dobropis>
+<SazbaDPH1>19</SazbaDPH1>
+<SazbaDPH2>23</SazbaDPH2>
+<SouhrnDPH><Zaklad0>0</Zaklad0><Zaklad5>0</Zaklad5><Zaklad22>-12.18</Zaklad22><DPH5>0</DPH5><DPH22>-2.8</DPH22></SouhrnDPH>
+<Celkem>-14.98</Celkem>
+<DodOdb><FaktNazev>Kováč a syn s.r.o.</FaktNazev><ICO>36123455</ICO><DIC>SK2020123457</DIC>
+<FaktAdresa><Ulice>Hlavná 12</Ulice><Misto>Nitra</Misto><PSC>94901</PSC><Stat>Slovenská republika</Stat></FaktAdresa></DodOdb>
+<SeznamPolozek>
+<Polozka><Popis>Relé 24 V</Popis><PocetMJ>-1</PocetMJ><Cena>12.18</Cena><CenaTyp>0</CenaTyp><SazbaDPH>23</SazbaDPH><MJ>ks</MJ></Polozka>
+</SeznamPolozek>
+<MojeFirma><MenaKod>EUR</MenaKod></MojeFirma>
+</FaktVyd>
+<FaktVyd>
+<Doklad>2026003</Doklad>
+<Popis>Servis podľa zmluvy</Popis>
+<Vystaveno>2026-04-01</Vystaveno>
+<PlnenoDPH>2026-03-31</PlnenoDPH>
+<Splatno>2026-04-15</Splatno>
+<VarSymbol>2026003</VarSymbol>
+<Druh>N</Druh>
+<Dobropis>0</Dobropis>
+<SazbaDPH1>19</SazbaDPH1>
+<SazbaDPH2>23</SazbaDPH2>
+<SouhrnDPH><Zaklad0>0</Zaklad0><Zaklad5>10</Zaklad5><Zaklad22>100</Zaklad22><DPH5>1.9</DPH5><DPH22>23</DPH22></SouhrnDPH>
+<Celkem>134.9</Celkem>
+<DodOdb><FaktNazev>Ján Šťastný</FaktNazev>
+<FaktAdresa><Ulice>Lipová 3</Ulice><Misto>Žilina</Misto><PSC>01001</PSC><Stat>Slovensko</Stat></FaktAdresa></DodOdb>
+<SeznamPolozek />
+</FaktVyd>
+<FaktVyd>
+<Doklad>2026004</Doklad>
+<Vystaveno>2026-04-10</Vystaveno>
+<Splatno>2026-04-24</Splatno>
+<Dobropis>0</Dobropis>
+<Druh>N</Druh>
+<Celkem>460</Celkem>
+<Valuty><Mena><Kod>USD</Kod><Mnozstvi>1</Mnozstvi><Kurs>0.92</Kurs></Mena><Celkem>500</Celkem></Valuty>
+<DodOdb><FaktNazev>Acme Inc.</FaktNazev><FaktAdresa><Misto>Boston</Misto><Stat>United States</Stat></FaktAdresa></DodOdb>
+<MojeFirma><MenaKod>EUR</MenaKod></MojeFirma>
+</FaktVyd>
+<FaktVyd>
+<Doklad>2026005</Doklad>
+<Vystaveno>2026-04-12</Vystaveno>
+<Druh>L</Druh>
+<Dobropis>0</Dobropis>
+<Celkem>100</Celkem>
+<DodOdb><FaktNazev>Kováč a syn s.r.o.</FaktNazev><ICO>36123455</ICO></DodOdb>
+</FaktVyd>
+</SeznamFaktVyd>
+<SeznamFaktVyd_DPP />
+<SeznamFaktPrij>
+<FaktPrij>
+<Doklad>PF2026001</Doklad>
+<PrijatDokl>2026001234</PrijatDokl>
+<Popis>Materiál na zákazku</Popis>
+<Vystaveno>2026-03-05</Vystaveno>
+<DatUcPr>2026-03-07</DatUcPr>
+<PlnenoDPH>2026-03-05</PlnenoDPH>
+<Splatno>2026-03-19</Splatno>
+<VarSymbol>2026001234</VarSymbol>
+<Dobropis>0</Dobropis>
+<Druh>N</Druh>
+<SazbaDPH1>19</SazbaDPH1>
+<SazbaDPH2>23</SazbaDPH2>
+<SouhrnDPH><Zaklad0>0</Zaklad0><Zaklad5>10</Zaklad5><Zaklad22>100</Zaklad22><DPH5>1.9</DPH5><DPH22>23</DPH22></SouhrnDPH>
+<Celkem>134.9</Celkem>
+<DodOdb><FaktNazev>Elektro Veľkoobchod a.s.</FaktNazev><ICO>35757442</ICO><DIC>SK2021757441</DIC>
+<FaktAdresa><Ulice>Priemyselná 8</Ulice><Misto>Zvolen</Misto><PSC>96001</PSC><Stat>SK</Stat></FaktAdresa></DodOdb>
+<MojeFirma><MenaKod>EUR</MenaKod></MojeFirma>
+</FaktPrij>
+</SeznamFaktPrij>
+<SeznamObjPrij>
+<ObjPrij><Doklad>OP1</Doklad></ObjPrij>
+</SeznamObjPrij>
+</MoneyData>

@@ -10,7 +10,13 @@ export const sources = [
     accept: '.xml,text/xml,application/xml',
     hint: 'V POHODE: Súbor → Dátová komunikácia → XML export. Vyberte adresár, zásoby, vydané a prijaté faktúry.',
   },
-  { id: 'money', name: 'Money S3', ready: false },
+  {
+    id: 'money',
+    name: 'Money S3',
+    ready: true,
+    accept: '.xml,text/xml,application/xml',
+    hint: 'V Money S3 cez XML prenosy (Money → Import/export) vyexportujte adresár, zásoby a faktúry vydané aj prijaté. Money v exporte neuvádza úhrady — nastavte nižšie, do akého dátumu sú faktúry uhradené.',
+  },
   { id: 'kros', name: 'KROS Alfa / Omega', ready: false },
   { id: 'superfaktura', name: 'SuperFaktúra', ready: false },
   { id: 'idoklad', name: 'iDoklad', ready: false },
@@ -51,6 +57,18 @@ const otherNames = {
   bank: 'bankové doklady',
   voucher: 'pokladničné doklady',
   intDoc: 'interné doklady',
+  // Money S3
+  ObjPrij: 'prijaté objednávky',
+  ObjVyd: 'vydané objednávky',
+  NabVyd: 'ponuky',
+  PoptPrij: 'dopyty',
+  PokDokl: 'pokladničné doklady',
+  BankDokl: 'bankové doklady',
+  IntDokl: 'interné doklady',
+  FaktVyd_DPP: 'daňové doklady k platbám',
+  Prijemka: 'príjemky',
+  Vydejka: 'výdajky',
+  Zakazka: 'zákazky',
 }
 
 /** Agendy v súbore, ktoré sa neprenášajú, ako text „objednávky 2, …“. */
