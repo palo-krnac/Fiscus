@@ -77,6 +77,9 @@ func TestImportMigrateAPI(t *testing.T) {
 	e.do("POST", base+"mrp", string(pohoda), 422, nil)
 	mrpZip, _ := os.ReadFile("../mrp/testdata/export.zip")
 	e.do("POST", base+"mrp", string(mrpZip), 200, nil)
+	e.do("POST", base+"superfaktura", string(pohoda), 200, nil)
+	e.do("POST", base+"fakturoid", string(money), 200, nil)
+	e.do("POST", base+"fakturoid", "Názov;IČO\n", 422, nil)
 }
 
 func TestImportContactsAPI(t *testing.T) {

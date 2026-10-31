@@ -34,10 +34,10 @@ describe('prenos dát', () => {
   ])('hľadanie v upozorneniach „%s“', (q, n) => {
     expect(filterWarnings(report.warnings, q)).toHaveLength(n)
   })
-  it.each(['pohoda', 'money', 'omega', 'idoklad', 'mrp', 'vcard', 'table'])('zdroj %s je hotový', (id) => {
+  it.each(['pohoda', 'money', 'omega', 'idoklad', 'mrp', 'superfaktura', 'fakturoid', 'vcard', 'table'])('zdroj %s je hotový', (id) => {
     const s = sources.find((x) => x.id === id)
     expect(s.ready).toBe(true)
-    expect(s.accept).toMatch({ table: /\.xlsx/, omega: /\.txt/, idoklad: /\.zip/, mrp: /\.zip/, vcard: /\.vcf/ }[id] ?? /\.xml/)
+    expect(s.accept).toMatch({ table: /\.xlsx/, omega: /\.txt/, idoklad: /\.zip/, mrp: /\.zip/, vcard: /\.vcf/, superfaktura: /\.zip/, fakturoid: /\.zip/ }[id] ?? /\.xml/)
   })
   it('agendy Money S3', () => {
     expect(otherText({ ObjPrij: 3, PokDokl: 1 })).toBe('prijaté objednávky 3, pokladničné doklady 1')
@@ -64,4 +64,8 @@ describe('import kontaktov', () => {
     [5, 'Pridať 5 kontaktov'],
     [0, 'Pridať 0 kontaktov'],
   ])('%i → %s', (n, text) => expect(contactsLabel(n)).toBe(text))
+})
+
+it('všetky zdroje sú hotové', () => {
+  expect(sources.filter((s) => !s.ready)).toEqual([])
 })

@@ -96,6 +96,12 @@ func (s *Server) importMigrate(w http.ResponseWriter, r *http.Request) {
 		"idoklad": report(s.App.ImportIDoklad),
 		"mrp":     report(s.App.ImportMRP),
 		"vcard":   report(s.App.ImportVCard),
+		"superfaktura": func(ctx context.Context, cid int64, data []byte, opt app.MigrateOptions, apply bool) (any, error) {
+			return s.App.ImportExport(ctx, cid, "SuperFaktúra", data, opt, apply)
+		},
+		"fakturoid": func(ctx context.Context, cid int64, data []byte, opt app.MigrateOptions, apply bool) (any, error) {
+			return s.App.ImportExport(ctx, cid, "Fakturoid", data, opt, apply)
+		},
 		"table": func(ctx context.Context, cid int64, data []byte, opt app.MigrateOptions, apply bool) (any, error) {
 			return s.App.ImportTable(ctx, cid, data, opt, apply)
 		},
