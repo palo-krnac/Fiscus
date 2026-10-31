@@ -17,7 +17,10 @@ import (
 // integrácie (Authorization: Bearer). Dátumy objednávok sú v UTC.
 // https://developer.adobe.com/commerce/webapi/rest/
 
-type magento struct{ c Conn }
+type magento struct {
+	c   Conn
+	tax *mgTax
+}
 
 func (m *magento) auth(r *http.Request) { r.Header.Set("Authorization", "Bearer "+m.c.Secret) }
 

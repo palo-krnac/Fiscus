@@ -137,7 +137,8 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] PrestaShop, Magento / Adobe Commerce, Drupal Commerce (neoverené); automatické načítanie objednávok každú hodinu s chybou pri obchode
 - [x] Shoptet (súkromné API): objednávky → koncepty faktúr, zásoby (realStock) — neoverené
 - [x] Riadenie obchodu z Fiškusu (WooCommerce): prevzatie produktov a zákazníkov, odoslanie cenníka (názov, cena, trieda DPH, vyradenie) iba zmien, nové skladové položky ako koncept; každú hodinu aj so zásobami
-- [ ] Riadenie obchodu pre Shoptet (čaká na schému produktov a zákazníkov), Shopify, PrestaShop, Magento
+- [x] Riadenie obchodu pre Shopify (zdaniteľný = 23 %, nezdaniteľný = 0 %) a Magento (triedy dane z daňových pravidiel, ceny bez DPH)
+- [ ] Riadenie obchodu pre Shoptet (čaká na schému produktov a zákazníkov) a PrestaShop
 - [ ] Upgates (čaká na oficiálnu dokumentáciu)
 
 ## Etapa 4 — mzdy (samostatný návrh)
