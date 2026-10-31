@@ -62,8 +62,8 @@ var Platforms = []Info{
 		Help: "Shoptet admin → Prepojenia → Súkromné API (balík Premium): vytvorte token s právami na objednávky (čítanie), e-shop, kategórie a zákazníkov (čítanie), produkty, cenníky a sklady (zápis).",
 		Docs: "https://api.docs.shoptet.com/shoptet-api/openapi", Stock: true, Catalog: true},
 	{Platform: PrestaShop, Name: "PrestaShop", URLHint: "https://mojobchod.sk", SecretLbl: "Kľúč webservice",
-		Help: "PrestaShop → Rozšírené parametre → Webservice: zapnite webservice a pridajte kľúč s právami GET na orders, order_details, order_states, addresses, customers, countries, currencies, products a GET+PUT na stock_availables.",
-		Docs: "https://devdocs.prestashop-project.org/8/webservice/", Stock: true},
+		Help: "PrestaShop → Rozšírené parametre → Webservice: zapnite webservice a pridajte kľúč s právami GET na orders, order_details, order_states, addresses, customers, countries, currencies, products GET na taxes, tax_rules, tax_rule_groups, languages, combinations, configurations a GET+PUT+POST na products, combinations a stock_availables.",
+		Docs: "https://devdocs.prestashop-project.org/8/webservice/", Stock: true, Catalog: true},
 	{Platform: Magento, Name: "Magento / Adobe Commerce", URLHint: "https://mojobchod.sk", SecretLbl: "Access token integrácie",
 		Help: "Magento admin → System → Integrations → Add New Integration s prístupom k Sales (Orders) a Catalog (Inventory) → Activate; skopírujte Access Token. V nastaveniach musí byť povolené použitie tokenu integrácie ako bearer tokenu. Ceny katalógu musia byť bez DPH (predvolené).",
 		Docs: "https://developer.adobe.com/commerce/webapi/rest/", Stock: true, Catalog: true},
@@ -320,6 +320,10 @@ func send(ctx context.Context, hc *http.Client, method, u, contentType string, b
 		return nil, &notFound{req.URL.Path}
 	case res.StatusCode >= 300:
 		return nil, fmt.Errorf("obchod vrátil chybu %d: %s", res.StatusCode, snippet(data))
+	}
+	if raw, ok := out.(*[]byte); ok {
+		*raw = data // surové telo (napr. XML)
+		return res.Header, nil
 	}
 	if out != nil {
 		if err := json.Unmarshal(data, out); err != nil {

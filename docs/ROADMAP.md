@@ -139,7 +139,7 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] Riadenie obchodu z Fiškusu (WooCommerce): prevzatie produktov a zákazníkov, odoslanie cenníka (názov, cena, trieda DPH, vyradenie) iba zmien, nové skladové položky ako koncept; každú hodinu aj so zásobami
 - [x] Riadenie obchodu pre Shopify (zdaniteľný = 23 %, nezdaniteľný = 0 %) a Magento (triedy dane z daňových pravidiel, ceny bez DPH)
 - [x] Riadenie obchodu pre Shoptet podľa oficiálnej schémy openapi.yaml: produkty a varianty, zákazníci, cena v predvolenom cenníku (sadzba + cena bez DPH), názov a skrytie, nový produkt skrytý v prvej kategórii
-- [ ] Riadenie obchodu pre PrestaShop
+- [x] Riadenie obchodu pre PrestaShop: skupiny daňových pravidiel (SK), produkty aj kombinácie, zákazníci; úprava celého produktu v XML (iba cena, DPH, aktívnosť, jednojazyčný názov), nový produkt neaktívny v domovskej kategórii
 - [ ] Upgates (čaká na oficiálnu dokumentáciu)
 
 ## Etapa 4 — mzdy (samostatný návrh)
