@@ -664,15 +664,39 @@ async function markPaid() {
 }
 
 function cancelInvoice() {
+  const credit = isCredit.value
   confirm.require({
-    header: 'Stornovať faktúru',
-    message: `Faktúra ${inv.value.number} sa označí ako stornovaná a nebude sa započítavať do súčtov.`,
+    header: credit ? 'Stornovať dobropis' : 'Stornovať faktúru',
+    message: credit
+      ? `Dobropis ${inv.value.number} sa označí ako stornovaný. Ak bol započítaný s faktúrou, faktúre sa vráti zostatok.`
+      : `Faktúra ${inv.value.number} sa označí ako stornovaná a nebude sa započítavať do súčtov.`,
     acceptProps: { label: 'Stornovať', severity: 'danger' },
     rejectProps: { label: 'Ponechať', severity: 'secondary', outlined: true },
     accept: async () => {
       try {
         inv.value = await api.cancel(session.companyId, inv.value.id)
-        toast.add({ severity: 'info', summary: 'Faktúra stornovaná', life: 2500 })
+        toast.add({ severity: 'info', summary: credit ? 'Dobropis stornovaný' : 'Faktúra stornovaná', life: 2500 })
+      } catch (e) {
+        applyError(e)
+      }
+    },
+  })
+}
+
+// koncept sa dá zmazať (vystavený doklad iba stornovať)
+function deleteDraft() {
+  const what = isCredit.value ? 'koncept dobropisu' : 'koncept'
+  confirm.require({
+    header: 'Zmazať koncept',
+    message: `Naozaj zmazať ${what}? Nedá sa to vrátiť.`,
+    acceptProps: { label: 'Zmazať', severity: 'danger' },
+    rejectProps: { label: 'Ponechať', severity: 'secondary', outlined: true },
+    accept: async () => {
+      try {
+        await api.deleteInvoice(session.companyId, inv.value.id)
+        dirty.value = false
+        toast.add({ severity: 'info', summary: 'Koncept zmazaný', life: 2500 })
+        router.push(base.value)
       } catch (e) {
         applyError(e)
       }
@@ -958,6 +982,7 @@ const customerFields = reactive([
       <Button v-if="amending && canWrite" label="Uložiť zmeny" icon="pi pi-check" :severity="dirty ? undefined : 'secondary'" :outlined="!dirty" size="small" :loading="busy"
         :disabled="!dirty" v-tooltip.bottom="'Vystavená faktúra sa dá upravovať, kým nie je uhradená (Ctrl+S)'" @click="save()" />
       <template v-if="editable && isDraftDoc && !isRecurring">
+        <Button v-if="inv.id && !isQuote" label="Zmazať" severity="danger" text size="small" :disabled="busy" @click="deleteDraft" />
         <Button label="Uložiť koncept" severity="secondary" outlined size="small" :loading="busy" @click="save()" v-tooltip.bottom="'Ctrl+S'" />
         <Button label="Vystaviť" icon="pi pi-check" size="small" :disabled="busy" @click="issue" />
       </template>
@@ -982,6 +1007,8 @@ const customerFields = reactive([
           v-tooltip.bottom="'Opraviť alebo zrušiť faktúru dobropisom'"
           @click="createCreditNote"
         />
+        <Button v-if="isCredit && inv.status === 'paid'" label="Stornovať" severity="secondary" text size="small"
+          v-tooltip.bottom="'Zruší dobropis aj jeho zápočet s faktúrou'" @click="cancelInvoice" />
         <template v-if="inv.status === 'issued'">
           <Button label="Stornovať" severity="secondary" text size="small" @click="cancelInvoice" />
           <Button :label="isCredit ? 'Označiť ako vrátené' : 'Označiť ako uhradenú'" icon="pi pi-wallet" size="small" :loading="busy" @click="openPay" />

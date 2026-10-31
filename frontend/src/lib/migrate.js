@@ -39,7 +39,7 @@ export const sources = [
     ready: true,
     accept: '.zip,.xml,application/zip,text/xml',
     pick: 'Vybrať súbor ZIP',
-    hint: 'Z MRP-K/S exportujte vydané faktúry do XML — súbory FAKVY.XML (faktúry), FAKVYPOL.XML (položky) a FV_ADRES.XML (adresy) — a nahrajte ich spolu zabalené v ZIP. Odberateľ sa doplní z adresára podľa IČO.',
+    hint: 'Z MRP-K/S exportujte faktúry do XML: vydané FAKVY.XML, FAKVYPOL.XML, FAKVYUHR.XML a adresy FV_ADRES.XML, prijaté FAKPR.XML, FAKPRPOL.XML, FAKPRUHR.XML a FP_ADRES.XML — a nahrajte ich spolu zabalené v ZIP. Partner sa doplní z adresára podľa IČO, úhrady označia faktúry ako uhradené.',
   },
   {
     id: 'superfaktura',
