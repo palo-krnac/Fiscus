@@ -2,12 +2,12 @@
 
 /** Nové napojenie (Since prázdne = server dá posledných 30 dní). */
 export function blankConn(platform = 'woocommerce') {
-  return { id: '', platform, name: '', url: '', key: '', secret: '', hasKey: false, hasSecret: false, onlyPaid: true, auto: false, since: '' }
+  return { id: '', platform, name: '', url: '', key: '', secret: '', hasKey: false, hasSecret: false, onlyPaid: true, auto: false, manage: false, since: '' }
 }
 
 /** Údaje na uloženie: bez stavových polí; prázdny kľúč a tajomstvo server ponechá. */
 export function toSave(conns) {
-  return conns.map(({ id, platform, name, url, key, secret, onlyPaid, auto, since }) => ({
+  return conns.map(({ id, platform, name, url, key, secret, onlyPaid, auto, manage, since }) => ({
     id,
     platform,
     name,
@@ -16,6 +16,7 @@ export function toSave(conns) {
     secret: secret ?? '',
     onlyPaid: !!onlyPaid,
     auto: !!auto,
+    manage: !!manage,
     since: since || '',
   }))
 }
@@ -63,4 +64,20 @@ export function splitError(s) {
   const i = s.indexOf(' ')
   const when = formatWhen(s.slice(0, i))
   return when ? { when, text: s.slice(i + 1) } : { when: '', text: s }
+}
+
+/** Zhrnutie odoslania cenníka. */
+export function catalogSummary(r) {
+  const parts = [`Upravené: ${r.updated}`, `nové (koncept): ${r.created}`, `bez zmeny: ${r.unchanged}`]
+  if (r.notInShop) parts.push(`nie sú v obchode: ${r.notInShop}`)
+  if (r.errors?.length) parts.push(`chyby: ${r.errors.length} (${r.errors[0]})`)
+  return parts.join(' · ')
+}
+
+/** Zhrnutie náhľadu alebo prenosu z obchodu. */
+export function importSummary(r) {
+  const p = [`Produkty: ${r.items.new} nových`, `zákazníci: ${r.contacts.new} nových`]
+  if (r.items.existing || r.contacts.existing) p.push(`už vo Fiškuse: ${r.items.existing + r.contacts.existing}`)
+  if (r.items.skipped) p.push(`preskočené: ${r.items.skipped}`)
+  return p.join(', ')
 }

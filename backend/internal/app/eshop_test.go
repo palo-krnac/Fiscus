@@ -217,6 +217,8 @@ func TestShopRate(t *testing.T) {
 		{"10.00", "0", vat.Rate0, true},
 		{"10.00", "1.00", vat.Rate0, false},
 		{"0", "1.00", vat.Rate0, false},
+		{"-10.00", "-2.30", vat.Rate23, true}, // zľava
+		{"-10.00", "2.30", vat.Rate0, false},
 	}
 	for _, tt := range tests {
 		r, ok := shopRate(m.MustParse(tt.net), m.MustParse(tt.tax), d)

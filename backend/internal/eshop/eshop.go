@@ -32,6 +32,7 @@ const (
 	PrestaShop  Platform = "prestashop"
 	Magento     Platform = "magento"
 	Drupal      Platform = "drupal"
+	Shoptet     Platform = "shoptet"
 )
 
 // Info opisuje platformu pre rozhranie: čo treba zadať a kde to v obchode nájsť.
@@ -44,6 +45,7 @@ type Info struct {
 	Help      string   `json:"help"`        // kde údaje v obchode vytvoriť
 	Docs      string   `json:"docs"`        // odkaz na dokumentáciu API
 	Stock     bool     `json:"stock"`       // vie prijať stav zásob
+	Catalog   bool     `json:"catalog"`     // vie riadiť cenník a zákazníkov z Fiškusu
 	Verified  bool     `json:"verified"`    // overené na živom obchode
 	Note      string   `json:"note,omitempty"`
 }
@@ -52,10 +54,13 @@ type Info struct {
 var Platforms = []Info{
 	{Platform: WooCommerce, Name: "WooCommerce", URLHint: "https://mojobchod.sk", KeyLabel: "Consumer key", SecretLbl: "Consumer secret",
 		Help: "WooCommerce → Nastavenia → Pokročilé → REST API → Pridať kľúč s oprávnením Čítanie/Zápis.",
-		Docs: "https://woocommerce.github.io/woocommerce-rest-api-docs/", Stock: true},
+		Docs: "https://woocommerce.github.io/woocommerce-rest-api-docs/", Stock: true, Catalog: true},
 	{Platform: Shopify, Name: "Shopify", URLHint: "mojobchod.myshopify.com", SecretLbl: "Admin API access token",
 		Help: "Shopify admin → Settings → Apps → Develop apps → vlastná aplikácia s právami read_orders, read_products, write_inventory, read_locations.",
 		Docs: "https://shopify.dev/docs/api/admin-graphql", Stock: true},
+	{Platform: Shoptet, Name: "Shoptet", URLHint: "https://mojobchod.sk", SecretLbl: "Súkromný API token",
+		Help: "Shoptet admin → Prepojenia → Súkromné API (balík Premium): vytvorte token s právami na objednávky (čítanie), e-shop a sklady (zápis).",
+		Docs: "https://api.docs.shoptet.com/shoptet-api/openapi", Stock: true},
 	{Platform: PrestaShop, Name: "PrestaShop", URLHint: "https://mojobchod.sk", SecretLbl: "Kľúč webservice",
 		Help: "PrestaShop → Rozšírené parametre → Webservice: zapnite webservice a pridajte kľúč s právami GET na orders, order_details, order_states, addresses, customers, countries, currencies, products a GET+PUT na stock_availables.",
 		Docs: "https://devdocs.prestashop-project.org/8/webservice/", Stock: true},
@@ -185,7 +190,7 @@ func New(c Conn) (Connector, error) {
 	}
 	switch c.Platform {
 	case WooCommerce:
-		return &woo{c}, nil
+		return &woo{c: c}, nil
 	case Shopify:
 		return &shopify{c}, nil
 	case PrestaShop:
@@ -194,6 +199,8 @@ func New(c Conn) (Connector, error) {
 		return &magento{c}, nil
 	case Drupal:
 		return &drupal{c}, nil
+	case Shoptet:
+		return &shoptet{c}, nil
 	}
 	return nil, ErrPlatform
 }

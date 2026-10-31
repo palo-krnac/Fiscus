@@ -16,7 +16,10 @@ import (
 // consumer key/secret cez HTTP Basic (iba cez https).
 // https://woocommerce.github.io/woocommerce-rest-api-docs/
 
-type woo struct{ c Conn }
+type woo struct {
+	c   Conn
+	tax *wooTax
+}
 
 func (w *woo) auth(r *http.Request) { r.SetBasicAuth(w.c.Key, w.c.Secret) }
 

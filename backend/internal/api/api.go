@@ -294,6 +294,8 @@ func (s *Server) Handler() http.Handler {
 	need("POST /api/companies/{cid}/eshops/{id}/test", auth.PermSettingsWrite, s.testEshop)
 	need("POST /api/companies/{cid}/eshops/{id}/orders", auth.PermInvoicesWrite, s.syncEshopOrders)
 	need("POST /api/companies/{cid}/eshops/{id}/stock", auth.PermPurchasesWrite, s.pushEshopStock)
+	need("POST /api/companies/{cid}/eshops/{id}/catalog/import", auth.PermInvoicesWrite, s.importEshopCatalog)
+	need("POST /api/companies/{cid}/eshops/{id}/catalog/push", auth.PermInvoicesWrite, s.pushEshopCatalog)
 	public("POST /api/public/stock/{cid}/{token}/objednavky", s.publicShopOrder)
 	need("GET /api/companies/{cid}/ledger", auth.PermLedgerRead, s.getLedger)
 	need("PUT /api/companies/{cid}/chart/money", auth.PermLedgerWrite, s.setMoneyAccounts)
