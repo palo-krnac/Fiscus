@@ -67,6 +67,7 @@ export function currentSetting(path) {
 /** Sekcia formulára firmy, v ktorej je pole (pre chyby z uloženia). */
 export function sectionOfField(key) {
   if (/^(vat|icdph|taxOffice)/.test(key)) return 'dph'
+  if (key === 'bookkeeping') return 'firma'
   if (/^(numberFormats|units|iban|defaultDueDays)/.test(key)) return 'doklady'
   return 'firma'
 }

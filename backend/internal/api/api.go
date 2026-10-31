@@ -129,6 +129,7 @@ func (s *Server) Handler() http.Handler {
 	open("GET /api/companies", s.listCompanies)
 	open("POST /api/companies", s.createCompany)
 	need("PUT /api/companies/{cid}", auth.PermSettingsWrite, s.updateCompany)
+	open("DELETE /api/companies/{cid}", s.deleteCompany)
 	open("GET /api/companies/{cid}/logo", s.getLogo)
 	open("PUT /api/companies/{cid}/logo", s.putLogo)
 	open("DELETE /api/companies/{cid}/logo", s.deleteLogo)

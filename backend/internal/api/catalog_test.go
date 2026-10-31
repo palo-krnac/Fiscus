@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/palo-krnac/fiscus/backend/internal/edition"
@@ -63,10 +64,6 @@ func TestImportMigrateAPI(t *testing.T) {
 			e.do("POST", base+tc.url, tc.body, tc.status, nil)
 		})
 	}
-	e.do("POST", base+"money?apply=1", string(money), 200, &rep)
-	if rep.Source != "Money S3" || rep.Invoices.New != 3 || !rep.Done {
-		t.Fatalf("prenos: %+v", rep)
-	}
 	e.do("POST", base+"pohoda", string(money), 422, nil) // súbor Money nie je POHODA
 	e.do("POST", base+"omega", string(money), 422, nil)
 	omega, _ := os.ReadFile("../omega/testdata/export.txt")
@@ -80,6 +77,19 @@ func TestImportMigrateAPI(t *testing.T) {
 	e.do("POST", base+"superfaktura", string(pohoda), 200, nil)
 	e.do("POST", base+"fakturoid", string(money), 200, nil)
 	e.do("POST", base+"fakturoid", "Názov;IČO\n", 422, nil)
+
+	// zápis — potom sa doklady z iného programu už neprenesú (ani náhľad)
+	e.do("POST", base+"money?apply=1", string(money), 200, &rep)
+	if rep.Source != "Money S3" || rep.Invoices.New != 3 || !rep.Done {
+		t.Fatalf("prenos: %+v", rep)
+	}
+	var errRep struct {
+		Fields []struct{ Message string }
+	}
+	e.do("POST", base+"omega", string(omega), 422, &errRep)
+	if len(errRep.Fields) == 0 || !strings.Contains(errRep.Fields[0].Message, "iba raz") {
+		t.Errorf("druhý prenos: %+v", errRep)
+	}
 }
 
 func TestImportContactsAPI(t *testing.T) {

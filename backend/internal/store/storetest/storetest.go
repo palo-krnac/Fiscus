@@ -6,6 +6,7 @@ package storetest
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/palo-krnac/fiscus/backend/internal/catalog"
 	"github.com/palo-krnac/fiscus/backend/internal/journal"
 	"reflect"
@@ -230,6 +231,56 @@ func Run(t *testing.T, newStore Factory) {
 			t.Fatalf("iný rad: %d", v)
 		}
 	})
+	t.Run("zmazanie firmy", func(t *testing.T) {
+		s := newStore(t)
+		a, _ := s.CreateCompany(ctx, store.Company{Name: "Alfa"})
+		b, _ := s.CreateCompany(ctx, store.Company{Name: "Beta"})
+		for _, c := range []store.Company{a, b} {
+			inv := draft("Odberateľ", "2026-10-01")
+			if err := s.SaveInvoice(ctx, c.ID, inv); err != nil {
+				t.Fatal(err)
+			}
+			if err := s.SaveContact(ctx, c.ID, &store.Contact{Name: "Kontakt " + c.Name}); err != nil {
+				t.Fatal(err)
+			}
+			if err := s.SetSetting(ctx, fmt.Sprintf("stock.%d", c.ID), "{}"); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := s.SetSetting(ctx, "legal.vat", "x"); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.DeleteCompany(ctx, a.ID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.GetCompany(ctx, a.ID); !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("firma ostala: %v", err)
+		}
+		if l, _ := s.ListContacts(ctx, a.ID, ""); len(l) != 0 {
+			t.Errorf("adresár ostal: %+v", l)
+		}
+		if l, _ := s.ListInvoices(ctx, a.ID, store.InvoiceFilter{}); len(l) != 0 {
+			t.Errorf("faktúry ostali: %d", len(l))
+		}
+		if _, err := s.GetSetting(ctx, fmt.Sprintf("stock.%d", a.ID)); !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("nastavenie ostalo: %v", err)
+		}
+		// druhá firma a spoločné nastavenia ostanú
+		if l, _ := s.ListContacts(ctx, b.ID, ""); len(l) != 1 {
+			t.Errorf("adresár inej firmy: %+v", l)
+		}
+		if l, _ := s.ListInvoices(ctx, b.ID, store.InvoiceFilter{}); len(l) != 1 {
+			t.Errorf("faktúry inej firmy: %d", len(l))
+		}
+		for _, k := range []string{fmt.Sprintf("stock.%d", b.ID), "legal.vat"} {
+			if _, err := s.GetSetting(ctx, k); err != nil {
+				t.Errorf("%s: %v", k, err)
+			}
+		}
+		if err := s.DeleteCompany(ctx, a.ID); !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("druhé zmazanie: %v", err)
+		}
+	})
 	t.Run("úprava firmy", func(t *testing.T) {
 		s := newStore(t)
 		c, _ := s.CreateCompany(ctx, store.Company{Name: "Alfa", DefaultDueDays: 14})
@@ -237,6 +288,7 @@ func Run(t *testing.T, newStore Factory) {
 		c.Units = []string{"ks", "hod", "m²"}
 		c.NumberFormats = map[string]string{"invoice": "{RRRR}/{NNN}", "credit_note": "DB{RRRR}{NNNN}"}
 		c.TaxOffice, c.VATPeriod = "Daňový úrad Banská Bystrica", store.VATPeriodQuarter
+		c.Bookkeeping, c.SetupDone, c.MigratedFrom, c.MigratedAt = store.BookkeepingDouble, true, "POHODA", "2026-10-31T12:00:00Z"
 		if err := s.UpdateCompany(ctx, c); err != nil {
 			t.Fatal(err)
 		}

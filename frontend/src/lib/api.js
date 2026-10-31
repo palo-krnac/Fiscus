@@ -248,6 +248,7 @@ export const api = {
   companies: () => request('GET', '/api/companies'),
   createCompany: (c) => request('POST', '/api/companies', c),
   updateCompany: (c) => request('PUT', `/api/companies/${c.id}`, c),
+  deleteCompany: (id, name) => request('DELETE', `/api/companies/${id}`, { name }),
   registry: (ico) => request('GET', `/api/registry/${encodeURIComponent(ico)}`),
   vies: (vatId) => request('GET', `/api/vies/${encodeURIComponent(vatId.replace(/\s/g, ''))}`),
 

@@ -9,9 +9,10 @@ import DatePicker from 'primevue/datepicker'
 import Select from 'primevue/select'
 import ImportWarnings from '../components/ImportWarnings.vue'
 import { api, ApiError } from '../lib/api.js'
-import { session, can } from '../lib/session.js'
+import { session, can, replaceCompany } from '../lib/session.js'
 import { toISODate } from '../lib/format.js'
 import { downloadCSV } from '../lib/export.js'
+import { migrationNote } from '../lib/setup.js'
 import { kindLabel, maxImportBytes, newTotal, otherText, sources, summaryRows, tableKinds, templateExport } from '../lib/migrate.js'
 
 const toast = useToast()
@@ -93,6 +94,9 @@ async function run() {
   try {
     report.value = await api.importMigrate(session.companyId, selected.value.id, file.value, { apply: true, paidUntil: paidISO.value, kind: kindParam.value })
     toast.add({ severity: 'success', summary: 'Dáta prenesené', detail: `${newTotal(report.value)} nových záznamov`, life: 5000 })
+    // prenos dokladov je iba raz — firma si to pamätá (poznámka hore)
+    const fresh = (await api.companies().catch(() => [])).find((c) => c.id === session.companyId)
+    if (fresh) replaceCompany(fresh)
   } catch (err) {
     toast.add({ severity: 'error', summary: 'Prenos zlyhal', detail: err.message, life: 8000 })
   } finally {
@@ -106,6 +110,7 @@ async function run() {
     <header class="head">
       <h1>Prenos dát</h1>
       <p class="lead">Prechádzate z iného programu? Načítajte jeho export – najprv uvidíte, čo pribudne, a až potom sa niečo zapíše.</p>
+      <p v-if="migrationNote(session.company)" class="migrated"><i class="pi pi-lock" aria-hidden="true" /> {{ migrationNote(session.company) }}</p>
     </header>
 
     <div class="layout">
@@ -211,6 +216,17 @@ async function run() {
   font-weight: 600;
   color: var(--blue-deep);
   margin: 0;
+}
+.migrated {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  max-width: 70ch;
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: var(--tone-draft-bg);
+  color: var(--tone-draft);
+  font-size: var(--fs-sm);
 }
 .lead {
   margin: 4px 0 16px;

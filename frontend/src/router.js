@@ -79,11 +79,11 @@ export const modules = [
   {
     group: 'Účtovníctvo',
     items: [
-      { path: '/dennik', label: 'Peňažný denník', icon: 'pi-book', ready: true, perm: 'ledger.read' },
+      { path: '/dennik', label: 'Peňažný denník', icon: 'pi-book', ready: true, perm: 'ledger.read', book: 'simple' },
       { path: '/pohladavky-zavazky', label: 'Pohľadávky a záväzky', icon: 'pi-list', ready: true, perm: 'ledger.read' },
-      { path: '/vykazy-ju', label: 'Výkazy (závierka)', icon: 'pi-file', ready: true, perm: 'ledger.read' },
-      { path: '/uctovy-rozvrh', label: 'Účtový rozvrh', icon: 'pi-sitemap', ready: true, perm: 'ledger.read' },
-      { path: '/hlavna-kniha', label: 'Denník a hlavná kniha', icon: 'pi-table', ready: true, perm: 'ledger.read' },
+      { path: '/vykazy-ju', label: 'Výkazy (závierka)', icon: 'pi-file', ready: true, perm: 'ledger.read', book: 'simple' },
+      { path: '/uctovy-rozvrh', label: 'Účtový rozvrh', icon: 'pi-sitemap', ready: true, perm: 'ledger.read', book: 'double' },
+      { path: '/hlavna-kniha', label: 'Denník a hlavná kniha', icon: 'pi-table', ready: true, perm: 'ledger.read', book: 'double' },
       { path: '/majetok', label: 'Majetok', icon: 'pi-briefcase', ready: true, perm: 'ledger.read' },
       { path: '/kniha-jazd', label: 'Kniha jázd', icon: 'pi-car', ready: true, perm: 'ledger.read' },
       { path: '/sklad', label: 'Sklad', icon: 'pi-box', ready: true, perm: 'purchases.read' },

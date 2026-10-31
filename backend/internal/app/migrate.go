@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/palo-krnac/fiscus/backend/internal/audit"
 	"github.com/palo-krnac/fiscus/backend/internal/auth"
@@ -147,6 +148,18 @@ func (a *App) migrate(ctx context.Context, companyID int64, m migration, opt Mig
 	rep := ImportReport{Source: m.Source, Warnings: []string{}, Other: m.Other, Done: apply}
 	if rep.Other == nil {
 		rep.Other = map[string]int{}
+	}
+	// prenos dokladov z iného programu je iba raz (doplniť ďalší súbor z toho
+	// istého programu sa dá ešte v ten istý deň); adresár a cenník kedykoľvek
+	docs := len(m.Invoices)+len(m.Purchases) > 0
+	if docs {
+		co, err := a.Store.GetCompany(ctx, companyID)
+		if err != nil {
+			return rep, err
+		}
+		if err := a.migrationAllowed(co, m.Source); err != nil {
+			return rep, err
+		}
 	}
 	for _, w := range m.Warnings {
 		rep.warn("%s", w)
@@ -349,6 +362,11 @@ func (a *App) migrate(ctx context.Context, companyID int64, m migration, opt Mig
 		}
 		rep.warn("%s", s.Text)
 	}
+	if apply && docs && rep.Invoices.New+rep.Purchases.New > 0 {
+		if err := a.markMigrated(ctx, companyID, m.Source); err != nil {
+			return rep, err
+		}
+	}
 	if apply {
 		a.record(ctx, companyID, audit.CatSettings, "import", "migrate", 0, fmt.Sprintf(
 			"Prenos z %s: adresár %d, cenník %d, vydané faktúry %d, prijaté faktúry %d",
@@ -548,4 +566,35 @@ func contactNote(name, person, note string) string {
 		return strings.TrimSpace("Kontaktná osoba: " + person + "\n" + note)
 	}
 	return note
+}
+
+// migrationAllowed: doklady z iného programu sa prenášajú iba raz. Ďalší
+// súbor z toho istého programu sa dá doplniť do 24 hodín od prvého prenosu
+// (exporty bývajú rozdelené na vydané a prijaté faktúry).
+func (a *App) migrationAllowed(co store.Company, source string) error {
+	if co.MigratedAt == "" {
+		return nil
+	}
+	at, err := time.Parse(time.RFC3339, co.MigratedAt)
+	if err == nil && co.MigratedFrom == source && a.now().Sub(at) < 24*time.Hour {
+		return nil
+	}
+	when := co.MigratedAt
+	if err == nil {
+		when = at.In(bratislava()).Format("2. 1. 2006 15:04")
+	}
+	return mfaFieldErr("file", fmt.Sprintf("Doklady sa už preniesli z programu %s (%s). Prenos dokladov z iného programu je možný iba raz — "+
+		"ďalšie doklady zadajte vo Fiškuse. Adresár a cenník sa dajú preniesť kedykoľvek.", co.MigratedFrom, when))
+}
+
+func (a *App) markMigrated(ctx context.Context, companyID int64, source string) error {
+	co, err := a.Store.GetCompany(ctx, companyID)
+	if err != nil {
+		return err
+	}
+	if co.MigratedAt != "" {
+		return nil // doplnenie z toho istého programu: platí prvý prenos
+	}
+	co.MigratedFrom, co.MigratedAt = source, a.now().UTC().Format(time.RFC3339)
+	return a.Store.UpdateCompany(ctx, co)
 }
