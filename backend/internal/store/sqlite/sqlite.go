@@ -122,6 +122,9 @@ var schemaV34 string
 //go:embed schema_v35.sql
 var schemaV35 string
 
+//go:embed schema_v36.sql
+var schemaV36 string
+
 //go:embed schema_v26.sql
 var schemaV26 string
 
@@ -130,7 +133,7 @@ var schemaV25 string
 
 // migrations[i] prevedie schému z verzie i na i+1. Existujúce migrácie sa
 // nikdy nemenia — zmena schémy je vždy nová migrácia na konci.
-var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4, schemaV5, schemaV6, schemaV7, schemaV8, schemaV9, schemaV10, schemaV11, schemaV12, schemaV13, schemaV14, schemaV15, schemaV16, schemaV17, schemaV18, schemaV19, schemaV20, schemaV21, schemaV22, schemaV23, schemaV24, schemaV25, schemaV26, schemaV27, schemaV28, schemaV29, schemaV30, schemaV31, schemaV32, schemaV33, schemaV34, schemaV35}
+var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4, schemaV5, schemaV6, schemaV7, schemaV8, schemaV9, schemaV10, schemaV11, schemaV12, schemaV13, schemaV14, schemaV15, schemaV16, schemaV17, schemaV18, schemaV19, schemaV20, schemaV21, schemaV22, schemaV23, schemaV24, schemaV25, schemaV26, schemaV27, schemaV28, schemaV29, schemaV30, schemaV31, schemaV32, schemaV33, schemaV34, schemaV35, schemaV36}
 
 // Store je SQLite úložisko.
 type Store struct{ db *sql.DB }
@@ -184,13 +187,14 @@ func (s *Store) Close() error { return s.db.Close() }
 
 // ---- firmy ----
 
-const companyCols = "id, name, street, city, zip, ico, dic, icdph, iban, email, phone, vat_payer, default_due_days, units_json, number_formats_json, tax_office, vat_period"
+const companyCols = "id, name, street, city, zip, ico, dic, icdph, iban, email, phone, vat_payer, default_due_days, units_json, number_formats_json, tax_office, vat_period, bookkeeping, setup_done, migrated_from, migrated_at"
 
 func scanCompany(r interface{ Scan(...any) error }) (store.Company, error) {
 	var c store.Company
 	var units, formats string
 	err := r.Scan(&c.ID, &c.Name, &c.Street, &c.City, &c.Zip, &c.ICO, &c.DIC, &c.ICDPH, &c.IBAN,
-		&c.Email, &c.Phone, &c.VATPayer, &c.DefaultDueDays, &units, &formats, &c.TaxOffice, &c.VATPeriod)
+		&c.Email, &c.Phone, &c.VATPayer, &c.DefaultDueDays, &units, &formats, &c.TaxOffice, &c.VATPeriod,
+		&c.Bookkeeping, &c.SetupDone, &c.MigratedFrom, &c.MigratedAt)
 	if err != nil {
 		return c, err
 	}
@@ -257,10 +261,10 @@ func (s *Store) CreateCompany(ctx context.Context, c store.Company) (store.Compa
 	}
 	res, err := s.db.ExecContext(ctx,
 		`INSERT INTO companies (name, street, city, zip, ico, dic, icdph, iban, email, phone, vat_payer, default_due_days,
-		 units_json, number_formats_json, tax_office, vat_period)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 units_json, number_formats_json, tax_office, vat_period, bookkeeping, setup_done, migrated_from, migrated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		c.Name, c.Street, c.City, c.Zip, c.ICO, c.DIC, c.ICDPH, c.IBAN, c.Email, c.Phone, c.VATPayer, c.DefaultDueDays,
-		units, formats, c.TaxOffice, c.VATPeriod)
+		units, formats, c.TaxOffice, c.VATPeriod, c.Bookkeeping, c.SetupDone, c.MigratedFrom, c.MigratedAt)
 	if err != nil {
 		return c, err
 	}
@@ -283,10 +287,11 @@ func (s *Store) UpdateCompany(ctx context.Context, c store.Company) error {
 	}
 	res, err := s.db.ExecContext(ctx, `UPDATE companies SET name = ?, street = ?, city = ?, zip = ?,
 		ico = ?, dic = ?, icdph = ?, iban = ?, email = ?, phone = ?, vat_payer = ?, default_due_days = ?,
-		units_json = ?, number_formats_json = ?, tax_office = ?, vat_period = ?
+		units_json = ?, number_formats_json = ?, tax_office = ?, vat_period = ?,
+		bookkeeping = ?, setup_done = ?, migrated_from = ?, migrated_at = ?
 		WHERE id = ?`,
 		c.Name, c.Street, c.City, c.Zip, c.ICO, c.DIC, c.ICDPH, c.IBAN, c.Email, c.Phone, c.VATPayer, c.DefaultDueDays,
-		units, formats, c.TaxOffice, c.VATPeriod, c.ID)
+		units, formats, c.TaxOffice, c.VATPeriod, c.Bookkeeping, c.SetupDone, c.MigratedFrom, c.MigratedAt, c.ID)
 	if err != nil {
 		return err
 	}

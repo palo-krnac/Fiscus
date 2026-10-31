@@ -237,6 +237,7 @@ func Run(t *testing.T, newStore Factory) {
 		c.Units = []string{"ks", "hod", "m²"}
 		c.NumberFormats = map[string]string{"invoice": "{RRRR}/{NNN}", "credit_note": "DB{RRRR}{NNNN}"}
 		c.TaxOffice, c.VATPeriod = "Daňový úrad Banská Bystrica", store.VATPeriodQuarter
+		c.Bookkeeping, c.SetupDone, c.MigratedFrom, c.MigratedAt = store.BookkeepingDouble, true, "POHODA", "2026-10-31T12:00:00Z"
 		if err := s.UpdateCompany(ctx, c); err != nil {
 			t.Fatal(err)
 		}

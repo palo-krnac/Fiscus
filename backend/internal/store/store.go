@@ -59,7 +59,22 @@ type Company struct {
 	TaxOffice string `json:"taxOffice"`
 	// VATPeriod je zdaňovacie obdobie DPH: "month" alebo "quarter".
 	VATPeriod string `json:"vatPeriod"`
+	// Bookkeeping je druh účtovníctva: "simple" (jednoduché), "double"
+	// (podvojné) alebo "" (nezvolené — program ukáže oboje).
+	Bookkeeping string `json:"bookkeeping"`
+	// SetupDone: úvodné nastavenie (sprievodca) je dokončené.
+	SetupDone bool `json:"setupDone"`
+	// MigratedFrom a MigratedAt: odkiaľ a kedy sa preniesli doklady
+	// z iného účtovného programu (prenos je iba raz; nastavuje server).
+	MigratedFrom string `json:"migratedFrom"`
+	MigratedAt   string `json:"migratedAt"`
 }
+
+// Druhy účtovníctva.
+const (
+	BookkeepingSimple = "simple"
+	BookkeepingDouble = "double"
+)
 
 // Zdaňovacie obdobia DPH.
 const (

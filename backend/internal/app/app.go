@@ -106,6 +106,7 @@ func (a *App) CreateCompany(ctx context.Context, c store.Company) (store.Company
 	if err := validateCompany(c); err != nil {
 		return store.Company{}, err
 	}
+	c.MigratedFrom, c.MigratedAt = "", ""
 	c, err = a.Store.CreateCompany(ctx, c)
 	if err != nil {
 		return c, err
@@ -130,6 +131,8 @@ func (a *App) UpdateCompany(ctx context.Context, c store.Company) (store.Company
 	if err := validateCompany(c); err != nil {
 		return c, err
 	}
+	// prenos z iného programu zapisuje iba server
+	c.MigratedFrom, c.MigratedAt = old.MigratedFrom, old.MigratedAt
 	if err := a.Store.UpdateCompany(ctx, c); err != nil {
 		return c, err
 	}
@@ -198,6 +201,11 @@ func validateCompany(c store.Company) error {
 	add := func(f, m string) { fe = append(fe, invoice.FieldError{Field: f, Message: m}) }
 	if c.Name == "" {
 		add("name", "Zadajte názov firmy")
+	}
+	switch c.Bookkeeping {
+	case "", store.BookkeepingSimple, store.BookkeepingDouble:
+	default:
+		add("bookkeeping", "Účtovníctvo je jednoduché alebo podvojné")
 	}
 	if c.VATPeriod != store.VATPeriodMonth && c.VATPeriod != store.VATPeriodQuarter {
 		add("vatPeriod", "Zdaňovacie obdobie je mesačné alebo štvrťročné")

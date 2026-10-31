@@ -8,6 +8,8 @@ import { modules } from './router.js'
 import { session, loadSession, selectCompany, can, canSee, isSuperAdmin } from './lib/session.js'
 import { isSettingsPath, visibleSettings } from './lib/settingsNav.js'
 import SettingsShell from './components/SettingsShell.vue'
+import SetupWizard from './components/SetupWizard.vue'
+import { bookAllows } from './lib/setup.js'
 import { visibleModules } from './lib/access.js'
 import Login from './views/Login.vue'
 import UserMenu from './components/UserMenu.vue'
@@ -46,11 +48,13 @@ const menu = computed(() =>
   visibleModules(
     modules,
     // Nastavenia sú v menu, ak je viditeľná aspoň jedna ich sekcia
-    (i) => (i.settingsHub ? visibleSettings(canSee).length > 0 : canSee(i)),
+    (i) => bookAllows(i, session.company?.bookkeeping) && (i.settingsHub ? visibleSettings(canSee).length > 0 : canSee(i)),
   ),
 )
 const allowed = computed(() => (route.meta.superAdmin ? isSuperAdmin() : can(route.meta.perm)))
 // bez firmy sa dá otvoriť iba založenie firmy
+// nová firma: najprv úvodné nastavenie (iba kto smie meniť nastavenia)
+const needsSetup = computed(() => session.ready && session.company && !session.company.setupDone && can('settings.write'))
 const showView = computed(() => session.ready && allowed.value && (session.companyId || route.meta.noCompany))
 // verzia programu (v0.1.0 → „verzia 0.1.0“; vývojová zostava „dev“)
 const edition = computed(() => {
@@ -182,6 +186,7 @@ const isActive = (path) =>
           <i class="pi pi-exclamation-triangle" />
           <p>{{ session.error }}</p>
         </div>
+        <SetupWizard v-else-if="needsSetup" :key="'setup' + session.companyId" />
         <template v-else-if="showView">
           <SettingsShell v-if="route.meta.settings">
             <RouterView :key="session.companyId ?? 0" />

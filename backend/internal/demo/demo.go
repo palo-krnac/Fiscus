@@ -100,7 +100,7 @@ func Seed(ctx context.Context, a *app.App) (store.Company, error) {
 	c, err := a.CreateCompany(ctx, store.Company{
 		Name: "Demo elektroservis", Street: "Námestie SNP 1", City: "Banská Bystrica", Zip: "974 01",
 		ICO: ico("5512345"), DIC: "2120000003", ICDPH: "SK2120000003", IBAN: "SK31 1200 0000 1987 4263 7541", VATPayer: true,
-		TaxOffice: "Daňový úrad Banská Bystrica", VATPeriod: "month",
+		TaxOffice: "Daňový úrad Banská Bystrica", VATPeriod: "month", SetupDone: true,
 	})
 	if err != nil {
 		return c, err

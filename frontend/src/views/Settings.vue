@@ -19,6 +19,7 @@ import SecuritySettings from '../components/SecuritySettings.vue'
 import CalendarSyncPanel from '../components/CalendarSyncPanel.vue'
 import EshopSettings from '../components/EshopSettings.vue'
 import { currentSetting, errorSection } from '../lib/settingsNav.js'
+import { bookkeepingOptions, migrationNote } from '../lib/setup.js'
 import { useRouter } from 'vue-router'
 
 // sekcia nastavení (/nastavenia/:section); firma, dph a doklady zdieľajú
@@ -170,6 +171,18 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
       </fieldset>
 
       <fieldset v-if="section === 'firma'" class="form-section">
+        <legend>Účtovníctvo</legend>
+        <div class="books" role="radiogroup" aria-label="Druh účtovníctva">
+          <label v-for="o in bookkeepingOptions" :key="o.value" class="book" :class="{ on: form.bookkeeping === o.value }">
+            <input v-model="form.bookkeeping" type="radio" name="bookkeeping" :value="o.value" />
+            <span><strong>{{ o.label }}</strong><small>{{ o.what }}</small></span>
+          </label>
+        </div>
+        <small v-if="errors.bookkeeping" class="ff-err">{{ errors.bookkeeping }}</small>
+        <p v-if="migrationNote(session.company)" class="help">{{ migrationNote(session.company) }}</p>
+      </fieldset>
+
+      <fieldset v-if="section === 'firma'" class="form-section">
         <legend>Logo na dokladoch</legend>
         <div class="logo-row">
           <div class="logo-box">
@@ -278,6 +291,43 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 </template>
 
 <style scoped>
+.books {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  max-width: 760px;
+}
+.book {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--sheet);
+  cursor: pointer;
+}
+.book.on {
+  border-color: var(--blue);
+  background: var(--blue-wash);
+}
+.book input {
+  margin-top: 3px;
+  accent-color: var(--blue);
+}
+.book small {
+  display: block;
+  color: var(--ink-faint);
+  font-size: var(--fs-xs);
+}
+.ff-err {
+  color: var(--tone-overdue);
+}
+@media (max-width: 640px) {
+  .books {
+    grid-template-columns: 1fr;
+  }
+}
 .logo-row {
   display: flex;
   align-items: center;
