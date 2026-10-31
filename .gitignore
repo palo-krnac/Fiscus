@@ -8,3 +8,4 @@ backend/internal/web/dist/*
 *.db-shm
 *.fbk
 .DS_Store
+/backend/fiskus
