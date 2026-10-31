@@ -56,8 +56,8 @@ var Platforms = []Info{
 		Help: "WooCommerce → Nastavenia → Pokročilé → REST API → Pridať kľúč s oprávnením Čítanie/Zápis.",
 		Docs: "https://woocommerce.github.io/woocommerce-rest-api-docs/", Stock: true, Catalog: true},
 	{Platform: Shopify, Name: "Shopify", URLHint: "mojobchod.myshopify.com", SecretLbl: "Admin API access token",
-		Help: "Shopify admin → Settings → Apps → Develop apps → vlastná aplikácia s právami read_orders, read_products, write_inventory, read_locations.",
-		Docs: "https://shopify.dev/docs/api/admin-graphql", Stock: true},
+		Help: "Shopify admin → Settings → Apps → Develop apps → vlastná aplikácia s právami read_orders, write_products, write_inventory, read_locations a read_customers. Shopify nemá sadzbu DPH pri produkte: zdaniteľný = 23 %, nezdaniteľný = 0 %.",
+		Docs: "https://shopify.dev/docs/api/admin-graphql", Stock: true, Catalog: true},
 	{Platform: Shoptet, Name: "Shoptet", URLHint: "https://mojobchod.sk", SecretLbl: "Súkromný API token",
 		Help: "Shoptet admin → Prepojenia → Súkromné API (balík Premium): vytvorte token s právami na objednávky (čítanie), e-shop a sklady (zápis).",
 		Docs: "https://api.docs.shoptet.com/shoptet-api/openapi", Stock: true},
@@ -65,8 +65,8 @@ var Platforms = []Info{
 		Help: "PrestaShop → Rozšírené parametre → Webservice: zapnite webservice a pridajte kľúč s právami GET na orders, order_details, order_states, addresses, customers, countries, currencies, products a GET+PUT na stock_availables.",
 		Docs: "https://devdocs.prestashop-project.org/8/webservice/", Stock: true},
 	{Platform: Magento, Name: "Magento / Adobe Commerce", URLHint: "https://mojobchod.sk", SecretLbl: "Access token integrácie",
-		Help: "Magento admin → System → Integrations → Add New Integration s prístupom k Sales (Orders) a Catalog (Inventory) → Activate; skopírujte Access Token. V nastaveniach musí byť povolené použitie tokenu integrácie ako bearer tokenu.",
-		Docs: "https://developer.adobe.com/commerce/webapi/rest/", Stock: true},
+		Help: "Magento admin → System → Integrations → Add New Integration s prístupom k Sales (Orders) a Catalog (Inventory) → Activate; skopírujte Access Token. V nastaveniach musí byť povolené použitie tokenu integrácie ako bearer tokenu. Ceny katalógu musia byť bez DPH (predvolené).",
+		Docs: "https://developer.adobe.com/commerce/webapi/rest/", Stock: true, Catalog: true},
 	{Platform: Drupal, Name: "Drupal Commerce", URLHint: "https://mojobchod.sk", KeyLabel: "Používateľ", SecretLbl: "Heslo",
 		Help: "Drupal: zapnite moduly JSON:API a HTTP Basic Authentication a vytvorte používateľa iba s právom čítať objednávky a profily (view commerce_order, view commerce_product). Stav zásob Drupal Commerce bez doplnku nevedie, preto sa zásoby neposielajú.",
 		Docs: "https://docs.drupalcommerce.org/", Stock: false},
@@ -192,11 +192,11 @@ func New(c Conn) (Connector, error) {
 	case WooCommerce:
 		return &woo{c: c}, nil
 	case Shopify:
-		return &shopify{c}, nil
+		return &shopify{c: c}, nil
 	case PrestaShop:
 		return &presta{c}, nil
 	case Magento:
-		return &magento{c}, nil
+		return &magento{c: c}, nil
 	case Drupal:
 		return &drupal{c}, nil
 	case Shoptet:
