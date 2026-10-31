@@ -5,7 +5,9 @@ import Select from 'primevue/select'
 import Toast from 'primevue/toast'
 import ConfirmDialog from 'primevue/confirmdialog'
 import { modules } from './router.js'
-import { session, loadSession, selectCompany, can, isSuperAdmin } from './lib/session.js'
+import { session, loadSession, selectCompany, can, canSee, isSuperAdmin } from './lib/session.js'
+import { isSettingsPath, visibleSettings } from './lib/settingsNav.js'
+import SettingsShell from './components/SettingsShell.vue'
 import { visibleModules } from './lib/access.js'
 import Login from './views/Login.vue'
 import UserMenu from './components/UserMenu.vue'
@@ -43,7 +45,8 @@ watch(
 const menu = computed(() =>
   visibleModules(
     modules,
-    (i) => (i.superAdmin ? isSuperAdmin() : can(i.perm)) && (!i.serverOnly || session.caps.mode === 'server'),
+    // Nastavenia sú v menu, ak je viditeľná aspoň jedna ich sekcia
+    (i) => (i.settingsHub ? visibleSettings(canSee).length > 0 : canSee(i)),
   ),
 )
 const allowed = computed(() => (route.meta.superAdmin ? isSuperAdmin() : can(route.meta.perm)))
@@ -81,7 +84,8 @@ async function quitApp() {
   }
   stopped.value = true
 }
-const isActive = (path) => route.path === path || route.path.startsWith(path + '/')
+const isActive = (path) =>
+  path === '/nastavenia' ? isSettingsPath(route.path) : route.path === path || route.path.startsWith(path + '/')
 </script>
 
 <template>
@@ -178,7 +182,12 @@ const isActive = (path) => route.path === path || route.path.startsWith(path + '
           <i class="pi pi-exclamation-triangle" />
           <p>{{ session.error }}</p>
         </div>
-        <RouterView v-else-if="showView" :key="session.companyId ?? 0" />
+        <template v-else-if="showView">
+          <SettingsShell v-if="route.meta.settings">
+            <RouterView :key="session.companyId ?? 0" />
+          </SettingsShell>
+          <RouterView v-else :key="session.companyId ?? 0" />
+        </template>
         <div v-else-if="session.ready && !session.companyId" class="fatal muted-box">
           <i class="pi pi-building" />
           <template v-if="isSuperAdmin()">

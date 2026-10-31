@@ -16,8 +16,19 @@ import { session, replaceCompany } from '../lib/session.js'
 import CompanyLogo from '../components/CompanyLogo.vue'
 import EInvoiceSettings from '../components/EInvoiceSettings.vue'
 import SecuritySettings from '../components/SecuritySettings.vue'
+import CalendarSyncPanel from '../components/CalendarSyncPanel.vue'
+import { currentSetting, errorSection } from '../lib/settingsNav.js'
+import { useRouter } from 'vue-router'
+
+// sekcia nastavení (/nastavenia/:section); firma, dph a doklady zdieľajú
+// jeden formulár, takže neuložené zmeny ostanú aj po prepnutí sekcie
+const props = defineProps({ section: { type: String, default: 'firma' } })
+const formSections = ['firma', 'dph', 'doklady']
+const hasForm = computed(() => formSections.includes(props.section))
+const title = computed(() => currentSetting('/nastavenia/' + props.section)?.label ?? 'Nastavenia')
 
 const toast = useToast()
+const router = useRouter()
 const clone = (c) => ({ ...c, units: [...(c.units ?? [])], numberFormats: { ...(c.numberFormats ?? {}) } })
 const form = ref(clone(session.company))
 const errors = ref({})
@@ -115,6 +126,9 @@ async function save() {
   } catch (e) {
     if (e instanceof ApiError && e.fields.length) {
       errors.value = e.fieldMap()
+      // chyba v inej sekcii: prejsť tam, nech je pole vidieť
+      const target = errorSection(props.section, Object.keys(errors.value))
+      if (target !== props.section) router.replace('/nastavenia/' + target)
       toast.add({ severity: 'error', summary: 'Skontrolujte vyznačené polia', life: 4000 })
     } else {
       toast.add({ severity: 'error', summary: 'Uloženie zlyhalo', detail: e.message, life: 6000 })
@@ -127,7 +141,7 @@ async function save() {
 function onKey(e) {
   if ((e.ctrlKey || e.metaKey) && e.key === 's') {
     e.preventDefault()
-    if (!busy.value) save()
+    if (!busy.value && hasForm.value) save()
   }
 }
 onMounted(() => window.addEventListener('keydown', onKey))
@@ -137,14 +151,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 <template>
   <div class="settings">
     <header class="bar">
-      <h1>Nastavenia firmy</h1>
-      <span v-if="dirty" class="unsaved">neuložené zmeny</span>
+      <h1>{{ title }}</h1>
+      <span v-if="dirty && hasForm" class="unsaved">neuložené zmeny</span>
       <div class="spacer" />
-      <Button label="Uložiť" icon="pi pi-check" size="small" :loading="busy" :disabled="!dirty" @click="save" v-tooltip.bottom="'Ctrl+S'" />
+      <Button v-if="hasForm" label="Uložiť" icon="pi pi-check" size="small" :loading="busy" :disabled="!dirty" @click="save" v-tooltip.bottom="'Ctrl+S'" />
     </header>
 
     <div class="body">
-      <fieldset class="form-section">
+      <fieldset v-if="section === 'firma'" class="form-section">
         <legend>Údaje na faktúre</legend>
         <div class="form-grid">
           <FormField v-for="f in companyFields" :key="f.key" :label="f.label" :span="f.span" :error="errors[f.key]">
@@ -154,7 +168,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
         </div>
       </fieldset>
 
-      <fieldset class="form-section">
+      <fieldset v-if="section === 'firma'" class="form-section">
         <legend>Logo na dokladoch</legend>
         <div class="logo-row">
           <div class="logo-box">
@@ -170,7 +184,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
         </div>
       </fieldset>
 
-      <fieldset class="form-section">
+      <fieldset v-if="section === 'dph'" class="form-section">
         <legend>DPH</legend>
         <label class="switch">
           <ToggleSwitch v-model="form.vatPayer" input-id="vat-payer" />
@@ -199,7 +213,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
         </div>
       </fieldset>
 
-      <fieldset class="form-section">
+      <fieldset v-if="section === 'doklady'" class="form-section">
         <legend>Číselné rady</legend>
         <p class="help">
           Zástupné znaky: <code>{RRRR}</code> rok, <code>{RR}</code> rok dvojciferne, <code>{MM}</code> mesiac,
@@ -224,7 +238,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
         </div>
       </fieldset>
 
-      <fieldset class="form-section">
+      <fieldset v-if="section === 'doklady'" class="form-section">
         <legend>Merné jednotky</legend>
         <FormField label="Jednotky ponúkané pri položkách faktúry" :error="errors.units" hint="Novú jednotku napíšte a potvrďte Enterom">
           <AutoComplete
@@ -242,7 +256,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
         <button type="button" class="link" @click="resetUnits">Obnoviť predvolené jednotky</button>
       </fieldset>
 
-      <fieldset class="form-section">
+      <fieldset v-if="section === 'doklady'" class="form-section">
         <legend>Platby</legend>
         <div class="form-grid">
           <FormField label="IBAN" :span="2" :error="errors.iban" hint="Zobrazí sa na faktúre a v QR kóde">
@@ -254,8 +268,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
         </div>
       </fieldset>
 
-      <EInvoiceSettings />
-      <SecuritySettings />
+      <EInvoiceSettings v-if="section === 'e-faktury'" />
+      <CalendarSyncPanel v-if="section === 'kalendar'" />
+      <SecuritySettings v-if="section === 'bezpecnost'" />
     </div>
   </div>
 </template>
