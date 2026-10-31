@@ -1,6 +1,7 @@
 <script setup>
 // Pokladničný doklad na tlač (polovica A4, dva doklady sa zmestia na jeden hárok).
 import { computed, onMounted, ref } from 'vue'
+import PrintFooter from '../components/PrintFooter.vue'
 import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import { api } from '../lib/api.js'
@@ -90,6 +91,7 @@ const addr = (c) => [c.street, [c.zip, c.city].filter(Boolean).join(' ')].filter
         <div><span>{{ income ? 'Prijal (pokladník)' : 'Vyplatil (pokladník)' }}</span></div>
         <div><span>{{ income ? 'Zaplatil' : 'Prijal' }}</span></div>
       </footer>
+      <PrintFooter />
     </article>
   </div>
 </template>

@@ -1,6 +1,7 @@
 <script setup>
 // Upomienka na tlač / do PDF (A4 list): odberateľ, zoznam faktúr, úrok, náhrada.
 import { computed, onMounted, ref } from 'vue'
+import PrintFooter from '../components/PrintFooter.vue'
 import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import { api } from '../lib/api.js'
@@ -131,6 +132,7 @@ const download = () => {
         <span>S pozdravom</span>
         <strong>{{ company.name }}</strong>
       </div>
+      <PrintFooter />
     </article>
     <SendMailDialog v-if="r" v-model:visible="mailOpen" :kind="'reminders'" :id="id" />
   </div>
@@ -162,6 +164,7 @@ const download = () => {
   padding: 40px;
 }
 .sheet {
+  position: relative;
   width: 210mm;
   min-height: 297mm;
   margin: 24px auto 0;
