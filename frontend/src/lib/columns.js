@@ -545,3 +545,5 @@ export const dimColumns = [
   money('Výnosy', (r) => r.revenues),
   money('Výsledok', (r) => r.result),
 ]
+
+export const importWarningColumns = [t('Č.', (r) => r.n, 6), t('Upozornenie', (r) => r.text, 90)]

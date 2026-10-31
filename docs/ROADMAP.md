@@ -119,6 +119,11 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] Tlač knihy jázd (A4 na šírku): vozidlo, jazdy, tankovanie, náklady s DPH, vyúčtovanie
 - [ ] Kniha jázd: import z GPS, zdanenie súkromného použitia vozidla s plným odpočtom (§ 9 ods. 2), úprava odpočtu pri predaji do 5 rokov
 
+## Prenos dát z iných programov
+- [x] POHODA (XML export, aj Windows-1250): adresár, zásoby do cenníka, vydané faktúry a dobropisy s pôvodnými číslami a úhradami, prijaté faktúry; náhľad pred prenosom, opakovaný prenos nevytvorí duplicity, číselný rad pokračuje za prenesenými číslami
+- [ ] Money S3 (XML), KROS Alfa/Omega, SuperFaktúra, iDoklad, Fakturoid, všeobecný Excel/CSV
+- [ ] Konektory na e-shopy (Shoptet, WooCommerce, Shopify, PrestaShop, Upgates, Magento) — podľa verejnej dokumentácie, neoverené na živom obchode
+
 ## Etapa 4 — mzdy (samostatný návrh)
 - [ ] Sociálna poisťovňa, zdravotné poisťovne, preddavky na daň, ročné zúčtovanie
 

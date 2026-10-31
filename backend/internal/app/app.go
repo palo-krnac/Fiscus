@@ -472,6 +472,15 @@ func (a *App) Issue(ctx context.Context, companyID, id int64) (invoice.Invoice, 
 		return inv, err
 	}
 	number := invoice.FormatNumberWith(NumberFormat(company, inv.Kind), year, month, seq)
+	// číslo už môže mať faktúra prenesená z iného programu → ďalšie v rade
+	if taken, err := a.invoiceNumbers(ctx, companyID); err == nil {
+		for i := 0; i < 1000 && taken[number]; i++ {
+			if seq, err = a.Store.NextSequence(ctx, companyID, invoice.SequenceKey(inv.Kind), year); err != nil {
+				return inv, err
+			}
+			number = invoice.FormatNumberWith(NumberFormat(company, inv.Kind), year, month, seq)
+		}
+	}
 	if err := inv.Issue(number); err != nil {
 		return inv, fmt.Errorf("vystavenie: %w", err)
 	}
@@ -591,4 +600,19 @@ func (a *App) transition(ctx context.Context, companyID, id int64, action, what 
 	}
 	a.record(ctx, companyID, audit.CatInvoices, action, "invoice", inv.ID, what+docName(inv), before, state{inv.Status, inv.PaidDate, inv.Paid(), inv.Payments})
 	return inv, nil
+}
+
+// invoiceNumbers vráti čísla vystavených dokladov firmy.
+func (a *App) invoiceNumbers(ctx context.Context, companyID int64) (map[string]bool, error) {
+	list, err := a.Store.ListInvoices(ctx, companyID, store.InvoiceFilter{})
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]bool, len(list))
+	for _, inv := range list {
+		if inv.Number != "" {
+			out[inv.Number] = true
+		}
+	}
+	return out, nil
 }

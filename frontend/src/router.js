@@ -34,6 +34,7 @@ import Legal from './views/Legal.vue'
 import Catalog from './views/Catalog.vue'
 import ChartOfAccounts from './views/ChartOfAccounts.vue'
 import LedgerBook from './views/LedgerBook.vue'
+import DataTransfer from './views/DataTransfer.vue'
 import Calendar from './views/Calendar.vue'
 
 // Moduly z etapového plánu — zatiaľ prázdne stránky s popisom.
@@ -89,6 +90,7 @@ export const modules = [
     group: 'Ostatné',
     items: [
       { path: '/adresar', label: 'Adresár', icon: 'pi-address-book', ready: true, perm: 'contacts.read' },
+      { path: '/prenos', label: 'Prenos dát', icon: 'pi-file-import', ready: true, perm: 'invoices.write' },
       { path: '/pouzivatelia', label: 'Používatelia', icon: 'pi-users', ready: true, perm: 'users.manage', serverOnly: true },
       { path: '/audit', label: 'Audit', icon: 'pi-shield', ready: true, perm: 'audit.read' },
       { path: '/ai', label: 'Prístup pre AI', icon: 'pi-sparkles', ready: true },
@@ -125,6 +127,7 @@ export const router = createRouter({
     { path: '/ponuky/nova', component: InvoiceEdit, props: { quote: true }, meta: { title: 'Nová ponuka', perm: 'invoices.write' } },
     { path: '/ponuky/:id(\\d+)', component: InvoiceEdit, props: (r) => ({ id: r.params.id, quote: true }), meta: { title: 'Cenová ponuka', perm: 'invoices.read' } },
     { path: '/ponuky/:id(\\d+)/tlac', component: InvoicePrint, props: (r) => ({ id: r.params.id, quote: true }), meta: { title: 'Cenová ponuka', bare: true, perm: 'invoices.read' } },
+    { path: '/prenos', component: DataTransfer, meta: { title: 'Prenos dát', perm: 'invoices.write' } },
     { path: '/kalendar', component: Calendar, meta: { title: 'Kalendár' } },
     { path: '/pravidelne', component: RecurringList, meta: { title: 'Pravidelná fakturácia', perm: 'invoices.read' } },
     { path: '/pravidelne/nova', component: InvoiceEdit, props: { recurring: true }, meta: { title: 'Nová pravidelná faktúra', perm: 'invoices.write' } },

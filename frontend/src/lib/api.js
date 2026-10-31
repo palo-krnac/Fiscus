@@ -323,6 +323,7 @@ export const api = {
   deleteItem: (cid, id) => request('DELETE', `/api/companies/${cid}/items/${id}`),
   // súbor CSV/XLSX; apply=false vráti iba náhľad
   importItems: (cid, file, apply = false) => request('POST', `/api/companies/${cid}/items/import${apply ? '?apply=1' : ''}`, file),
+  importPohoda: (cid, file, apply = false) => request('POST', `/api/companies/${cid}/import/pohoda${apply ? '?apply=1' : ''}`, file),
   rates: (f = {}) => request('GET', `/api/rates${query(f)}`),
   saveRate: (r) => request('PUT', '/api/rates', r),
   updateRates: () => request('POST', '/api/rates/update'),
