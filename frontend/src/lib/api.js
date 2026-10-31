@@ -171,6 +171,8 @@ export const api = {
   saveStockDoc: (cid, d) =>
     d.id ? request('PUT', `/api/companies/${cid}/stock/docs/${d.id}`, d) : request('POST', `/api/companies/${cid}/stock/docs`, d),
   deleteStockDoc: (cid, id) => request('DELETE', `/api/companies/${cid}/stock/docs/${id}`),
+  createStockFeed: (cid) => request('POST', `/api/companies/${cid}/stock/feed`, {}),
+  revokeStockFeed: (cid) => request('DELETE', `/api/companies/${cid}/stock/feed`),
   stockCard: (cid, warehouse, item) => request('GET', `/api/companies/${cid}/stock/cards/${encodeURIComponent(warehouse)}/${item}`),
   ledger: (cid, year) => request('GET', `/api/companies/${cid}/ledger` + query({ year })),
   setPosting: (cid, year, key, body) => request('PUT', `/api/companies/${cid}/ledger/${year}/postings/${encodeURIComponent(key)}`, body),

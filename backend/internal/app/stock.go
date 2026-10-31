@@ -2,6 +2,9 @@ package app
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -41,6 +44,14 @@ type StockItem struct {
 type StockConfig struct {
 	Warehouses []Warehouse `json:"warehouses"`
 	Items      []StockItem `json:"items"`
+	// Method je spôsob ocenenia úbytku (vážený priemer alebo FIFO).
+	Method stock.Method `json:"method"`
+	// FeedHash je odtlačok tajného odkazu na zásoby pre e-shop (tajné,
+	// cez API sa nevracia); FeedCreated je čas vytvorenia.
+	FeedHash    string `json:"feedHash,omitempty"`
+	FeedCreated int64  `json:"feedCreated,omitempty"`
+	// Orders: e-shop smie cez odkaz posielať objednávky (výdajky).
+	Orders bool `json:"orders"`
 }
 
 func stockKey(companyID int64) string { return fmt.Sprintf("stock.%d", companyID) }
@@ -64,6 +75,9 @@ func (a *App) loadStock(ctx context.Context, companyID int64) (StockConfig, erro
 	}
 	if c.Items == nil {
 		c.Items = []StockItem{}
+	}
+	if !c.Method.Valid() {
+		c.Method = stock.Average
 	}
 	return c, nil
 }
@@ -112,15 +126,20 @@ type StockCard struct {
 
 // StockView je prehľad skladu.
 type StockView struct {
-	Warehouses []Warehouse     `json:"warehouses"`
-	Items      []StockItem     `json:"items"`
-	Cards      []StockCard     `json:"cards"`
-	Docs       []stock.Doc     `json:"docs"`
-	Problems   []stock.Problem `json:"problems"`
-	Value      money.Dec       `json:"value"` // hodnota zásob spolu
-	Kinds      any             `json:"kinds"`
-	ItemKinds  any             `json:"itemKinds"`
-	Catalog    []catalog.Item  `json:"catalog"`
+	Warehouses  []Warehouse     `json:"warehouses"`
+	Items       []StockItem     `json:"items"`
+	Cards       []StockCard     `json:"cards"`
+	Docs        []stock.Doc     `json:"docs"`
+	Problems    []stock.Problem `json:"problems"`
+	Value       money.Dec       `json:"value"` // hodnota zásob spolu
+	Kinds       any             `json:"kinds"`
+	ItemKinds   any             `json:"itemKinds"`
+	Catalog     []catalog.Item  `json:"catalog"`
+	Method      stock.Method    `json:"method"`
+	Methods     any             `json:"methods"`
+	FeedActive  bool            `json:"feedActive"`
+	Orders      bool            `json:"orders"`
+	FeedCreated int64           `json:"feedCreated,omitempty"`
 }
 
 // Stock vráti stav skladu, doklady a problémy ocenenia.
@@ -144,9 +163,10 @@ func (a *App) Stock(ctx context.Context, companyID int64) (StockView, error) {
 	for _, it := range items {
 		byID[it.ID] = it
 	}
-	cards, costed, probs := stock.Valuate(docs)
+	cards, costed, probs := stock.Valuate(docs, cfg.Method)
 	v := StockView{Warehouses: cfg.Warehouses, Items: cfg.Items, Docs: costed, Problems: probs, Kinds: stock.Kinds,
-		ItemKinds: stock.ItemKinds, Catalog: items, Cards: []StockCard{}}
+		ItemKinds: stock.ItemKinds, Catalog: items, Cards: []StockCard{}, Method: cfg.Method, Methods: stock.Methods,
+		FeedActive: cfg.FeedHash != "", FeedCreated: cfg.FeedCreated, Orders: cfg.Orders}
 	if v.Problems == nil {
 		v.Problems = []stock.Problem{}
 	}
@@ -202,7 +222,11 @@ func (a *App) StockCardMoves(ctx context.Context, companyID int64, warehouse str
 	if err != nil {
 		return nil, err
 	}
-	cards, _, _ := stock.Valuate(docs)
+	cfg, err := a.loadStock(ctx, companyID)
+	if err != nil {
+		return nil, err
+	}
+	cards, _, _ := stock.Valuate(docs, cfg.Method)
 	if c := cards[stock.Key{Warehouse: warehouse, ItemID: itemID}]; c != nil {
 		return c.Moves, nil
 	}
@@ -280,11 +304,21 @@ func (a *App) SaveStockConfig(ctx context.Context, companyID int64, c StockConfi
 	if c.Items == nil {
 		c.Items = []StockItem{}
 	}
+	if c.Method == "" {
+		c.Method = old.Method
+	}
+	if !c.Method.Valid() {
+		return c, mfaFieldErr("method", "Vyberte spôsob ocenenia")
+	}
+	c.FeedHash, c.FeedCreated = old.FeedHash, old.FeedCreated // odkaz pre e-shop sa mení zvlášť
 	if err := a.saveStockConfig(ctx, companyID, c); err != nil {
 		return c, err
 	}
+	oldView, newView := old, c
+	oldView.FeedHash, newView.FeedHash = "", ""
 	a.record(ctx, companyID, audit.CatSettings, "update", "stock", 0,
-		fmt.Sprintf("Sklad: %d skladov, %d skladových položiek", len(c.Warehouses), len(c.Items)), old, c)
+		fmt.Sprintf("Sklad: %d skladov, %d skladových položiek, ocenenie %s", len(c.Warehouses), len(c.Items), c.Method), oldView, newView)
+	c.FeedHash = ""
 	return c, nil
 }
 
@@ -295,6 +329,26 @@ func (a *App) checkStockDoc(ctx context.Context, companyID int64, cfg StockConfi
 	}
 	if !cfg.warehouse(d.Warehouse) {
 		return mfaFieldErr("warehouse", "Sklad "+d.Warehouse+" neexistuje")
+	}
+	if d.Kind == stock.Transfer && !cfg.warehouse(d.To) {
+		return mfaFieldErr("to", "Sklad "+d.To+" neexistuje")
+	}
+	if !d.Auto {
+		switch d.LinkKind {
+		case "":
+			d.LinkID, d.LinkNumber = 0, ""
+		case "purchase":
+			p, err := a.Store.GetPurchase(ctx, companyID, d.LinkID)
+			if err != nil {
+				return mfaFieldErr("linkId", "Prijatá faktúra neexistuje")
+			}
+			d.LinkNumber = p.Number
+			if d.Partner == "" {
+				d.Partner = p.Supplier.Name
+			}
+		default:
+			return mfaFieldErr("linkKind", "Skladový doklad sa ručne viaže iba na prijatú faktúru")
+		}
 	}
 	for i := range d.Lines {
 		l := &d.Lines[i]
@@ -336,7 +390,7 @@ func (a *App) SaveStockDoc(ctx context.Context, companyID int64, d stock.Doc) (s
 			return d, err
 		}
 		if old.Auto {
-			return d, mfaFieldErr("kind", "Doklad vytvorený z faktúry "+old.LinkNumber+" sa mení spolu s faktúrou")
+			return d, mfaFieldErr("kind", autoSource(old)+" — mení sa iba spolu s ním")
 		}
 		if old.Kind != d.Kind {
 			return d, mfaFieldErr("kind", "Druh dokladu sa nemení")
@@ -378,7 +432,7 @@ func (a *App) DeleteStockDoc(ctx context.Context, companyID, id int64) error {
 		return err
 	}
 	if d.Auto {
-		return mfaFieldErr("kind", "Doklad vytvorený z faktúry "+d.LinkNumber+" sa zmaže stornom faktúry")
+		return mfaFieldErr("kind", autoSource(d)+" — zmaže sa stornom faktúry alebo zrušením objednávky")
 	}
 	if err := a.Store.DeleteStockDoc(ctx, companyID, id); err != nil {
 		return err
@@ -488,7 +542,7 @@ func (a *App) stockValues(ctx context.Context, companyID int64, at invoice.Date)
 			upto = append(upto, d)
 		}
 	}
-	cards, _, _ := stock.Valuate(upto)
+	cards, _, _ := stock.Valuate(upto, cfg.Method)
 	out := map[stock.ItemKind]money.Dec{}
 	for k, c := range cards {
 		si, ok := cfg.item(k.ItemID)
@@ -499,4 +553,216 @@ func (a *App) stockValues(ctx context.Context, companyID int64, at invoice.Date)
 		out[kind] = out[kind].Add(c.Value)
 	}
 	return out, nil
+}
+
+// StockFeedPrefix je začiatok tajného odkazu na zásoby pre e-shop.
+const StockFeedPrefix = "fks_"
+
+// ErrBadStockFeed — neplatný alebo zrušený odkaz na zásoby.
+var ErrBadStockFeed = errors.New("neplatný alebo zrušený odkaz na zásoby")
+
+// CreateStockFeed vytvorí nový tajný odkaz na zásoby pre e-shop (starý
+// prestane platiť); vráti ho iba raz.
+func (a *App) CreateStockFeed(ctx context.Context, companyID int64) (string, error) {
+	if err := a.Require(ctx, companyID, auth.PermPurchasesWrite); err != nil {
+		return "", err
+	}
+	stockMu.Lock()
+	defer stockMu.Unlock()
+	c, err := a.loadStock(ctx, companyID)
+	if err != nil {
+		return "", err
+	}
+	b := make([]byte, 24)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	token := StockFeedPrefix + base64.RawURLEncoding.EncodeToString(b)
+	c.FeedHash, c.FeedCreated = auth.TokenHash(token), a.clock().Unix()
+	if err := a.saveStockConfig(ctx, companyID, c); err != nil {
+		return "", err
+	}
+	a.record(ctx, companyID, audit.CatSettings, "create", "stock_feed", 0, "Odkaz na zásoby pre e-shop", nil, nil)
+	return token, nil
+}
+
+// RevokeStockFeed zruší odkaz na zásoby.
+func (a *App) RevokeStockFeed(ctx context.Context, companyID int64) error {
+	if err := a.Require(ctx, companyID, auth.PermPurchasesWrite); err != nil {
+		return err
+	}
+	stockMu.Lock()
+	defer stockMu.Unlock()
+	c, err := a.loadStock(ctx, companyID)
+	if err != nil {
+		return err
+	}
+	c.FeedHash, c.FeedCreated = "", 0
+	if err := a.saveStockConfig(ctx, companyID, c); err != nil {
+		return err
+	}
+	a.record(ctx, companyID, audit.CatSettings, "delete", "stock_feed", 0, "Zrušený odkaz na zásoby pre e-shop", nil, nil)
+	return nil
+}
+
+// FeedItem je položka v zozname zásob pre e-shop.
+type FeedItem struct {
+	Code       string               `json:"code"`
+	Name       string               `json:"name"`
+	Unit       string               `json:"unit"`
+	Quantity   money.Dec            `json:"quantity"` // spolu vo všetkých skladoch, záporný stav = 0
+	Price      money.Dec            `json:"price"`    // predajná cena z cenníka
+	PriceGross money.Dec            `json:"priceGross"`
+	VATRate    int                  `json:"vatRate"`
+	Warehouses map[string]money.Dec `json:"warehouses"`
+}
+
+// StockFeed vráti zásoby pre e-shop podľa tajného odkazu (bez prihlásenia).
+func (a *App) StockFeed(ctx context.Context, companyID int64, token string) ([]FeedItem, error) {
+	cfg, err := a.loadStock(ctx, companyID)
+	if err != nil {
+		return nil, err
+	}
+	if !checkFeed(cfg, token) {
+		return nil, ErrBadStockFeed
+	}
+	docs, err := a.Store.ListStockDocs(ctx, companyID)
+	if err != nil {
+		return nil, err
+	}
+	cards, _, _ := stock.Valuate(docs, cfg.Method)
+	out := []FeedItem{}
+	for _, si := range cfg.Items {
+		it, err := a.Store.GetItem(ctx, companyID, si.ItemID)
+		if err != nil || it.Archived {
+			continue
+		}
+		pr := it.Prices()
+		f := FeedItem{Code: it.Code, Name: it.Name, Unit: it.Unit, Price: pr.Net, PriceGross: pr.Gross, VATRate: int(it.Rate), Warehouses: map[string]money.Dec{}}
+		for _, w := range cfg.Warehouses {
+			q := money.Zero
+			if c := cards[stock.Key{Warehouse: w.Code, ItemID: si.ItemID}]; c != nil && c.Quantity.Sign() > 0 {
+				q = c.Quantity
+			}
+			f.Warehouses[w.Code] = q
+			f.Quantity = f.Quantity.Add(q)
+		}
+		out = append(out, f)
+	}
+	return out, nil
+}
+
+// checkFeed overí tajný odkaz e-shopu.
+func checkFeed(cfg StockConfig, token string) bool {
+	return strings.HasPrefix(token, StockFeedPrefix) && cfg.FeedHash != "" &&
+		subtle.ConstantTimeCompare([]byte(cfg.FeedHash), []byte(auth.TokenHash(token))) == 1
+}
+
+// ShopOrderLine je položka objednávky podľa kódu v cenníku.
+type ShopOrderLine struct {
+	Code     string    `json:"code"`
+	Quantity money.Dec `json:"quantity"`
+}
+
+// ShopOrder je objednávka z e-shopu.
+type ShopOrder struct {
+	Order    string          `json:"order"` // číslo objednávky v e-shope
+	Date     invoice.Date    `json:"date"`
+	Customer string          `json:"customer"`
+	Cancel   bool            `json:"cancel"` // zrušená objednávka → výdajka sa zmaže
+	Lines    []ShopOrderLine `json:"lines"`
+}
+
+// ErrOrdersOff — e-shop nemá povolené posielať objednávky.
+var ErrOrdersOff = errors.New("posielanie objednávok z e-shopu nie je zapnuté")
+
+// ShopOrderIssue zapíše objednávku z e-shopu ako výdajku z prvého skladu
+// (rovnaké číslo objednávky výdajku prepíše, zrušená ju zmaže). Položky
+// mimo skladu (služby, doprava) sa preskočia.
+func (a *App) ShopOrderIssue(ctx context.Context, companyID int64, token string, o ShopOrder) (stock.Doc, error) {
+	stockMu.Lock()
+	defer stockMu.Unlock()
+	cfg, err := a.loadStock(ctx, companyID)
+	if err != nil {
+		return stock.Doc{}, err
+	}
+	if !checkFeed(cfg, token) {
+		return stock.Doc{}, ErrBadStockFeed
+	}
+	if !cfg.Orders {
+		return stock.Doc{}, ErrOrdersOff
+	}
+	o.Order = strings.TrimSpace(o.Order)
+	if o.Order == "" || len(o.Order) > 40 {
+		return stock.Doc{}, mfaFieldErr("order", "Zadajte číslo objednávky")
+	}
+	docs, err := a.Store.ListStockDocs(ctx, companyID)
+	if err != nil {
+		return stock.Doc{}, err
+	}
+	var existing *stock.Doc
+	for i := range docs {
+		if docs[i].LinkKind == "order" && docs[i].LinkNumber == o.Order {
+			existing = &docs[i]
+		}
+	}
+	ctx = auth.WithActor(ctx, auth.Actor{Name: "E-shop", Channel: auth.ChannelAPI})
+	if o.Cancel {
+		if existing == nil {
+			return stock.Doc{}, nil
+		}
+		if err := a.Store.DeleteStockDoc(ctx, companyID, existing.ID); err != nil {
+			return stock.Doc{}, err
+		}
+		a.record(ctx, companyID, audit.CatSettings, "delete", "stock_doc", existing.ID, "Zrušená objednávka z e-shopu "+o.Order, nil, nil)
+		return *existing, nil
+	}
+	items, err := a.Store.ListItems(ctx, companyID)
+	if err != nil {
+		return stock.Doc{}, err
+	}
+	byCode := map[string]int64{}
+	for _, it := range items {
+		if it.Code != "" {
+			byCode[strings.ToUpper(it.Code)] = it.ID
+		}
+	}
+	if o.Date.IsZero() {
+		o.Date = a.Today()
+	}
+	d := stock.Doc{Kind: stock.Issue, Date: o.Date, Warehouse: cfg.Warehouses[0].Code, Partner: strings.TrimSpace(o.Customer),
+		Note: "Objednávka z e-shopu", LinkKind: "order", LinkNumber: o.Order, Auto: true}
+	for i, l := range o.Lines {
+		id := byCode[strings.ToUpper(strings.TrimSpace(l.Code))]
+		if id == 0 {
+			return stock.Doc{}, mfaFieldErr(fmt.Sprintf("lines[%d].code", i), "Kód "+l.Code+" nie je v cenníku")
+		}
+		if _, ok := cfg.item(id); ok {
+			d.Lines = append(d.Lines, stock.Line{ItemID: id, Quantity: l.Quantity})
+		}
+	}
+	if len(d.Lines) == 0 {
+		return stock.Doc{}, nil // objednávka bez skladových položiek
+	}
+	if err := a.checkStockDoc(ctx, companyID, cfg, &d); err != nil {
+		return stock.Doc{}, err
+	}
+	if existing != nil {
+		d.ID, d.Number = existing.ID, existing.Number
+	} else {
+		d.Number = stock.NextNumber(docs, d.Kind, d.Date.Year())
+	}
+	if err := a.Store.SaveStockDoc(ctx, companyID, &d); err != nil {
+		return stock.Doc{}, err
+	}
+	a.record(ctx, companyID, audit.CatSettings, "create", "stock_doc", d.ID, stockDocSummary(d)+" z objednávky e-shopu "+o.Order, nil, d)
+	return d, nil
+}
+
+// autoSource popíše, odkiaľ automatický doklad vznikol.
+func autoSource(d stock.Doc) string {
+	if d.LinkKind == "order" {
+		return "Doklad vznikol z objednávky e-shopu " + d.LinkNumber
+	}
+	return "Doklad vznikol z faktúry " + d.LinkNumber
 }

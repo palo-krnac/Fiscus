@@ -546,7 +546,7 @@ export const dimColumns = [
   money('Výsledok', (r) => r.result),
 ]
 
-const stockKind = (r) => (r.return ? 'Príjemka – vrátenie' : { receipt: 'Príjemka', issue: 'Výdajka', count: 'Inventúrny rozdiel' }[r.kind] ?? r.kind)
+const stockKind = (r) => (r.return ? 'Príjemka – vrátenie' : { receipt: 'Príjemka', issue: 'Výdajka', count: 'Inventúrny rozdiel', transfer: 'Presun' }[r.kind] ?? r.kind)
 const num = (header, value) => ({ header, value: (r) => Number(value(r)), type: 'number', width: 12 })
 
 /** Skladové karty. */
@@ -569,6 +569,7 @@ export const stockDocColumns = [
   t('Číslo', (r) => r.number, 12),
   t('Druh', stockKind, 18),
   t('Sklad', (r) => r.warehouse, 8),
+  t('Do skladu', (r) => r.to, 8),
   t('Partner', (r) => r.partner, 26),
   t('Doklad', (r) => r.linkNumber, 14),
   t('Položka', (r) => r.line.name, 32),

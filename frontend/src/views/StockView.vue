@@ -21,6 +21,7 @@ import { api, ApiError } from '../lib/api.js'
 import { can, session } from '../lib/session.js'
 import { formatAmount, formatDate, formatMoney, fromISODate, toISODate } from '../lib/format.js'
 import { stockCardColumns, stockDocColumns } from '../lib/columns.js'
+import { localOnly } from '../lib/calendar.js'
 import { apiLines, blankLine, docLabel, docRows, filterCards, filterDocs, itemKindLabels, needsCost } from '../lib/stock.js'
 
 const toast = useToast()
@@ -51,7 +52,7 @@ watch(() => session.companyId, load)
 watch(tab, () => (search.value = ''))
 
 const warehouseOptions = computed(() => [{ value: 'all', label: 'Všetky sklady' }, ...(v.value?.warehouses ?? []).map((w) => ({ value: w.code, label: `${w.code} – ${w.name}` }))])
-const kindOptions = [{ value: 'all', label: 'Všetky doklady' }, { value: 'receipt', label: 'Príjemky' }, { value: 'issue', label: 'Výdajky' }, { value: 'count', label: 'Inventúrne rozdiely' }]
+const kindOptions = [{ value: 'all', label: 'Všetky doklady' }, { value: 'receipt', label: 'Príjemky' }, { value: 'issue', label: 'Výdajky' }, { value: 'count', label: 'Inventúrne rozdiely' }, { value: 'transfer', label: 'Presuny' }]
 const wh = computed(() => (warehouse.value === 'all' ? '' : warehouse.value))
 const cards = computed(() => (v.value ? filterCards(v.value.cards, { search: search.value, warehouse: wh.value, low: low.value }) : []))
 const docs = computed(() => (v.value ? filterDocs(v.value.docs, { search: search.value, kind: kind.value === 'all' ? '' : kind.value, warehouse: wh.value }) : []))
@@ -76,7 +77,29 @@ const itemOptions = computed(() => {
     return { value: s.itemId, label: `${it.code ? it.code + ' · ' : ''}${it.name ?? '?'} (${it.unit ?? ''})` }
   })
 })
-const docKindOptions = [{ value: 'receipt', label: 'Príjemka' }, { value: 'issue', label: 'Výdajka' }, { value: 'count', label: 'Inventúrny rozdiel' }]
+const docKindOptions = computed(() => [
+  { value: 'receipt', label: 'Príjemka' },
+  { value: 'issue', label: 'Výdajka' },
+  { value: 'count', label: 'Inventúrny rozdiel' },
+  ...(multi.value || form.value?.kind === 'transfer' ? [{ value: 'transfer', label: 'Presun medzi skladmi' }] : []),
+])
+const methodLabel = computed(() => (v.value?.methods ?? []).find((m) => m.code === v.value.method)?.label ?? '')
+// prijaté faktúry na väzbu príjemky (načítajú sa pri prvom otvorení formulára)
+const purchases = ref(null)
+async function loadPurchases() {
+  if (purchases.value) return
+  try {
+    const y = new Date().getFullYear()
+    const [a, b] = await Promise.all([api.purchases(session.companyId, { year: y }), api.purchases(session.companyId, { year: y - 1 })])
+    purchases.value = [...a, ...b]
+  } catch {
+    purchases.value = []
+  }
+}
+const purchaseOptions = computed(() => [
+  { value: 0, label: 'Bez väzby' },
+  ...(purchases.value ?? []).map((p) => ({ value: p.id, label: `${p.number} · ${p.supplier?.name ?? ''} · ${formatAmount(p.summary?.total)} €` })),
+])
 const title = computed(() => {
   if (mode.value === 'card') return current.value?.name ?? 'Skladová karta'
   return form.value?.id ? `${docLabel(form.value)} ${form.value.number}` : 'Nový skladový doklad'
@@ -84,10 +107,11 @@ const title = computed(() => {
 const readonly = computed(() => !canWrite.value || form.value?.auto)
 
 function editDoc(d) {
+  loadPurchases()
   errors.value = {}
   form.value = d
     ? { ...d, date: fromISODate(d.date) }
-    : { id: 0, kind: 'receipt', date: new Date(), warehouse: v.value.warehouses[0].code, partner: '', note: '', return: false }
+    : { id: 0, kind: 'receipt', date: new Date(), warehouse: v.value.warehouses[0].code, to: '', partner: '', note: '', return: false, linkId: 0 }
   lines.value = d
     ? d.lines.map((l) => ({ itemId: l.itemId, quantity: String(l.quantity), unitCost: Number(l.unitCost) ? String(l.unitCost) : '', name: l.name, unit: l.unit, total: l.total }))
     : [blankLine()]
@@ -114,7 +138,8 @@ async function saveDoc() {
     const f = form.value
     const saved = await api.saveStockDoc(session.companyId, {
       id: f.id || undefined, kind: f.kind, date: toISODate(f.date), warehouse: f.warehouse, partner: f.partner, note: f.note,
-      return: f.kind === 'receipt' && f.return, lines: apiLines(lines.value),
+      return: f.kind === 'receipt' && f.return, lines: apiLines(lines.value), to: f.kind === 'transfer' ? f.to : '',
+      ...(f.kind === 'receipt' && !f.return && f.linkId ? { linkKind: 'purchase', linkId: f.linkId } : {}),
     })
     toast.add({ severity: 'success', summary: f.id ? 'Doklad upravený' : 'Doklad vytvorený', detail: saved.number, life: 3000 })
     open.value = false
@@ -150,11 +175,18 @@ function removeDoc() {
 // ---- nastavenie ----
 const setup = ref(null)
 const setupErrors = ref({})
+let keepSetup = false // po vytvorení odkazu ostanú neuložené zmeny nastavenia
 watch([tab, v], () => {
+  if (keepSetup) {
+    keepSetup = false
+    return
+  }
   if (tab.value === 'setup' && v.value) {
     setup.value = {
       warehouses: v.value.warehouses.map((w) => ({ ...w })),
       items: v.value.items.map((i) => ({ ...i, min: Number(i.min) ? String(i.min) : '' })),
+      method: v.value.method,
+      orders: v.value.orders,
     }
   }
 })
@@ -177,6 +209,8 @@ async function saveSetup() {
     await api.saveStockConfig(session.companyId, {
       warehouses: setup.value.warehouses,
       items: setup.value.items.map((i) => ({ itemId: i.itemId, kind: i.kind, min: String(i.min || '0').replace(/\s/g, '').replace(',', '.') })),
+      method: setup.value.method,
+      orders: setup.value.orders,
     })
     toast.add({ severity: 'success', summary: 'Nastavenie skladu uložené', life: 2500 })
     await load()
@@ -188,6 +222,42 @@ async function saveSetup() {
   }
 }
 const setupError = computed(() => Object.values(setupErrors.value)[0])
+
+// odkaz pre e-shop
+const feedToken = ref('')
+const local = localOnly(window.location.origin)
+const feedBusy = ref(false)
+const feedURLs = computed(() => {
+  const base = `${window.location.origin}/api/public/stock/${session.companyId}/${feedToken.value}`
+  return [
+    { label: 'Zásoby JSON', url: `${base}/zasoby.json` },
+    { label: 'Zásoby CSV', url: `${base}/zasoby.csv` },
+    { label: 'Objednávky (POST)', url: `${base}/objednavky` },
+  ]
+})
+async function createFeed() {
+  feedBusy.value = true
+  try {
+    feedToken.value = (await api.createStockFeed(session.companyId)).token
+    keepSetup = true
+    await load()
+  } catch (e) {
+    toast.add({ severity: 'error', summary: 'Odkaz sa nevytvoril', detail: e.message, life: 6000 })
+  } finally {
+    feedBusy.value = false
+  }
+}
+async function revokeFeed() {
+  try {
+    await api.revokeStockFeed(session.companyId)
+    feedToken.value = ''
+    keepSetup = true
+    await load()
+    toast.add({ severity: 'info', summary: 'Odkaz zrušený', life: 3000 })
+  } catch (e) {
+    toast.add({ severity: 'error', summary: 'Nepodarilo sa', detail: e.message, life: 6000 })
+  }
+}
 </script>
 
 <template>
@@ -207,7 +277,7 @@ const setupError = computed(() => Object.values(setupErrors.value)[0])
           <span class="label">Pod minimom</span>
           <span class="value" :class="{ bad: lowCount }">{{ lowCount }}</span>
         </div>
-        <div class="cell"><span class="label">Ocenenie</span><span class="value small">vážený priemer</span></div>
+        <div class="cell"><span class="label">Ocenenie</span><span class="value small">{{ methodLabel }}</span></div>
       </section>
 
       <p v-if="v.problems.length" class="warn">
@@ -264,7 +334,7 @@ const setupError = computed(() => Object.values(setupErrors.value)[0])
               <tr v-for="d in docs" :key="d.id" tabindex="0" @click="editDoc(d)" @keydown.enter="editDoc(d)">
                 <td class="date">{{ formatDate(d.date) }}</td>
                 <td>
-                  <b>{{ d.number }}</b> <span class="kind">{{ docLabel(d) }}<template v-if="multi"> · {{ d.warehouse }}</template></span>
+                  <b>{{ d.number }}</b> <span class="kind">{{ docLabel(d) }}<template v-if="multi"> · {{ d.warehouse }}<template v-if="d.to"> → {{ d.to }}</template></template></span>
                   <span v-if="d.auto" class="tag">z faktúry</span>
                 </td>
                 <td class="text">
@@ -291,6 +361,15 @@ const setupError = computed(() => Object.values(setupErrors.value)[0])
           <p class="hint">Výdajky z faktúr idú z prvého skladu.</p>
         </div>
         <div class="sheet pad">
+          <h2>Ocenenie zásob</h2>
+          <Select v-model="setup.method" :options="v.methods" option-label="label" option-value="code" size="small" class="method" :disabled="!canWrite" aria-label="Spôsob ocenenia" />
+          <p v-if="setup.method !== v.method" class="warn">
+            Zmena spôsobu prepočíta ocenenie všetkých výdajov od začiatku. Spôsob sa podľa zákona o účtovníctve mení iba výnimočne
+            a od začiatku účtovného obdobia — poraďte sa s účtovníkom.
+          </p>
+          <p v-else class="hint">Vážený priemer sa prepočíta pri každom príjme; pri FIFO sa vydáva najstaršia zásoba za jej cenu.</p>
+        </div>
+        <div class="sheet pad">
           <h2>Skladové položky</h2>
           <p class="hint">
             Položky cenníka, ktoré vediete na sklade. Druh určuje účty v podvojnom účtovníctve (tovar 132, materiál 112, výrobky 123).
@@ -305,6 +384,34 @@ const setupError = computed(() => Object.values(setupErrors.value)[0])
           </div>
           <Select v-if="canWrite" v-model="addItem" :options="catalogOptions" option-label="label" option-value="value" filter size="small" class="add-item"
             placeholder="Pridať položku z cenníka" :empty-message="'Všetky položky cenníka sú na sklade'" @update:model-value="pickItem" />
+        </div>
+        <div class="sheet pad">
+          <h2>E-shop</h2>
+          <p class="hint">
+            E-shop si stiahne zásoby a ceny z tajného odkazu (JSON alebo CSV, kód položky z cenníka) a môže posielať objednávky,
+            z ktorých vzniknú výdajky. Konektory pre konkrétne e-shopy (Shoptet, WooCommerce…) pribudnú.
+          </p>
+          <p v-if="local" class="warn">
+            Fiškus beží iba na tomto počítači — e-shop na internete sa k odkazu nedostane. Použite serverovú verziu Fiškusa
+            alebo konektor e-shopu (pribudne), ktorý zásoby posiela sám.
+          </p>
+          <template v-if="feedToken">
+            <p class="once"><i class="pi pi-key" /> Odkaz si skopírujte teraz — znova sa neukáže.</p>
+            <label v-for="u in feedURLs" :key="u.label" class="url">
+              <span>{{ u.label }}</span>
+              <InputText :model-value="u.url" readonly size="small" fluid @focus="$event.target.select()" />
+            </label>
+            <p class="hint">
+              Objednávka: <code>POST {{ feedURLs[2].url }}</code> s hlavičkou <code>X-Fiskus: 1</code> a telom
+              <code>{"order":"2026-123","customer":"…","lines":[{"code":"K5","quantity":"2"}]}</code>; zrušenie <code>"cancel":true</code>.
+            </p>
+          </template>
+          <p v-else-if="v.feedActive" class="hint"><i class="pi pi-check-circle ok" /> Odkaz je aktívny od {{ new Date(v.feedCreated * 1000).toLocaleDateString('sk-SK') }}.</p>
+          <label class="check"><Checkbox v-model="setup.orders" binary :disabled="!canWrite" /> <span>Povoliť e-shopu posielať objednávky (výdajky)</span></label>
+          <div v-if="canWrite" class="actions">
+            <Button :label="v.feedActive ? 'Nový odkaz' : 'Vytvoriť odkaz pre e-shop'" icon="pi pi-link" size="small" severity="secondary" outlined :loading="feedBusy" @click="createFeed" />
+            <Button v-if="v.feedActive" label="Zrušiť odkaz" severity="danger" text size="small" @click="revokeFeed" />
+          </div>
         </div>
         <p v-if="setupError" class="warn">{{ setupError }}</p>
         <div v-if="canWrite" class="actions">
@@ -349,21 +456,29 @@ const setupError = computed(() => Object.values(setupErrors.value)[0])
           <FormField v-if="multi" label="Sklad" :error="errors.warehouse">
             <Select v-model="form.warehouse" :options="warehouseOptions.slice(1)" option-label="label" option-value="value" size="small" fluid :disabled="readonly" />
           </FormField>
-          <FormField :label="form.kind === 'receipt' ? 'Dodávateľ' : form.kind === 'issue' ? 'Odberateľ / komu' : 'Inventúru vykonal'" :span="multi ? 1 : 2">
+          <FormField v-if="form.kind === 'transfer'" label="Do skladu" :error="errors.to">
+            <Select v-model="form.to" :options="warehouseOptions.slice(1).filter((w) => w.value !== form.warehouse)" option-label="label" option-value="value"
+              size="small" fluid :disabled="readonly" :invalid="!!errors.to" />
+          </FormField>
+          <FormField :label="{ receipt: 'Dodávateľ', issue: 'Odberateľ / komu', count: 'Inventúru vykonal', transfer: 'Presunul' }[form.kind]" :span="multi ? 1 : 2">
             <InputText v-model="form.partner" size="small" :disabled="readonly" />
           </FormField>
         </div>
-        <label v-if="form.kind === 'receipt'" class="check"><Checkbox v-model="form.return" binary :disabled="readonly" /> <span>Vrátenie od odberateľa (ocení sa priemernou cenou)</span></label>
+        <FormField v-if="form.kind === 'receipt' && !form.return" label="K prijatej faktúre" :error="errors.linkId" hint="Nepovinné — dodávateľa doplní z faktúry">
+          <Select v-model="form.linkId" :options="purchaseOptions" option-label="label" option-value="value" filter size="small" fluid :disabled="readonly"
+            :loading="purchases === null" />
+        </FormField>
+        <label v-if="form.kind === 'receipt'" class="check"><Checkbox v-model="form.return" binary :disabled="readonly" /> <span>Vrátenie od odberateľa (ocení sa cenou zo skladu)</span></label>
         <p v-if="form.kind === 'count'" class="hint">Prebytok zadajte kladným množstvom (s cenou), manko záporným — ocení sa priemernou cenou.</p>
 
         <div class="doc-lines">
-          <div class="dl-head"><span>Položka</span><span class="num">Množstvo</span><span class="num">{{ form.kind === 'issue' || form.return ? 'Ocenenie' : 'Cena za MJ' }}</span><span /></div>
+          <div class="dl-head"><span>Položka</span><span class="num">Množstvo</span><span class="num">{{ form.kind === 'issue' || form.kind === 'transfer' || form.return ? 'Ocenenie' : 'Cena za MJ' }}</span><span /></div>
           <div v-for="(l, i) in lines" :key="i" class="dl-row">
             <Select v-model="l.itemId" :options="itemOptions" option-label="label" option-value="value" filter size="small" fluid placeholder="Položka"
               :disabled="readonly" :invalid="!!errors[`lines[${i}].itemId`]" :aria-label="`Položka ${i + 1}`" />
             <InputText v-model="l.quantity" size="small" inputmode="decimal" class="num-in" :disabled="readonly" :invalid="!!errors[`lines[${i}].quantity`]" :aria-label="`Množstvo ${i + 1}`" />
             <InputText v-if="needsCost(form.kind, l.quantity, form.return)" v-model="l.unitCost" size="small" inputmode="decimal" class="num-in" :disabled="readonly" :aria-label="`Cena ${i + 1}`" />
-            <span v-else class="auto-cost">{{ l.total !== undefined && form.id ? formatAmount(l.total) + ' €' : 'priemerom' }}</span>
+            <span v-else class="auto-cost">{{ l.total !== undefined && form.id ? formatAmount(l.total) + ' €' : (v.method === 'fifo' ? 'podľa FIFO' : 'priemerom') }}</span>
             <Button v-if="!readonly" icon="pi pi-times" text rounded size="small" severity="secondary" :disabled="lines.length < 2" :aria-label="`Odstrániť riadok ${i + 1}`" @click="lines.splice(i, 1)" />
           </div>
           <small v-for="(msg, k) in errors" v-show="k.startsWith('lines')" :key="k" class="err">{{ msg }}</small>
@@ -600,6 +715,31 @@ const setupError = computed(() => Object.values(setupErrors.value)[0])
 .num-in :deep(input),
 .num-in {
   text-align: right;
+}
+.method {
+  width: min(420px, 100%);
+}
+.once {
+  font-weight: 600;
+  margin: 6px 0;
+  font-size: var(--fs-sm);
+}
+.url {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--fs-sm);
+  color: var(--ink-soft);
+  margin-bottom: 6px;
+}
+.url :deep(input),
+code {
+  font-family: ui-monospace, monospace;
+  font-size: var(--fs-xs);
+  word-break: break-all;
+}
+.ok {
+  color: var(--tone-paid);
 }
 .add-item {
   margin-top: 8px;
