@@ -297,6 +297,17 @@ func (s *Store) GetInvoice(_ context.Context, companyID, id int64) (invoice.Invo
 	return clone(inv), nil
 }
 
+func (s *Store) DeleteInvoice(_ context.Context, companyID, id int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	inv, ok := s.invoices[id]
+	if !ok || inv.CompanyID != companyID {
+		return store.ErrNotFound
+	}
+	delete(s.invoices, id)
+	return nil
+}
+
 func (s *Store) SaveInvoice(_ context.Context, companyID int64, inv *invoice.Invoice) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

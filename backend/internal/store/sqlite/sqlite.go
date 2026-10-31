@@ -528,6 +528,25 @@ func (s *Store) GetInvoice(ctx context.Context, companyID, id int64) (invoice.In
 	return inv, s.loadLines(ctx, &inv)
 }
 
+func (s *Store) DeleteInvoice(ctx context.Context, companyID, id int64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, "DELETE FROM invoices WHERE id = ? AND company_id = ?", id, companyID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM invoice_lines WHERE invoice_id = ?", id); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (s *Store) SaveInvoice(ctx context.Context, companyID int64, inv *invoice.Invoice) error {
 	summary, err := json.Marshal(inv.Summary)
 	if err != nil {
