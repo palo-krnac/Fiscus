@@ -546,6 +546,7 @@ export const dimColumns = [
   money('Výsledok', (r) => r.result),
 ]
 
+export const importWarningColumns = [t('Č.', (r) => r.n, 6), t('Upozornenie', (r) => r.text, 90)]
 const stockKind = (r) => (r.return ? 'Príjemka – vrátenie' : { receipt: 'Príjemka', issue: 'Výdajka', count: 'Inventúrny rozdiel', transfer: 'Presun' }[r.kind] ?? r.kind)
 const num = (header, value) => ({ header, value: (r) => Number(value(r)), type: 'number', width: 12 })
 

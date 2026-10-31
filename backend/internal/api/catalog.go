@@ -75,3 +75,20 @@ func (s *Server) importItems(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, res)
 }
+
+// importPohoda: POST …/import/pohoda — telo je XML export z POHODY;
+// ?apply=1 prenos vykoná, inak vráti náhľad.
+func (s *Server) importPohoda(w http.ResponseWriter, r *http.Request) {
+	cid, _ := pathID(w, r, "cid")
+	data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, app.MaxPohodaBytes))
+	if err != nil {
+		writeErr(w, http.StatusRequestEntityTooLarge, "Súbor je príliš veľký (najviac 50 MB)", nil)
+		return
+	}
+	res, err := s.App.ImportPohoda(r.Context(), cid, data, r.URL.Query().Get("apply") == "1")
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}

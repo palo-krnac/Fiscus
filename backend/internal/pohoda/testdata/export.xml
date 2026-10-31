@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="Windows-1250"?>
+<rsp:responsePack version="2.0" id="Ex001" state="ok" application="POHODA" xmlns:rsp="http://www.stormware.cz/schema/version_2/response.xsd" xmlns:lst="http://www.stormware.cz/schema/version_2/list.xsd" xmlns:lAdb="http://www.stormware.cz/schema/version_2/list_addBook.xsd" xmlns:lStk="http://www.stormware.cz/schema/version_2/list_stock.xsd" xmlns:adb="http://www.stormware.cz/schema/version_2/addressbook.xsd" xmlns:stk="http://www.stormware.cz/schema/version_2/stock.xsd" xmlns:inv="http://www.stormware.cz/schema/version_2/invoice.xsd" xmlns:typ="http://www.stormware.cz/schema/version_2/type.xsd" xmlns:ord="http://www.stormware.cz/schema/version_2/order.xsd">
+ <rsp:responsePackItem version="2.0" id="a1" state="ok">
+  <lAdb:listAddressBook version="2.0">
+   <lAdb:addressbook version="2.0">
+    <adb:addressbookHeader>
+     <adb:identity><typ:address><typ:company>Kováč a syn s.r.o.</typ:company><typ:city>Žilina</typ:city><typ:street>Hlinkova 12</typ:street><typ:zip>010 01</typ:zip><typ:ico>36123455</typ:ico><typ:dic>2020123457</typ:dic><typ:icDph>SK2020123457</typ:icDph><typ:country><typ:ids>SK</typ:ids></typ:country></typ:address></adb:identity>
+     <adb:email>info@kovac.sk</adb:email><adb:phone>+421 41 555 000</adb:phone>
+    </adb:addressbookHeader>
+   </lAdb:addressbook>
+   <lAdb:addressbook version="2.0">
+    <adb:addressbookHeader><adb:identity><typ:address><typ:name>Ján Šťastný</typ:name><typ:city>Banská Bystrica</typ:city></typ:address></adb:identity></adb:addressbookHeader>
+   </lAdb:addressbook>
+  </lAdb:listAddressBook>
+ </rsp:responsePackItem>
+ <rsp:responsePackItem version="2.0" id="a2" state="ok">
+  <lStk:listStock version="2.0">
+   <lStk:stock version="2.0">
+    <stk:stockHeader><stk:stockType>card</stk:stockType><stk:code>REL24</stk:code><stk:name>Relé 24 V</stk:name><stk:unit>ks</stk:unit><stk:sellingRateVAT>high</stk:sellingRateVAT><stk:sellingPrice payVAT="false">12.5</stk:sellingPrice><stk:purchasingPrice payVAT="false">7.5</stk:purchasingPrice><stk:count>20</stk:count></stk:stockHeader>
+   </lStk:stock>
+  </lStk:listStock>
+ </rsp:responsePackItem>
+ <rsp:responsePackItem version="2.0" id="a3" state="ok">
+  <lst:listInvoice version="2.0" invoiceVersion="2.0">
+   <lst:invoice version="2.0">
+    <inv:invoiceHeader><inv:invoiceType>issuedInvoice</inv:invoiceType><inv:number><typ:numberRequested>260100015</typ:numberRequested></inv:number><inv:symVar>260100015</inv:symVar><inv:date>2026-03-02</inv:date><inv:dateTax>2026-03-01</inv:dateTax><inv:dateDue>2026-03-16</inv:dateDue><inv:text>Montáž rozvádzača</inv:text>
+     <inv:partnerIdentity><typ:address><typ:company>Kováč a syn s.r.o.</typ:company><typ:city>Žilina</typ:city><typ:ico>36123455</typ:ico><typ:icDph>SK2020123457</typ:icDph></typ:address></inv:partnerIdentity>
+     <inv:liquidation><typ:amountHome>173.31</typ:amountHome></inv:liquidation>
+    </inv:invoiceHeader>
+    <inv:invoiceDetail>
+     <inv:invoiceItem><inv:text>Montáž</inv:text><inv:quantity>2</inv:quantity><inv:unit>hod</inv:unit><inv:payVAT>false</inv:payVAT><inv:rateVAT>high</inv:rateVAT><inv:homeCurrency><typ:unitPrice>40</typ:unitPrice><typ:price>80</typ:price><typ:priceVAT>18.4</typ:priceVAT><typ:priceSum>98.4</typ:priceSum></inv:homeCurrency></inv:invoiceItem>
+     <inv:invoiceItem><inv:text>Relé 24 V</inv:text><inv:quantity>5</inv:quantity><inv:unit>ks</inv:unit><inv:payVAT>false</inv:payVAT><inv:rateVAT>high</inv:rateVAT><inv:homeCurrency><typ:unitPrice>12.18</typ:unitPrice></inv:homeCurrency><inv:code>REL24</inv:code></inv:invoiceItem>
+    </inv:invoiceDetail>
+    <inv:invoiceSummary><inv:homeCurrency><typ:priceNone>0</typ:priceNone><typ:priceHigh>140.9</typ:priceHigh><typ:priceHighVAT>32.41</typ:priceHighVAT></inv:homeCurrency></inv:invoiceSummary>
+   </lst:invoice>
+   <lst:invoice version="2.0">
+    <inv:invoiceHeader><inv:invoiceType>issuedCreditNotice</inv:invoiceType><inv:number><typ:numberRequested>260200001</typ:numberRequested></inv:number><inv:originalDocument>260100015</inv:originalDocument><inv:date>2026-03-10</inv:date><inv:dateTax>2026-03-10</inv:dateTax><inv:dateDue>2026-03-24</inv:dateDue><inv:text>Vrátené relé</inv:text>
+     <inv:partnerIdentity><typ:address><typ:company>Kováč a syn s.r.o.</typ:company><typ:ico>36123455</typ:ico></typ:address></inv:partnerIdentity></inv:invoiceHeader>
+    <inv:invoiceDetail><inv:invoiceItem><inv:text>Relé 24 V</inv:text><inv:quantity>-1</inv:quantity><inv:unit>ks</inv:unit><inv:rateVAT>high</inv:rateVAT><inv:homeCurrency><typ:unitPrice>12.18</typ:unitPrice><typ:price>-12.18</typ:price></inv:homeCurrency></inv:invoiceItem></inv:invoiceDetail>
+   </lst:invoice>
+   <lst:invoice version="2.0">
+    <inv:invoiceHeader><inv:invoiceType>receivedInvoice</inv:invoiceType><inv:number><typ:numberRequested>26PF0007</typ:numberRequested></inv:number><inv:originalDocument>2026001234</inv:originalDocument><inv:date>2026-03-05</inv:date><inv:dateTax>2026-03-07</inv:dateTax><inv:dateDue>2026-03-19</inv:dateDue><inv:text>Elektroinštalačný materiál</inv:text>
+     <inv:partnerIdentity><typ:address><typ:company>Elektro veľkoobchod BB s.r.o.</typ:company><typ:ico>31322832</typ:ico><typ:icDph>SK2020372640</typ:icDph></typ:address></inv:partnerIdentity></inv:invoiceHeader>
+    <inv:invoiceSummary><inv:homeCurrency><typ:priceHigh>100</typ:priceHigh><typ:priceHighVAT>23</typ:priceHighVAT><typ:price3>10</typ:price3><typ:price3VAT>0.5</typ:price3VAT></inv:homeCurrency></inv:invoiceSummary>
+   </lst:invoice>
+   <lst:invoice version="2.0">
+    <inv:invoiceHeader><inv:invoiceType>issuedProformaInvoice</inv:invoiceType><inv:number><typ:numberRequested>260300002</typ:numberRequested></inv:number><inv:date>2026-03-12</inv:date></inv:invoiceHeader>
+   </lst:invoice>
+  </lst:listInvoice>
+ </rsp:responsePackItem>
+ <rsp:responsePackItem version="2.0" id="a4" state="ok"><ord:order version="2.0"><ord:orderHeader><ord:orderType>receivedOrder</ord:orderType></ord:orderHeader></ord:order></rsp:responsePackItem>
+</rsp:responsePack>
