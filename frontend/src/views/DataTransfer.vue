@@ -144,7 +144,7 @@ async function run() {
         <template v-else>
           <input ref="fileInput" type="file" :accept="selected.accept" class="visually-hidden" @change="pick" />
           <div class="actions">
-            <Button icon="pi pi-upload" :label="file ? 'Vybrať iný súbor' : selected.kinds ? 'Vybrať tabuľku' : 'Vybrať súbor XML'" :severity="file ? 'secondary' : undefined"
+            <Button icon="pi pi-upload" :label="file ? 'Vybrať iný súbor' : selected.pick ?? 'Vybrať súbor XML'" :severity="file ? 'secondary' : undefined"
               :outlined="!!file" size="small" :loading="busy && !file" @click="fileInput.click()" />
             <span v-if="file" class="file">{{ file.name }}</span>
           </div>

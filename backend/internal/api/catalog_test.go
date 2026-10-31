@@ -68,4 +68,7 @@ func TestImportMigrateAPI(t *testing.T) {
 		t.Fatalf("prenos: %+v", rep)
 	}
 	e.do("POST", base+"pohoda", string(money), 422, nil) // súbor Money nie je POHODA
+	e.do("POST", base+"omega", string(money), 422, nil)
+	omega, _ := os.ReadFile("../omega/testdata/export.txt")
+	e.do("POST", base+"omega", string(omega), 200, nil)
 }

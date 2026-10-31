@@ -501,7 +501,7 @@ func Number(s string) (money.Dec, error) {
 	return money.Parse(s)
 }
 
-var reDate = regexp.MustCompile(`^(\d{1,2})\s*[./-]\s*(\d{1,2})\s*[./-]\s*(\d{4})$`)
+var reDate = regexp.MustCompile(`^(\d{1,2})\s*[./,-]\s*(\d{1,2})\s*[./,-]\s*(\d{4})$`)
 
 // Date prečíta dátum: 2026-03-02, 2.3.2026, 02. 03. 2026, 2/3/2026
 // (deň/mesiac) aj poradové číslo dňa z Excelu. Prázdny reťazec je nulový
