@@ -34,10 +34,10 @@ describe('prenos dát', () => {
   ])('hľadanie v upozorneniach „%s“', (q, n) => {
     expect(filterWarnings(report.warnings, q)).toHaveLength(n)
   })
-  it.each(['pohoda', 'money', 'omega', 'table'])('zdroj %s je hotový', (id) => {
+  it.each(['pohoda', 'money', 'omega', 'idoklad', 'table'])('zdroj %s je hotový', (id) => {
     const s = sources.find((x) => x.id === id)
     expect(s.ready).toBe(true)
-    expect(s.accept).toMatch({ table: /\.xlsx/, omega: /\.txt/ }[id] ?? /\.xml/)
+    expect(s.accept).toMatch({ table: /\.xlsx/, omega: /\.txt/, idoklad: /\.zip/ }[id] ?? /\.xml/)
   })
   it('agendy Money S3', () => {
     expect(otherText({ ObjPrij: 3, PokDokl: 1 })).toBe('prijaté objednávky 3, pokladničné doklady 1')

@@ -64,9 +64,10 @@ type MigrateOptions struct {
 }
 
 type migContact struct {
-	Party invoice.Party
-	Phone string
-	Note  string
+	Party   invoice.Party
+	Phone   string
+	Note    string
+	fromDoc bool // z faktúry: ak už je, nepočíta sa
 }
 
 // migInvoice je vydaná faktúra alebo dobropis zo zdroja.
@@ -103,6 +104,9 @@ type migration struct {
 	Skips    []migSkip
 	Other    map[string]int
 	Warnings []string // upozornenia z prevodu (neznámy štát…)
+	// ContactsFromDocs: zdroj neposiela adresár — kontakty sa založia
+	// z odberateľov a dodávateľov na faktúrach.
+	ContactsFromDocs bool
 }
 
 // agendy na počty preskočených záznamov
@@ -161,7 +165,21 @@ func (a *App) migrate(ctx context.Context, companyID int64, m migration, opt Mig
 	for _, c := range contacts {
 		known[key(c.ICO, c.Name)] = true
 	}
-	for _, c := range m.Contacts {
+	list0 := m.Contacts
+	if m.ContactsFromDocs {
+		list0 = append([]migContact(nil), m.Contacts...)
+		for _, mi := range m.Invoices {
+			if mi.Err == nil && mi.Inv.Customer.Name != "" {
+				list0 = append(list0, migContact{Party: mi.Inv.Customer, fromDoc: true})
+			}
+		}
+		for _, mp := range m.Purchases {
+			if mp.Err == nil && mp.P.Supplier.Name != "" {
+				list0 = append(list0, migContact{Party: mp.P.Supplier, fromDoc: true})
+			}
+		}
+	}
+	for _, c := range list0 {
 		p := c.Party
 		if p.Name == "" {
 			rep.Contacts.Skipped++
@@ -169,6 +187,9 @@ func (a *App) migrate(ctx context.Context, companyID int64, m migration, opt Mig
 			continue
 		}
 		k := key(p.ICO, p.Name)
+		if known[k] && c.fromDoc {
+			continue
+		}
 		if known[k] {
 			rep.Contacts.Existing++
 			continue

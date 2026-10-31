@@ -57,7 +57,7 @@ func (a *App) ImportPohoda(ctx context.Context, companyID int64, data []byte, op
 	if err := a.requireMigrate(ctx, companyID); err != nil {
 		return ImportReport{}, err
 	}
-	d, err := pohoda.Parse(data)
+	d, err := pohoda.ParseArchive(data, MaxMigrateBytes)
 	if err != nil {
 		return ImportReport{Source: "POHODA", Warnings: []string{}, Other: map[string]int{}}, mfaFieldErr("file", err.Error())
 	}
