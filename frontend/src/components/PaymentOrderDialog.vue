@@ -70,7 +70,7 @@ async function downloadOrder() {
         <span v-if="companyIBAN" class="iban">{{ companyIBAN }}</span>
         <span v-else class="missing">
           Firma nemá IBAN.
-          <Button v-if="can('settings.write')" label="Doplniť v nastaveniach" text size="small" @click="(visible = false), router.push('/nastavenia')" />
+          <Button v-if="can('settings.write')" label="Doplniť v nastaveniach" text size="small" @click="(visible = false), router.push('/nastavenia/doklady')" />
         </span>
       </div>
       <label class="when">

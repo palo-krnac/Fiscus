@@ -31,6 +31,11 @@ export function can(perm) {
   return hasPerm(session.me, session.companyId, perm)
 }
 
+/** Vidí používateľ položku menu (právo, správca, iba serverová verzia)? */
+export function canSee(item) {
+  return (item.superAdmin ? isSuperAdmin() : can(item.perm)) && (!item.serverOnly || session.caps.mode === 'server')
+}
+
 export function currentRole() {
   return roleFor(session.me, session.companyId)
 }

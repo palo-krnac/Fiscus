@@ -11,6 +11,7 @@ import Statements from './views/Statements.vue'
 import Placeholder from './views/Placeholder.vue'
 import Contacts from './views/Contacts.vue'
 import Settings from './views/Settings.vue'
+import SettingsHub from './views/SettingsHub.vue'
 import InvoicePrint from './views/InvoicePrint.vue'
 import PurchaseList from './views/PurchaseList.vue'
 import PurchaseEdit from './views/PurchaseEdit.vue'
@@ -34,6 +35,7 @@ import Legal from './views/Legal.vue'
 import Catalog from './views/Catalog.vue'
 import ChartOfAccounts from './views/ChartOfAccounts.vue'
 import LedgerBook from './views/LedgerBook.vue'
+import { settingsSections } from './lib/settingsNav.js'
 import DataTransfer from './views/DataTransfer.vue'
 import StockView from './views/StockView.vue'
 import Calendar from './views/Calendar.vue'
@@ -91,15 +93,8 @@ export const modules = [
     group: 'Ostatné',
     items: [
       { path: '/adresar', label: 'Adresár', icon: 'pi-address-book', ready: true, perm: 'contacts.read' },
-      { path: '/prenos', label: 'Prenos dát', icon: 'pi-file-import', ready: true, perm: 'invoices.write' },
-      { path: '/pouzivatelia', label: 'Používatelia', icon: 'pi-users', ready: true, perm: 'users.manage', serverOnly: true },
       { path: '/audit', label: 'Audit', icon: 'pi-shield', ready: true, perm: 'audit.read' },
-      { path: '/ai', label: 'Prístup pre AI', icon: 'pi-sparkles', ready: true },
-      { path: '/zalohy', label: 'Zálohy', icon: 'pi-history', ready: true, superAdmin: true },
-      { path: '/kurzy', label: 'Kurzy mien', icon: 'pi-euro', ready: true, perm: 'invoices.read' },
-      { path: '/legislativa', label: 'Legislatíva', icon: 'pi-verified', ready: true, superAdmin: true },
-      { path: '/nastavenia', label: 'Nastavenia', icon: 'pi-cog', ready: true, perm: 'settings.write' },
-      { path: '/firmy', label: 'Firmy a licencia', icon: 'pi-building', ready: true, superAdmin: true, serverOnly: true },
+      { path: '/nastavenia', label: 'Nastavenia', icon: 'pi-cog', ready: true, settingsHub: true },
     ],
   },
 ]
@@ -128,7 +123,7 @@ export const router = createRouter({
     { path: '/ponuky/nova', component: InvoiceEdit, props: { quote: true }, meta: { title: 'Nová ponuka', perm: 'invoices.write' } },
     { path: '/ponuky/:id(\\d+)', component: InvoiceEdit, props: (r) => ({ id: r.params.id, quote: true }), meta: { title: 'Cenová ponuka', perm: 'invoices.read' } },
     { path: '/ponuky/:id(\\d+)/tlac', component: InvoicePrint, props: (r) => ({ id: r.params.id, quote: true }), meta: { title: 'Cenová ponuka', bare: true, perm: 'invoices.read' } },
-    { path: '/prenos', component: DataTransfer, meta: { title: 'Prenos dát', perm: 'invoices.write' } },
+    { path: '/prenos', component: DataTransfer, meta: { settings: true, title: 'Prenos dát', perm: 'invoices.write' } },
     { path: '/kalendar', component: Calendar, meta: { title: 'Kalendár' } },
     { path: '/pravidelne', component: RecurringList, meta: { title: 'Pravidelná fakturácia', perm: 'invoices.read' } },
     { path: '/pravidelne/nova', component: InvoiceEdit, props: { recurring: true }, meta: { title: 'Nová pravidelná faktúra', perm: 'invoices.write' } },
@@ -153,19 +148,25 @@ export const router = createRouter({
     { path: '/prijate/:id(\\d+)', component: PurchaseEdit, props: true, meta: { title: 'Prijatá faktúra', perm: 'purchases.read' } },
     { path: '/adresar', component: Contacts, meta: { title: 'Adresár', perm: 'contacts.read' } },
     { path: '/adresar/:id(\\d+|novy)', component: Contacts, props: true, meta: { title: 'Adresár', perm: 'contacts.read' } },
-    { path: '/nastavenia', component: Settings, meta: { title: 'Nastavenia', perm: 'settings.write' } },
-    { path: '/pouzivatelia', component: Users, meta: { title: 'Používatelia', perm: 'users.manage' } },
-    { path: '/ai', component: AiAccess, meta: { title: 'Prístup pre AI', noCompany: true } },
-    { path: '/kurzy', component: Rates, meta: { title: 'Kurzy mien', perm: 'invoices.read' } },
-    { path: '/legislativa', component: Legal, meta: { title: 'Legislatíva', superAdmin: true, noCompany: true } },
-    { path: '/zalohy', component: Backups, meta: { title: 'Zálohy', superAdmin: true, noCompany: true } },
+    { path: '/nastavenia', component: SettingsHub, meta: { title: 'Nastavenia', noCompany: true } },
+    {
+      path: `/nastavenia/:section(${settingsSections.join('|')})`,
+      component: Settings,
+      props: true,
+      meta: { title: 'Nastavenia', settings: true, perm: 'settings.write' },
+    },
+    { path: '/pouzivatelia', component: Users, meta: { settings: true, title: 'Používatelia', perm: 'users.manage' } },
+    { path: '/ai', component: AiAccess, meta: { settings: true, title: 'Prístup pre AI', noCompany: true } },
+    { path: '/kurzy', component: Rates, meta: { settings: true, title: 'Kurzy mien', perm: 'invoices.read' } },
+    { path: '/legislativa', component: Legal, meta: { settings: true, title: 'Legislatíva', superAdmin: true, noCompany: true } },
+    { path: '/zalohy', component: Backups, meta: { settings: true, title: 'Zálohy', superAdmin: true, noCompany: true } },
     { path: '/pokladna', component: Cash, meta: { title: 'Pokladňa', perm: 'cash.read' } },
     { path: '/pokladna/:id(\\d+)/tlac', component: CashPrint, props: true, meta: { title: 'Pokladničný doklad', bare: true, perm: 'cash.read' } },
     { path: '/banka', component: Bank, meta: { title: 'Banka', perm: 'bank.read' } },
     { path: '/dph', component: VatReturn, props: { tab: 'dph' }, meta: { title: 'Priznanie k DPH', perm: 'vat.read' } },
     { path: '/kontrolny-vykaz', component: VatReturn, props: { tab: 'kv' }, meta: { title: 'Kontrolný výkaz', perm: 'vat.read' } },
     { path: '/suhrnny-vykaz', component: VatReturn, props: { tab: 'sv' }, meta: { title: 'Súhrnný výkaz', perm: 'vat.read' } },
-    { path: '/firmy', component: Companies, meta: { title: 'Firmy a licencia', superAdmin: true, noCompany: true } },
+    { path: '/firmy', component: Companies, meta: { settings: true, title: 'Firmy a licencia', superAdmin: true, noCompany: true } },
     { path: '/audit', component: AuditLog, meta: { title: 'Audit', perm: 'audit.read' } },
     ...placeholderRoutes,
     { path: '/:pathMatch(.*)*', redirect: '/faktury' },
