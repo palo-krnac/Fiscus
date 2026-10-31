@@ -31,8 +31,8 @@ const (
 // Party sú údaje partnera z riadku.
 type Party struct {
 	Name, Street, City, Zip, Country, ICO, DIC, ICDPH, Email, Phone, Note string
-	Person string // meno a priezvisko kontaktnej osoby (Outlook, Google)
-	IBAN   string
+	Person                                                                string // meno a priezvisko kontaktnej osoby (Outlook, Google)
+	IBAN                                                                  string
 }
 
 // Amount je základ a daň jednej sadzby.
@@ -178,7 +178,7 @@ var (
 
 type layout struct {
 	col      map[int][]int // stĺpec → indexy (prvá neprázdna hodnota)
-	baseRate map[int]int // sadzba → index stĺpca so základom
+	baseRate map[int]int   // sadzba → index stĺpca so základom
 	vatRate  map[int]int
 }
 

@@ -5,8 +5,8 @@ import (
 	"context"
 
 	"github.com/palo-krnac/fiscus/backend/internal/auth"
-	"github.com/palo-krnac/fiscus/backend/internal/table"
 	"github.com/palo-krnac/fiscus/backend/internal/tabimport"
+	"github.com/palo-krnac/fiscus/backend/internal/table"
 	"github.com/palo-krnac/fiscus/backend/internal/vat"
 	"github.com/palo-krnac/fiscus/backend/internal/vcard"
 )

@@ -27,7 +27,9 @@ func TestImportContacts(t *testing.T) {
 			r, err := a.ImportTable(ctx, c.ID, []byte(outlook), MigrateOptions{}, true)
 			return r.ImportReport, err
 		}, ImportCount{New: 1}},
-		{"vCard nie", func() (ImportReport, error) { return a.ImportVCard(ctx, c.ID, []byte(outlook), MigrateOptions{}, false) }, ImportCount{}},
+		{"vCard nie", func() (ImportReport, error) {
+			return a.ImportVCard(ctx, c.ID, []byte(outlook), MigrateOptions{}, false)
+		}, ImportCount{}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
