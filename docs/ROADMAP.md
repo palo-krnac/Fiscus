@@ -133,7 +133,8 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] Počiatočné stavy účtov z tabuľky (konečná súvaha alebo predvaha z iného programu: Účet; Názov; MD; D alebo jeden stĺpec so zostatkom) — návrh do editora, 211000 → 211, upozornenie na chýbajúce účty a nevyrovnané strany
 - [x] SuperFaktúra a Fakturoid: ich export pre účtovníka (POHODA, Money S3, KROS Omega alebo MRP) — formát sa rozpozná sám, aj v ZIP; kontakty z faktúr
 - [ ] KROS Alfa; priame napojenie cez API (Fakturoid, iDoklad, SuperFaktúra)
-- [ ] Konektory na e-shopy (Shoptet, WooCommerce, Shopify, PrestaShop, Upgates, Drupal Commerce, Magento): zásoby, ceny, objednávky, faktúry — podľa verejnej dokumentácie, neoverené na živom obchode
+- [x] Napojenie e-shopov WooCommerce a Shopify (neoverené na živom obchode): objednávky → koncepty faktúr (zákazník, IČO, kontaktná osoba, dodacia adresa, väzba na cenník podľa kódu, sadzba DPH z dane), „iba uhradené“, bez duplicít; stav zásob zo skladu do obchodu; na serveri zákaz volaní do vnútornej siete
+- [ ] Ďalšie e-shopy (Shoptet, PrestaShop, Upgates, Drupal Commerce, Magento), automatické načítanie podľa plánu
 
 ## Etapa 4 — mzdy (samostatný návrh)
 - [ ] Sociálna poisťovňa, zdravotné poisťovne, preddavky na daň, ročné zúčtovanie

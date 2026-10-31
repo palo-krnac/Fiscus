@@ -17,6 +17,7 @@ import CompanyLogo from '../components/CompanyLogo.vue'
 import EInvoiceSettings from '../components/EInvoiceSettings.vue'
 import SecuritySettings from '../components/SecuritySettings.vue'
 import CalendarSyncPanel from '../components/CalendarSyncPanel.vue'
+import EshopSettings from '../components/EshopSettings.vue'
 import { currentSetting, errorSection } from '../lib/settingsNav.js'
 import { useRouter } from 'vue-router'
 
@@ -271,6 +272,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
       <EInvoiceSettings v-if="section === 'e-faktury'" />
       <CalendarSyncPanel v-if="section === 'kalendar'" />
       <SecuritySettings v-if="section === 'bezpecnost'" />
+      <EshopSettings v-if="section === 'e-shopy'" />
     </div>
   </div>
 </template>

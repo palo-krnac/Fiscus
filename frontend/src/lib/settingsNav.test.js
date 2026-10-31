@@ -3,7 +3,7 @@ import { currentSetting, errorSection, isSettingsPath, sectionOfField, settingsS
 
 describe('nastavenia po sekciách', () => {
   it('sekcie stránky Nastavenia', () => {
-    expect(settingsSections).toEqual(['firma', 'dph', 'doklady', 'e-faktury', 'kalendar', 'bezpecnost'])
+    expect(settingsSections).toEqual(['firma', 'dph', 'doklady', 'e-faktury', 'kalendar', 'bezpecnost', 'e-shopy'])
   })
   it.each([
     ['/nastavenia', true],
