@@ -123,7 +123,8 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 ## Prenos dát z iných programov
 - [x] POHODA (XML export, aj Windows-1250): adresár, zásoby do cenníka, vydané faktúry a dobropisy s pôvodnými číslami a úhradami, prijaté faktúry; náhľad pred prenosom, opakovaný prenos nevytvorí duplicity, číselný rad pokračuje za prenesenými číslami
 - [x] Money S3 (XML export, slovenská aj česká verzia, Windows-1250): adresár, zásoby, vydané faktúry a dobropisy, prijaté faktúry; položky so zľavou alebo zmiešanými cenami podľa rekapitulácie DPH; voľba „faktúry so splatnosťou do … sú uhradené“ (Money úhrady neexportuje, platí aj pre POHODU)
-- [ ] KROS Alfa/Omega, SuperFaktúra, iDoklad, Fakturoid (API), všeobecný Excel/CSV; počiatočné stavy
+- [x] Všeobecná tabuľka Excel/CSV z ľubovoľného programu: adresár, cenník, vydané alebo prijaté faktúry (riadok = faktúra, sumy po sadzbách, iba základ a DPH alebo iba suma so sadzbou); stĺpce podľa hlavičky (SK/CZ/EN), dátumy aj z Excelu, úhrada (áno/dátum), dobropisy; vzory na stiahnutie
+- [ ] KROS Alfa/Omega, iDoklad, MRP, potom SuperFaktúra a Fakturoid (API); počiatočné stavy
 - [ ] Konektory na e-shopy (Shoptet, WooCommerce, Shopify, PrestaShop, Upgates, Drupal Commerce, Magento): zásoby, ceny, objednávky, faktúry — podľa verejnej dokumentácie, neoverené na živom obchode
 
 ## Etapa 4 — mzdy (samostatný návrh)

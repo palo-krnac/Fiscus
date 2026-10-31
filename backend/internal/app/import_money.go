@@ -138,7 +138,7 @@ func moneyMigration(d moneys3.Data) migration {
 			if inv.Received {
 				label = "prijatá " + label
 			}
-			m.Skips = append(m.Skips, migSkip{Purchase: inv.Received,
+			m.Skips = append(m.Skips, migSkip{Agenda: map[bool]string{true: agPurchases, false: agInvoices}[inv.Received],
 				Text: fmt.Sprintf("%s %s sa neprenáša (zálohy a ostatné doklady zadajte vo Fiškuse)", strings.ToUpper(label[:1])+label[1:], num)})
 			continue
 		}

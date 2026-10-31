@@ -51,7 +51,9 @@ func TestImportMigrateAPI(t *testing.T) {
 		name, url, body string
 		status          int
 	}{
-		{"neznámy zdroj", "kros", "<x/>", 404},
+		{"neznámy zdroj", "xyz", "<x/>", 404},
+		{"tabuľka bez druhu", "table", "Číslo;Odberateľ;Dátum;Spolu\n1;A;2.3.2026;1\n", 422},
+		{"tabuľka vydaných", "table?kind=invoices", "Číslo;Odberateľ;Dátum;Spolu\n1;A;2.3.2026;1\n", 200},
 		{"chybný dátum", "money?paidUntil=31.3.2026", string(money), 400},
 		{"iný formát", "money", `<?xml version="1.0"?><dataPack/>`, 422},
 		{"náhľad", "money?paidUntil=2026-03-31", string(money), 200},

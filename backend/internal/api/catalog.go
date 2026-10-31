@@ -79,20 +79,28 @@ func (s *Server) importItems(w http.ResponseWriter, r *http.Request) {
 }
 
 // importMigrate: POST …/import/{source} — prenos dát z iného programu
-// (pohoda, money); telo je XML export. ?apply=1 prenos vykoná, inak vráti
+// (pohoda, money: XML export; table: Excel/CSV s ?kind=contacts|items|invoices|purchases). ?apply=1 prenos vykoná, inak vráti
 // náhľad; ?paidUntil=RRRR-MM-DD označí faktúry so splatnosťou do toho dňa
 // ako uhradené.
 func (s *Server) importMigrate(w http.ResponseWriter, r *http.Request) {
 	cid, _ := pathID(w, r, "cid")
-	run := map[string]func(context.Context, int64, []byte, app.MigrateOptions, bool) (app.ImportReport, error){
-		"pohoda": s.App.ImportPohoda,
-		"money":  s.App.ImportMoney,
+	report := func(f func(context.Context, int64, []byte, app.MigrateOptions, bool) (app.ImportReport, error)) func(context.Context, int64, []byte, app.MigrateOptions, bool) (any, error) {
+		return func(ctx context.Context, cid int64, data []byte, opt app.MigrateOptions, apply bool) (any, error) {
+			return f(ctx, cid, data, opt, apply)
+		}
+	}
+	run := map[string]func(context.Context, int64, []byte, app.MigrateOptions, bool) (any, error){
+		"pohoda": report(s.App.ImportPohoda),
+		"money":  report(s.App.ImportMoney),
+		"table": func(ctx context.Context, cid int64, data []byte, opt app.MigrateOptions, apply bool) (any, error) {
+			return s.App.ImportTable(ctx, cid, data, opt, apply)
+		},
 	}[r.PathValue("source")]
 	if run == nil {
 		writeErr(w, http.StatusNotFound, "Neznámy zdroj prenosu", nil)
 		return
 	}
-	var opt app.MigrateOptions
+	opt := app.MigrateOptions{Kind: r.URL.Query().Get("kind")}
 	if v := r.URL.Query().Get("paidUntil"); v != "" {
 		d, err := invoice.ParseDate(v)
 		if err != nil {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { filterWarnings, newTotal, otherText, sources, summaryRows } from './migrate.js'
+import { filterWarnings, kindLabel, newTotal, otherText, sources, summaryRows, tableKinds, templateExport } from './migrate.js'
 
 describe('prenos dát', () => {
   const report = {
@@ -34,12 +34,25 @@ describe('prenos dát', () => {
   ])('hľadanie v upozorneniach „%s“', (q, n) => {
     expect(filterWarnings(report.warnings, q)).toHaveLength(n)
   })
-  it.each(['pohoda', 'money'])('zdroj %s je hotový', (id) => {
+  it.each(['pohoda', 'money', 'table'])('zdroj %s je hotový', (id) => {
     const s = sources.find((x) => x.id === id)
     expect(s.ready).toBe(true)
-    expect(s.accept).toContain('.xml')
+    expect(s.accept).toMatch(id === 'table' ? /\.xlsx/ : /\.xml/)
   })
   it('agendy Money S3', () => {
     expect(otherText({ ObjPrij: 3, PokDokl: 1 })).toBe('prijaté objednávky 3, pokladničné doklady 1')
+  })
+})
+
+describe('tabuľka Excel/CSV', () => {
+  it.each(tableKinds.filter((k) => k.value !== 'auto').map((k) => k.value))('vzor %s má hlavičku aj ukážku rovnako dlhú', (kind) => {
+    const { columns, rows } = templateExport(kind)
+    expect(rows).toHaveLength(1)
+    expect(columns.length).toBe(rows[0].length)
+    expect(columns[0].value(rows[0])).toBe(rows[0][0])
+  })
+  it('názov druhu', () => {
+    expect(kindLabel('purchases')).toBe('Prijaté faktúry')
+    expect(kindLabel('x')).toBe('')
   })
 })
