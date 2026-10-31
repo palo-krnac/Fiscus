@@ -3,11 +3,14 @@
 package app
 
 import (
+	"net/http"
+
 	"context"
 	"crypto/ed25519"
 	"errors"
 	"fmt"
 	"github.com/palo-krnac/fiscus/backend/internal/backup"
+	"github.com/palo-krnac/fiscus/backend/internal/calsync"
 	"github.com/palo-krnac/fiscus/backend/internal/postman"
 	"strings"
 	"sync"
@@ -50,6 +53,13 @@ type App struct {
 	BackupSetup *BackupSetup
 	// ECBURL je adresa kurzov ECB ("" = nesťahovať); FetchRates ju v testoch nahradí.
 	ECBURL string
+	// CalSync sú prihlasovacie údaje aplikácie pre Google Kalendár
+	// a Outlook zadané pri spustení (inak z nastavení); CalSyncEndpoints
+	// a HTTP nahradia testy.
+	CalSync          calsync.Config
+	CalSyncEndpoints map[calsync.Provider]calsync.Endpoints
+	HTTP             *http.Client
+	calSync          calSyncState
 	// ECBRateURL je séria základnej úrokovej sadzby ECB (CSV) pre úrok
 	// z omeškania ("" = nesťahovať, sadzby sa zadávajú ručne).
 	ECBRateURL string
