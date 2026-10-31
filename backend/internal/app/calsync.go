@@ -361,7 +361,8 @@ type CalSyncResult struct {
 
 // SyncCalendar prenesie termíny firmy do prepojeného kalendára.
 func (a *App) SyncCalendar(ctx context.Context, companyID int64) (CalSyncResult, error) {
-	if err := a.Require(ctx, companyID, ""); err != nil {
+	// zapisuje do cudzieho kalendára — iba s právom meniť nastavenia firmy
+	if err := a.Require(ctx, companyID, auth.PermSettingsWrite); err != nil {
 		return CalSyncResult{}, err
 	}
 	a.calSync.run.Lock()

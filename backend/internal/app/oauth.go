@@ -356,9 +356,27 @@ func (a *App) tokens(ctx context.Context, grantID int64) (TokenResponse, string,
 	if err != nil {
 		return TokenResponse{}, "", err
 	}
-	refresh := OAuthRefreshPrefix + strconv.FormatInt(grantID, 10) + "." + raw
+	body := OAuthRefreshPrefix + strconv.FormatInt(grantID, 10) + "." + raw
+	mac, err := a.refreshMAC(ctx, body)
+	if err != nil {
+		return TokenResponse{}, "", err
+	}
+	refresh := body + "." + mac
 	return TokenResponse{AccessToken: access, TokenType: "Bearer", ExpiresIn: int(OAuthAccessTTL.Seconds()), RefreshToken: refresh, Scope: "mcp"},
 		auth.TokenHash(refresh), nil
+}
+
+// refreshMAC je podpis obnovovacieho tokenu. Iba token s platným podpisom
+// vydal Fiškus — len taký smie pri nezhode zrušiť povolenie (inak by ktokoľvek
+// zrušil cudzie povolenia vymyslenými tokenmi fr_1.x, fr_2.x…).
+func (a *App) refreshMAC(ctx context.Context, body string) (string, error) {
+	key, err := a.oauthKey(ctx)
+	if err != nil {
+		return "", err
+	}
+	m := hmac.New(sha256.New, key)
+	m.Write([]byte("refresh|" + body))
+	return b64.EncodeToString(m.Sum(nil)[:18]), nil
 }
 
 // ExchangeCode vymení autorizačný kód za tokeny (overí PKCE).
@@ -437,6 +455,9 @@ func (a *App) RefreshOAuth(ctx context.Context, clientID, refresh string) (Token
 		return TokenResponse{}, err
 	}
 	if subtle.ConstantTimeCompare([]byte(old), []byte(k.Hash)) != 1 || a.Store.RotateAPIKey(ctx, k.ID, old, hash) != nil {
+		if !a.signedRefresh(ctx, refresh) {
+			return TokenResponse{}, bad // vymyslený token: nič nerušíme
+		}
 		// starý (už vymenený) token: niekto ho mohol ukradnúť — povolenie zrušíme
 		_ = a.Store.RevokeAPIKey(ctx, k.UserID, k.ID)
 		a.record(ctx, 0, audit.CatAI, "oauth_reuse", "api_key", k.ID,
@@ -444,6 +465,16 @@ func (a *App) RefreshOAuth(ctx context.Context, clientID, refresh string) (Token
 		return TokenResponse{}, bad
 	}
 	return resp, nil
+}
+
+// signedRefresh: token má platný podpis Fiškusa (fr_<id>.<náhoda>.<podpis>).
+func (a *App) signedRefresh(ctx context.Context, refresh string) bool {
+	i := strings.LastIndexByte(refresh, '.')
+	if i < 0 || strings.Count(refresh, ".") != 2 {
+		return false
+	}
+	want, err := a.refreshMAC(ctx, refresh[:i])
+	return err == nil && hmac.Equal([]byte(want), []byte(refresh[i+1:]))
 }
 
 // OAuthActor overí prístupový token a vráti actora s právami používateľa.

@@ -205,6 +205,31 @@ func TestAmendIssuedInvoice(t *testing.T) {
 	}
 }
 
+// Úprava nesmie faktúru presunúť do obdobia DPH, ktoré už bolo priznané.
+func TestAmendIntoClosedPeriod(t *testing.T) {
+	a, c := newApp(t, edition.Desktop)
+	d, _ := a.SaveDraft(ctx, c.ID, validDraft())
+	inv, err := a.Issue(ctx, c.ID, d.ID)
+	if err != nil || a.AmendBlock(ctx, c.ID, inv) != "" {
+		t.Fatalf("vystavená má byť upraviteľná: %v", err)
+	}
+	for _, tt := range []struct {
+		delivery string
+		ok       bool
+	}{{"2026-09-15", false}, {"2026-10-05", true}} {
+		edit := inv
+		edit.Lines = append([]invoice.Line(nil), inv.Lines...)
+		edit.DeliveryDate = invoice.MustDate(tt.delivery)
+		_, err := a.SaveDraft(ctx, c.ID, edit)
+		if tt.ok != (err == nil) || (!tt.ok && !errors.Is(err, ErrAmend)) {
+			t.Errorf("dodanie %s: %v", tt.delivery, err)
+		}
+	}
+	if stored, _ := a.Store.GetInvoice(ctx, c.ID, inv.ID); stored.DeliveryDate.String() != "2026-10-05" {
+		t.Errorf("dodanie %s", stored.DeliveryDate)
+	}
+}
+
 func TestVATDeadline(t *testing.T) {
 	for _, tt := range []struct {
 		date      string

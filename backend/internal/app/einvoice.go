@@ -60,7 +60,8 @@ func (a *App) SetEInvoiceSettings(ctx context.Context, companyID int64, s postma
 	if err != nil {
 		return postman.Settings{}, err
 	}
-	if s.Token == "" && s.Mode == old.Mode {
+	// uložený token ide iba na tú istú adresu poskytovateľa
+	if s.Token == "" && s.Mode == old.Mode && s.URL == old.URL {
 		s.Token = old.Token
 	}
 	s.TokenSet = false

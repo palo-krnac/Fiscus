@@ -270,7 +270,7 @@ func (s *Server) Handler() http.Handler {
 	need("POST /api/companies/{cid}/calendar/own/{id}/done", auth.PermLedgerWrite, s.markOwnEvent)
 	open("GET /api/companies/{cid}/calendar/sync", s.calSyncStatus)
 	need("POST /api/companies/{cid}/calendar/sync/connect", auth.PermSettingsWrite, s.calSyncConnect)
-	open("POST /api/companies/{cid}/calendar/sync/run", s.calSyncRun)
+	need("POST /api/companies/{cid}/calendar/sync/run", auth.PermSettingsWrite, s.calSyncRun)
 	need("DELETE /api/companies/{cid}/calendar/sync", auth.PermSettingsWrite, s.calSyncDisconnect)
 	open("PUT /api/calendar-sync/config", s.calSyncConfig)
 	public("GET "+app.CalSyncCallbackPath, s.calSyncCallback)

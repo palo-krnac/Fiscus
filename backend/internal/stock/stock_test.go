@@ -130,3 +130,26 @@ func TestFIFOAndTransfer(t *testing.T) {
 		t.Error("presun do toho istého skladu")
 	}
 }
+
+// Výdaj nad stav a neskorší príjem: obe metódy musia spolu oceniť výdaje
+// celou obstarávacou cenou a hodnota karty pri nulovom stave je nula.
+func TestShortageThenReceipt(t *testing.T) {
+	docs := []Doc{
+		doc(1, Issue, "2026-02-01", ln("2", "0")),
+		doc(2, Receipt, "2026-02-03", ln("10", "1.00")),
+		doc(3, Issue, "2026-02-05", ln("8", "0")),
+	}
+	for _, meth := range []Method{FIFO, Average} {
+		cards, costed, probs := Valuate(docs, meth)
+		sum := money.Zero
+		for _, d := range costed {
+			if d.Kind == Issue {
+				sum = sum.Add(d.Total)
+			}
+		}
+		c := cards[Key{"HL", 1}]
+		if sum.String() != "10.00" || !c.Quantity.IsZero() || !c.Value.IsZero() || len(probs) != 1 {
+			t.Errorf("%s: výdaje %s, stav %s/%s, problémy %v", meth, sum, c.Quantity, c.Value, probs)
+		}
+	}
+}

@@ -187,6 +187,10 @@ func (a *App) SaveEshops(ctx context.Context, companyID int64, in []EshopConn) (
 		if err != nil {
 			bad(i, "url", strings.ToUpper(err.Error()[:1])+err.Error()[1:])
 		}
+		if exists && s.URL != u {
+			// kľúče obchodu idú iba na adresu, pre ktorú boli zadané
+			s.StoredKey, s.StoredSecret = "", ""
+		}
 		s.Platform, s.URL = c.Platform, u
 		s.Name = strings.TrimSpace(c.Name)
 		if s.Name == "" {
