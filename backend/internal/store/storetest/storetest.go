@@ -1317,6 +1317,49 @@ func Run(t *testing.T, newStore Factory) {
 		}
 	})
 
+	t.Run("súbor prijatého dokladu", func(t *testing.T) {
+		s := newStore(t)
+		a, _ := s.CreateCompany(ctx, store.Company{Name: "Alfa"})
+		b, _ := s.CreateCompany(ctx, store.Company{Name: "Beta"})
+		p := &purchase.Purchase{Number: "PF1", Supplier: invoice.Party{Name: "Obchod"}, IssueDate: invoice.MustDate("2026-10-31"),
+			ReceivedDate: invoice.MustDate("2026-10-31"), DueDate: invoice.MustDate("2026-10-31"), Rates: []purchase.RateRow{{Rate: vat.Rate23, Base: m.MustParse("10"), VAT: m.MustParse("2.30")}}}
+		p.Normalize()
+		if err := s.SavePurchase(ctx, a.ID, p); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.GetPurchaseFile(ctx, a.ID, p.ID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatalf("bez súboru: %v", err)
+		}
+		f := store.PurchaseFile{CompanyID: a.ID, PurchaseID: p.ID, Name: "blocek.jpg", ContentType: "image/jpeg", Data: []byte{0xff, 0xd8, 1, 2}, Created: time.Date(2026, 10, 31, 10, 0, 0, 0, time.UTC)}
+		if err := s.SavePurchaseFile(ctx, f); err != nil {
+			t.Fatal(err)
+		}
+		f.Data[2] = 9 // úložisko má vlastnú kópiu
+		got, err := s.GetPurchaseFile(ctx, a.ID, p.ID)
+		if err != nil || got.Name != "blocek.jpg" || got.ContentType != "image/jpeg" || len(got.Data) != 4 || got.Data[2] != 1 || !got.Created.Equal(f.Created) {
+			t.Fatalf("súbor %+v %v", got, err)
+		}
+		f.Name, f.Data = "nova.png", []byte{1}
+		if err := s.SavePurchaseFile(ctx, f); err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := s.GetPurchaseFile(ctx, a.ID, p.ID); got.Name != "nova.png" || len(got.Data) != 1 {
+			t.Errorf("prepísanie %+v", got)
+		}
+		// cudzia firma ho nevidí ani nezapíše
+		if _, err := s.GetPurchaseFile(ctx, b.ID, p.ID); !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("cudzia firma číta: %v", err)
+		}
+		if err := s.SavePurchaseFile(ctx, store.PurchaseFile{CompanyID: b.ID, PurchaseID: p.ID, Data: []byte{1}}); !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("cudzia firma zapisuje: %v", err)
+		}
+		if err := s.DeletePurchase(ctx, a.ID, p.ID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.GetPurchaseFile(ctx, a.ID, p.ID); !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("súbor po zmazaní dokladu: %v", err)
+		}
+	})
 	t.Run("prijaté faktúry", func(t *testing.T) {
 		s := newStore(t)
 		a, _ := s.CreateCompany(ctx, store.Company{Name: "Alfa"})

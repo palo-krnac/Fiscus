@@ -1,6 +1,7 @@
 <script setup>
 // Prihlásený používateľ v hornej lište: rola vo firme, zmena hesla, dvojfázové overenie, odhlásenie.
 import { computed, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import Menu from 'primevue/menu'
 import Dialog from 'primevue/dialog'
 import Password from 'primevue/password'
@@ -10,6 +11,8 @@ import { api } from '../lib/api.js'
 import MFADialog from './MFADialog.vue'
 import { codes } from '../lib/codes.js'
 import { session, currentRole, logout } from '../lib/session.js'
+
+const router = useRouter()
 
 const toast = useToast()
 const menu = ref()
@@ -35,6 +38,8 @@ const initials = computed(() =>
 )
 
 const items = [
+  { label: 'Bločky z mobilu', icon: 'pi pi-camera', command: () => router.push('/m') },
+  { separator: true },
   { label: 'Zmeniť heslo', icon: 'pi pi-key', command: () => openPassword() },
   { label: 'Dvojfázové overenie', icon: 'pi pi-shield', command: () => (mfaOpen.value = true) },
   { separator: true },

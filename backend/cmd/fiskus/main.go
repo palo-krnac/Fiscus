@@ -15,6 +15,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/palo-krnac/fiscus/backend/internal/ekasa"
 	"io"
 	"log"
 	"net"
@@ -69,6 +70,7 @@ func main() {
 	viesURL := flag.String("vies-url", registry.VIESBaseURL, "adresa VIES na overenie IČ DPH; prázdne = vypnuté")
 	ruzURL := flag.String("ruz-url", registry.RUZBaseURL, "adresa API Registra účtovných závierok (záloha RPO, DIČ); prázdne = vypnuté")
 	ecbRateURL := flag.String("ecb-rate-url", reminder.ECBDataURL, "adresa základnej úrokovej sadzby ECB (CSV) pre úrok z omeškania; prázdne = vypnuté")
+	ekasaURL := flag.String("ekasa-url", ekasa.DefaultURL, "adresa služby eKasa (bločky z mobilu)")
 	ecbURL := flag.String("ecb-url", fx.ECB90, "adresa kurzov ECB (posledných 90 dní); prázdne = vypnuté, kurzy sa zadávajú ručne")
 	claudeURL := flag.String("claude-url", "", "adresa Claude API na čítanie dokladov (prázdne = api.anthropic.com)")
 	restoreFile := flag.String("restore", "", "pred spustením obnoviť databázu zo zálohy (.fbk); pôvodná sa premenuje na .pred-obnovou")
@@ -154,6 +156,7 @@ func main() {
 	a := app.New(st, caps)
 	a.PublicURL = *publicURL
 	a.ECBURL = *ecbURL
+	a.EKasaURL = *ekasaURL
 	// prihlasovacie údaje aplikácie pre Google Kalendár a Outlook (inak ich
 	// hlavný správca zadá v programe; tajomstvo sa nikdy nevypisuje)
 	a.CalSync = calsync.Config{GoogleClientID: os.Getenv("FISKUS_GOOGLE_CLIENT_ID"),

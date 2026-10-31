@@ -109,6 +109,11 @@ const isActive = (path) =>
     <RouterView v-if="session.ready" />
     <Toast position="bottom-right" />
   </template>
+  <!-- mobil (bločky): vlastná hlavička bez bočného menu -->
+  <template v-else-if="route.meta.mobile">
+    <RouterView v-if="session.ready && session.companyId && allowed" />
+    <Toast position="top-center" />
+  </template>
   <!-- tlačové zobrazenie bez menu a hlavičky -->
   <template v-else-if="route.meta.bare">
     <RouterView v-if="session.ready && session.companyId && allowed" />

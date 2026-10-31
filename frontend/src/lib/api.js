@@ -25,7 +25,10 @@ export async function request(method, path, body, fetchImpl = globalThis.fetch) 
   // ochrana proti CSRF: cudzia stránka túto hlavičku poslať nevie
   if (method !== 'GET') init.headers['X-Fiskus'] = '1'
 
-  if (typeof Blob !== 'undefined' && body instanceof Blob) {
+  if (typeof FormData !== 'undefined' && body instanceof FormData) {
+    // formulár so súbormi (multipart) — hranicu doplní prehliadač
+    init.body = body
+  } else if (typeof Blob !== 'undefined' && body instanceof Blob) {
     // súbor (napr. bankový výpis) sa posiela tak, ako je
     init.headers['Content-Type'] = body.type || 'application/octet-stream'
     init.body = body
@@ -347,6 +350,14 @@ export const api = {
   importItems: (cid, file, apply = false) => request('POST', `/api/companies/${cid}/items/import${apply ? '?apply=1' : ''}`, file),
   importOpening: (cid, file) => request('POST', `/api/companies/${cid}/ledger/opening/import`, file),
   importContacts: (cid, file, apply = false) => request('POST', `/api/companies/${cid}/contacts/import${apply ? '?apply=1' : ''}`, file),
+  scanReceipt: (cid, { qr, payment, photo }) => {
+    const f = new FormData()
+    f.append('qr', qr)
+    f.append('payment', payment)
+    if (photo) f.append('photo', photo, 'blocek.jpg')
+    return request('POST', `/api/companies/${cid}/receipts`, f)
+  },
+  purchaseFileUrl: (cid, id) => `/api/companies/${cid}/purchases/${id}/file`,
   importMigrate: (cid, source, file, { apply = false, paidUntil = '', kind = '' } = {}) => {
     const q = new URLSearchParams()
     if (apply) q.set('apply', '1')

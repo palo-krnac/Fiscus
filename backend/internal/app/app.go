@@ -64,6 +64,8 @@ type App struct {
 	// z omeškania ("" = nesťahovať, sadzby sa zadávajú ručne).
 	ECBRateURL string
 	FetchRates func(ctx context.Context, url string) ([]fx.Rate, error)
+	// EKasaURL je adresa služby eKasa na vyhľadanie bločku ("" = ekasa.DefaultURL).
+	EKasaURL string
 	// AIBaseURL je adresa Claude API ("" = api.anthropic.com; v testoch falošný server).
 	AIBaseURL string
 
