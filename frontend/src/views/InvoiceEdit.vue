@@ -11,7 +11,7 @@ import DatePicker from 'primevue/datepicker'
 import Dialog from 'primevue/dialog'
 import SelectButton from 'primevue/selectbutton'
 import Select from 'primevue/select'
-import { codes, ratesOn, supplyKindsFor, isForeign, supplyHint, domesticRCOptions, needsCommodity } from '../lib/codes.js'
+import { codes, ratesOn, supplyKindsFor, isForeign, supplyHint, domesticRCOptions, needsCommodity, countries } from '../lib/codes.js'
 import Checkbox from 'primevue/checkbox'
 import AutoComplete from 'primevue/autocomplete'
 import IcoInput from '../components/IcoInput.vue'
@@ -26,7 +26,7 @@ import {
   fromISODate, parseNumber, paymentSource, statusOf, toISODate,
 } from '../lib/format.js'
 import { fiskusGridTheme, skGridLocale } from '../lib/grid.js'
-import { contactFromCustomer, customerFromContact, dueDaysFor, filterContacts } from '../lib/contacts.js'
+import { addressKindLabel, addressText, contactFromCustomer, customerFromContact, defaultDelivery, defaultPerson, dueDaysFor, filterContacts } from '../lib/contacts.js'
 import { quoteActions, quoteStatusOf, shareInfo, validDays as quoteValidDays } from '../lib/quotes.js'
 import { firstOfNextMonth, intervals, placeholders, recurringStatusOf } from '../lib/recurring.js'
 import InputNumber from 'primevue/inputnumber'
@@ -873,6 +873,9 @@ function applyContact(ct) {
   inv.value.customer = customerFromContact(ct)
   inv.value.contactId = ct.id
   if (isQuote.value || isRecurring.value) return changed()
+  // predvolená kontaktná osoba a dodacia adresa z adresára
+  inv.value.attention = defaultPerson(ct)
+  inv.value.delivery = defaultDelivery(ct)
   const d = fromISODate(inv.value.issueDate)
   d.setDate(d.getDate() + dueDaysFor(ct, session.company))
   inv.value.dueDate = toISODate(d)
@@ -882,6 +885,32 @@ function applyContact(ct) {
 function onCustomerName(v) {
   if (v && typeof v === 'object') applyContact(v)
   else upd(inv.value.customer, 'name')(v ?? '')
+}
+
+// ---- kontaktná osoba a dodacia adresa (iba faktúry) ----
+const showExtras = computed(() => !isQuote.value && !isRecurring.value && (editable.value || inv.value?.attention || inv.value?.delivery))
+const bookContact = computed(() => contacts.value.find((x) => x.id === inv.value?.contactId) ?? null)
+const personOptions = computed(() => (bookContact.value?.persons ?? []).map((p, i) => ({ value: i, label: p.role ? `${p.name} (${p.role})` : p.name })))
+const addressOptions = computed(() =>
+  (bookContact.value?.addresses ?? []).map((a, i) => ({ value: i, label: `${addressKindLabel(a.kind)}: ${addressText(a)}` })),
+)
+function pickPerson(i) {
+  const p = bookContact.value?.persons?.[i]
+  if (p) inv.value.attention = { name: p.name, email: p.email ?? '', phone: p.phone ?? '' }
+  changed()
+}
+function pickAddress(i) {
+  const a = bookContact.value?.addresses?.[i]
+  if (a) inv.value.delivery = { name: a.name ?? '', street: a.street, city: a.city, zip: a.zip, country: a.country || 'SK' }
+  changed()
+}
+function setAttention(on) {
+  inv.value.attention = on ? (defaultPerson(bookContact.value) ?? { name: '', email: '', phone: '' }) : null
+  changed()
+}
+function setDelivery(on) {
+  inv.value.delivery = on ? (defaultDelivery(bookContact.value) ?? { name: '', street: '', city: '', zip: '', country: 'SK' }) : null
+  changed()
 }
 
 const savingContact = ref(false)
@@ -1130,6 +1159,50 @@ const customerFields = reactive([
               />
               <small v-if="fieldError(`customer.${f.key}`)" class="err">{{ fieldError(`customer.${f.key}`) }}</small>
             </label>
+          </div>
+        </fieldset>
+
+        <fieldset v-if="showExtras" class="block extras">
+          <legend>Kontaktná osoba a dodacia adresa</legend>
+          <div class="extra">
+            <label class="check">
+              <Checkbox :model-value="!!inv.attention" binary :disabled="!editable" input-id="att-on" @update:model-value="setAttention" />
+              <span>Kontaktná osoba odberateľa</span>
+            </label>
+            <template v-if="inv.attention">
+              <Select v-if="editable && personOptions.length" :options="personOptions" option-label="label" option-value="value" size="small"
+                placeholder="Vybrať z adresára" aria-label="Osoba z adresára" class="pick" @update:model-value="pickPerson" />
+              <div class="fields three">
+                <label><span>Meno</span>
+                  <InputText v-model="inv.attention.name" :disabled="!editable" :invalid="!!fieldError('attention.name')" size="small" @update:model-value="changed" />
+                  <small v-if="fieldError('attention.name')" class="err">{{ fieldError('attention.name') }}</small>
+                </label>
+                <label><span>Telefón</span><InputText v-model="inv.attention.phone" :disabled="!editable" inputmode="tel" size="small" @update:model-value="changed" /></label>
+                <label><span>E-mail</span><InputText v-model="inv.attention.email" :disabled="!editable" size="small" @update:model-value="changed" /></label>
+              </div>
+            </template>
+          </div>
+          <div class="extra">
+            <label class="check">
+              <Checkbox :model-value="!!inv.delivery" binary :disabled="!editable" input-id="del-on" @update:model-value="setDelivery" />
+              <span>Dodacia adresa iná ako adresa odberateľa</span>
+            </label>
+            <template v-if="inv.delivery">
+              <Select v-if="editable && addressOptions.length" :options="addressOptions" option-label="label" option-value="value" size="small"
+                placeholder="Vybrať z adresára" aria-label="Adresa z adresára" class="pick" @update:model-value="pickAddress" />
+              <div class="fields addr">
+                <label class="wide"><span>Príjemca / názov</span><InputText v-model="inv.delivery.name" :disabled="!editable" size="small" @update:model-value="changed" /></label>
+                <label class="wide"><span>Ulica a číslo</span>
+                  <InputText v-model="inv.delivery.street" :disabled="!editable" :invalid="!!fieldError('delivery.street')" size="small" @update:model-value="changed" />
+                  <small v-if="fieldError('delivery.street')" class="err">{{ fieldError('delivery.street') }}</small>
+                </label>
+                <label><span>PSČ</span><InputText v-model="inv.delivery.zip" :disabled="!editable" size="small" @update:model-value="changed" /></label>
+                <label><span>Obec</span><InputText v-model="inv.delivery.city" :disabled="!editable" :invalid="!!fieldError('delivery.street')" size="small" @update:model-value="changed" /></label>
+                <label><span>Krajina</span>
+                  <Select v-model="inv.delivery.country" :options="countries" option-label="label" option-value="code" filter :disabled="!editable" size="small" @update:model-value="changed" />
+                </label>
+              </div>
+            </template>
           </div>
         </fieldset>
 
@@ -1562,6 +1635,50 @@ const customerFields = reactive([
 </template>
 
 <style scoped>
+.extras .extra {
+  margin-bottom: 8px;
+}
+.extras .check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.extras .pick {
+  margin: 6px 0 4px;
+  max-width: 100%;
+  width: 26rem;
+}
+.extras .fields.three {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px 10px;
+}
+.extras .fields.addr {
+  display: grid;
+  grid-template-columns: 7rem minmax(0, 1fr) 11rem;
+  gap: 6px 10px;
+}
+.extras .fields.addr .wide {
+  grid-column: 1 / -1;
+}
+.extras .fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--fs-xs);
+  color: var(--ink-soft);
+}
+@media (max-width: 720px) {
+  .extras .fields.three,
+  .extras .fields.addr {
+    grid-template-columns: 1fr 1fr;
+  }
+  .extras .fields.three label:first-child {
+    grid-column: 1 / -1;
+  }
+}
 .state {
   padding: 48px 16px;
   text-align: center;

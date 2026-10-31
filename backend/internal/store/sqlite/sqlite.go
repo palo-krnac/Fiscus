@@ -119,6 +119,9 @@ var schemaV33 string
 //go:embed schema_v34.sql
 var schemaV34 string
 
+//go:embed schema_v35.sql
+var schemaV35 string
+
 //go:embed schema_v26.sql
 var schemaV26 string
 
@@ -127,7 +130,7 @@ var schemaV25 string
 
 // migrations[i] prevedie schému z verzie i na i+1. Existujúce migrácie sa
 // nikdy nemenia — zmena schémy je vždy nová migrácia na konci.
-var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4, schemaV5, schemaV6, schemaV7, schemaV8, schemaV9, schemaV10, schemaV11, schemaV12, schemaV13, schemaV14, schemaV15, schemaV16, schemaV17, schemaV18, schemaV19, schemaV20, schemaV21, schemaV22, schemaV23, schemaV24, schemaV25, schemaV26, schemaV27, schemaV28, schemaV29, schemaV30, schemaV31, schemaV32, schemaV33, schemaV34}
+var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4, schemaV5, schemaV6, schemaV7, schemaV8, schemaV9, schemaV10, schemaV11, schemaV12, schemaV13, schemaV14, schemaV15, schemaV16, schemaV17, schemaV18, schemaV19, schemaV20, schemaV21, schemaV22, schemaV23, schemaV24, schemaV25, schemaV26, schemaV27, schemaV28, schemaV29, schemaV30, schemaV31, schemaV32, schemaV33, schemaV34, schemaV35}
 
 // Store je SQLite úložisko.
 type Store struct{ db *sql.DB }
@@ -296,13 +299,36 @@ func (s *Store) UpdateCompany(ctx context.Context, c store.Company) error {
 // ---- adresár ----
 
 const contactCols = `id, company_id, name, street, city, zip, country, ico, dic, icdph,
-	email, phone, iban, due_days, note`
+	email, phone, iban, due_days, note, persons_json, addresses_json`
 
 func scanContact(r interface{ Scan(...any) error }) (store.Contact, error) {
 	var c store.Contact
+	var persons, addresses string
 	err := r.Scan(&c.ID, &c.CompanyID, &c.Name, &c.Street, &c.City, &c.Zip, &c.Country, &c.ICO, &c.DIC,
-		&c.ICDPH, &c.Email, &c.Phone, &c.IBAN, &c.DueDays, &c.Note)
-	return c, err
+		&c.ICDPH, &c.Email, &c.Phone, &c.IBAN, &c.DueDays, &c.Note, &persons, &addresses)
+	if err != nil {
+		return c, err
+	}
+	if persons != "" {
+		if err := json.Unmarshal([]byte(persons), &c.Persons); err != nil {
+			return c, err
+		}
+	}
+	if addresses != "" {
+		if err := json.Unmarshal([]byte(addresses), &c.Addresses); err != nil {
+			return c, err
+		}
+	}
+	return c, nil
+}
+
+// jsonList uloží zoznam ako JSON (prázdny zoznam = "").
+func jsonList[T any](list []T) (string, error) {
+	if len(list) == 0 {
+		return "", nil
+	}
+	b, err := json.Marshal(list)
+	return string(b), err
 }
 
 func (s *Store) ListContacts(ctx context.Context, companyID int64, search string) ([]store.Contact, error) {
@@ -342,12 +368,20 @@ func (s *Store) GetContact(ctx context.Context, companyID, id int64) (store.Cont
 }
 
 func (s *Store) SaveContact(ctx context.Context, companyID int64, c *store.Contact) error {
+	persons, err := jsonList(c.Persons)
+	if err != nil {
+		return err
+	}
+	addresses, err := jsonList(c.Addresses)
+	if err != nil {
+		return err
+	}
 	vals := []any{c.Name, c.Street, c.City, c.Zip, c.Country, c.ICO, c.DIC, c.ICDPH,
-		c.Email, c.Phone, c.IBAN, c.DueDays, c.Note}
+		c.Email, c.Phone, c.IBAN, c.DueDays, c.Note, persons, addresses}
 	if c.ID == 0 {
 		res, err := s.db.ExecContext(ctx, `INSERT INTO contacts (company_id, name, street, city, zip, country,
-			ico, dic, icdph, email, phone, iban, due_days, note)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, append([]any{companyID}, vals...)...)
+			ico, dic, icdph, email, phone, iban, due_days, note, persons_json, addresses_json)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, append([]any{companyID}, vals...)...)
 		if err != nil {
 			return err
 		}
@@ -356,7 +390,7 @@ func (s *Store) SaveContact(ctx context.Context, companyID int64, c *store.Conta
 		}
 	} else {
 		res, err := s.db.ExecContext(ctx, `UPDATE contacts SET name = ?, street = ?, city = ?, zip = ?, country = ?,
-			ico = ?, dic = ?, icdph = ?, email = ?, phone = ?, iban = ?, due_days = ?, note = ?
+			ico = ?, dic = ?, icdph = ?, email = ?, phone = ?, iban = ?, due_days = ?, note = ?, persons_json = ?, addresses_json = ?
 			WHERE id = ? AND company_id = ?`, append(vals, c.ID, companyID)...)
 		if err != nil {
 			return err
@@ -386,18 +420,31 @@ const invoiceCols = `id, company_id, kind, status, number, variable_symbol,
 	customer_name, customer_street, customer_city, customer_zip, customer_country,
 	customer_ico, customer_dic, customer_icdph, customer_email,
 	issue_date, delivery_date, due_date, paid_date,
-	currency, price_mode, reverse_charge, note, summary_json, contact_id, non_vat_payer, payment_method, correction_json, supply_kind, advance_json, fx_json, payments_json, subject, intro`
+	currency, price_mode, reverse_charge, note, summary_json, contact_id, non_vat_payer, payment_method, correction_json, supply_kind, advance_json, fx_json, payments_json, subject, intro, delivery_json`
+
+// deliveryData je dodacia adresa a kontaktná osoba faktúry (delivery_json).
+type deliveryData struct {
+	Delivery  *invoice.Address `json:"delivery,omitempty"`
+	Attention *invoice.Person  `json:"attention,omitempty"`
+}
 
 func scanInvoice(r interface{ Scan(...any) error }) (invoice.Invoice, error) {
 	var inv invoice.Invoice
-	var issue, delivery, due, paid, summary, correction, advance, fxJSON, payments string
+	var issue, delivery, due, paid, summary, correction, advance, fxJSON, payments, deliveryJSON string
 	c := &inv.Customer
 	err := r.Scan(&inv.ID, &inv.CompanyID, &inv.Kind, &inv.Status, &inv.Number, &inv.VariableSymbol,
 		&c.Name, &c.Street, &c.City, &c.Zip, &c.Country, &c.ICO, &c.DIC, &c.ICDPH, &c.Email,
 		&issue, &delivery, &due, &paid,
-		&inv.Currency, &inv.PriceMode, &inv.ReverseCharge, &inv.Note, &summary, &inv.ContactID, &inv.NonVATPayer, &inv.PaymentMethod, &correction, &inv.SupplyKind, &advance, &fxJSON, &payments, &inv.Subject, &inv.Intro)
+		&inv.Currency, &inv.PriceMode, &inv.ReverseCharge, &inv.Note, &summary, &inv.ContactID, &inv.NonVATPayer, &inv.PaymentMethod, &correction, &inv.SupplyKind, &advance, &fxJSON, &payments, &inv.Subject, &inv.Intro, &deliveryJSON)
 	if err != nil {
 		return inv, err
+	}
+	if deliveryJSON != "" {
+		var dd deliveryData
+		if err := json.Unmarshal([]byte(deliveryJSON), &dd); err != nil {
+			return inv, fmt.Errorf("dodacia adresa: %w", err)
+		}
+		inv.Delivery, inv.Attention = dd.Delivery, dd.Attention
 	}
 	for _, d := range []struct {
 		src string
@@ -584,6 +631,14 @@ func (s *Store) SaveInvoice(ctx context.Context, companyID int64, inv *invoice.I
 		}
 		payments = string(b)
 	}
+	deliveryJSON := ""
+	if inv.Delivery != nil || inv.Attention != nil {
+		b, err := json.Marshal(deliveryData{inv.Delivery, inv.Attention})
+		if err != nil {
+			return err
+		}
+		deliveryJSON = string(b)
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -595,15 +650,15 @@ func (s *Store) SaveInvoice(ctx context.Context, companyID int64, inv *invoice.I
 		c.Name, c.Street, c.City, c.Zip, c.Country, c.ICO, c.DIC, c.ICDPH, c.Email,
 		inv.IssueDate.String(), inv.DeliveryDate.String(), inv.DueDate.String(), inv.PaidDate.String(),
 		inv.Currency, string(inv.PriceMode), inv.ReverseCharge, inv.Note, string(summary), inv.ContactID, inv.NonVATPayer, string(inv.PaymentMethod), correction,
-		string(inv.SupplyKind), advance, fxJSON, payments, inv.Subject, inv.Intro}
+		string(inv.SupplyKind), advance, fxJSON, payments, inv.Subject, inv.Intro, deliveryJSON}
 
 	if inv.ID == 0 {
 		res, err := tx.ExecContext(ctx, `INSERT INTO invoices (company_id, kind, status, number, variable_symbol,
 			customer_name, customer_street, customer_city, customer_zip, customer_country,
 			customer_ico, customer_dic, customer_icdph, customer_email,
 			issue_date, delivery_date, due_date, paid_date,
-			currency, price_mode, reverse_charge, note, summary_json, contact_id, non_vat_payer, payment_method, correction_json, supply_kind, advance_json, fx_json, payments_json, subject, intro)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			currency, price_mode, reverse_charge, note, summary_json, contact_id, non_vat_payer, payment_method, correction_json, supply_kind, advance_json, fx_json, payments_json, subject, intro, delivery_json)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			append([]any{companyID}, vals...)...)
 		if err != nil {
 			return err
@@ -617,7 +672,7 @@ func (s *Store) SaveInvoice(ctx context.Context, companyID int64, inv *invoice.I
 			customer_ico = ?, customer_dic = ?, customer_icdph = ?, customer_email = ?,
 			issue_date = ?, delivery_date = ?, due_date = ?, paid_date = ?,
 			currency = ?, price_mode = ?, reverse_charge = ?, note = ?, summary_json = ?,
-			contact_id = ?, non_vat_payer = ?, payment_method = ?, correction_json = ?, supply_kind = ?, advance_json = ?, fx_json = ?, payments_json = ?, subject = ?, intro = ?
+			contact_id = ?, non_vat_payer = ?, payment_method = ?, correction_json = ?, supply_kind = ?, advance_json = ?, fx_json = ?, payments_json = ?, subject = ?, intro = ?, delivery_json = ?
 			WHERE id = ? AND company_id = ?`,
 			append(vals, inv.ID, companyID)...)
 		if err != nil {

@@ -45,6 +45,27 @@ type Party struct {
 	Email   string `json:"email"`
 }
 
+// Address je ďalšia adresa partnera (dodacia, korešpondenčná, prevádzka).
+type Address struct {
+	Name    string `json:"name,omitempty"` // príjemca alebo názov prevádzky
+	Street  string `json:"street"`
+	City    string `json:"city"`
+	Zip     string `json:"zip"`
+	Country string `json:"country"`
+}
+
+// IsZero — adresa bez údajov.
+func (a Address) IsZero() bool {
+	return strings.TrimSpace(a.Name+a.Street+a.City+a.Zip) == ""
+}
+
+// Person je kontaktná osoba odberateľa (na doklade „Kontaktná osoba“).
+type Person struct {
+	Name  string `json:"name"`
+	Email string `json:"email,omitempty"`
+	Phone string `json:"phone,omitempty"`
+}
+
 // PaymentMethod je spôsob úhrady.
 type PaymentMethod string
 
@@ -145,6 +166,10 @@ type Invoice struct {
 	// NonVATPayer: dodávateľ nie je platiteľ DPH — faktúra je bez DPH.
 	NonVATPayer bool  `json:"nonVatPayer"`
 	ContactID   int64 `json:"contactId"` // odkaz do adresára (0 = zadané ručne)
+	// Delivery je dodacia adresa, ak je iná ako adresa odberateľa;
+	// Attention je kontaktná osoba odberateľa (obe sa tlačia na doklade).
+	Delivery  *Address `json:"delivery,omitempty"`
+	Attention *Person  `json:"attention,omitempty"`
 	// PaymentMethod je spôsob úhrady (číselník PaymentMethods).
 	PaymentMethod PaymentMethod `json:"paymentMethod"`
 	// Subject je krátky predmet (za čo je faktúra) — v zoznamoch aj na tlači.
@@ -276,6 +301,24 @@ func (inv *Invoice) Validate() error {
 		add("supplyKind", ErrTriangular)
 	} else if inv.SupplyKind == SupplyTriangular && !inv.ReverseCharge {
 		add("reverseCharge", "Pri trojstrannom obchode označte prenesenie daňovej povinnosti — faktúra je bez DPH")
+	}
+	// prázdna dodacia adresa a osoba sa neukladajú
+	if inv.Delivery != nil && inv.Delivery.IsZero() {
+		inv.Delivery = nil
+	}
+	if inv.Attention != nil && strings.TrimSpace(inv.Attention.Name+inv.Attention.Email+inv.Attention.Phone) == "" {
+		inv.Attention = nil
+	}
+	if d := inv.Delivery; d != nil {
+		if strings.TrimSpace(d.Street) == "" || strings.TrimSpace(d.City) == "" {
+			add("delivery.street", "Dodacia adresa potrebuje ulicu a obec")
+		}
+		if d.Country == "" {
+			d.Country = "SK"
+		}
+	}
+	if p := inv.Attention; p != nil && strings.TrimSpace(p.Name) == "" {
+		add("attention.name", "Zadajte meno kontaktnej osoby")
 	}
 	if len(inv.Lines) == 0 {
 		add("lines", "Faktúra musí mať aspoň jednu položku")

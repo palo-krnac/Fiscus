@@ -105,7 +105,7 @@ func tableMigration(m *migration, sh tabimport.Sheet) {
 			m.Warnings = append(m.Warnings, fmt.Sprintf("Adresár, riadok %d: %s", c.Line, warn))
 		}
 		m.Contacts = append(m.Contacts, migContact{Party: p, Phone: c.Party.Phone, IBAN: c.Party.IBAN,
-			Note: contactNote(p.Name, c.Party.Person, c.Party.Note)})
+			Note: c.Party.Note, Persons: contactPersons(p.Name, c.Party.Person, "", "")})
 	}
 	for _, d := range sh.Docs {
 		ref := fmt.Sprintf("riadok %d", d.Line)

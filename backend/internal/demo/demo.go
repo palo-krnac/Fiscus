@@ -112,7 +112,19 @@ func Seed(ctx context.Context, a *app.App) (store.Company, error) {
 		if i%3 == 0 {
 			due = 30
 		}
-		ct, err := a.SaveContact(ctx, c.ID, store.Contact{Name: cu.name, City: cu.city, ICO: cu.ico, DIC: cu.dic(), ICDPH: cu.icdph, Country: "SK", DueDays: due})
+		k := store.Contact{Name: cu.name, City: cu.city, ICO: cu.ico, DIC: cu.dic(), ICDPH: cu.icdph, Country: "SK", DueDays: due}
+		if i == 0 { // ukážka kontaktných osôb a ďalších adries
+			k.Street, k.Zip = "Partizánska cesta 18", "97401"
+			k.Persons = []store.ContactPerson{
+				{Name: "Ing. Marek Hron", Role: "konateľ", Email: "hron@elektrohron.sk", Phone: "+421 905 412 118", Primary: true},
+				{Name: "Lucia Benková", Role: "účtovníčka", Email: "faktury@elektrohron.sk", Phone: "+421 48 414 22 10"},
+			}
+			k.Addresses = []store.ContactAddress{
+				{Kind: store.AddressDelivery, Name: "Sklad Radvaň", Street: "Kremnička 6", Zip: "97405", City: "Banská Bystrica", Country: "SK", Default: true},
+				{Kind: store.AddressBranch, Name: "Predajňa Zvolen", Street: "Námestie SNP 9", Zip: "96001", City: "Zvolen", Country: "SK"},
+			}
+		}
+		ct, err := a.SaveContact(ctx, c.ID, k)
 		if err != nil {
 			return c, err
 		}

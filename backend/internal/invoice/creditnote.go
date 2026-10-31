@@ -66,6 +66,7 @@ func NewCreditNote(orig Invoice, issueDate Date) (Invoice, error) {
 		Status:       StatusDraft,
 		Customer:     orig.Customer,
 		ContactID:    orig.ContactID,
+		Attention:    orig.Attention,
 		IssueDate:    issueDate,
 		DeliveryDate: issueDate, // dátum vzniku dôvodu opravy
 		DueDate:      issueDate.AddDays(14),

@@ -81,6 +81,13 @@ func clone(in invoice.Invoice) invoice.Invoice {
 	return out
 }
 
+// cloneContact skopíruje aj osoby a adresy.
+func cloneContact(c store.Contact) store.Contact {
+	c.Persons = append([]store.ContactPerson(nil), c.Persons...)
+	c.Addresses = append([]store.ContactAddress(nil), c.Addresses...)
+	return c
+}
+
 // cloneCompany skopíruje aj číselníky (slice a mapu).
 func cloneCompany(c store.Company) store.Company {
 	c.Units = append([]string(nil), c.Units...)
@@ -147,7 +154,7 @@ func (s *Store) ListContacts(_ context.Context, companyID int64, search string) 
 	out := []store.Contact{}
 	for _, c := range s.contacts {
 		if c.CompanyID == companyID && store.Matches(search, c.Name, c.ICO, c.City) {
-			out = append(out, c)
+			out = append(out, cloneContact(c))
 		}
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -167,7 +174,7 @@ func (s *Store) GetContact(_ context.Context, companyID, id int64) (store.Contac
 	if !ok || c.CompanyID != companyID {
 		return store.Contact{}, store.ErrNotFound
 	}
-	return c, nil
+	return cloneContact(c), nil
 }
 
 func (s *Store) SaveContact(_ context.Context, companyID int64, c *store.Contact) error {
@@ -179,7 +186,7 @@ func (s *Store) SaveContact(_ context.Context, companyID int64, c *store.Contact
 		return store.ErrNotFound
 	}
 	c.CompanyID = companyID
-	s.contacts[c.ID] = *c
+	s.contacts[c.ID] = cloneContact(*c)
 	return nil
 }
 

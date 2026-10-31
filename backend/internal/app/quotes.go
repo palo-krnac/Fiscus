@@ -244,7 +244,7 @@ func (a *App) InvoiceQuote(ctx context.Context, companyID, id int64) (invoice.In
 	}
 	draft := q.ToInvoice(a.Today(), 0)
 	draft.DueDate = invoice.Date{} // splatnosť podľa kontaktu alebo firmy
-	inv, err := a.saveDraft(ctx, companyID, draft)
+	inv, err := a.saveDraft(ctx, companyID, a.withDocExtras(ctx, companyID, draft))
 	if err != nil {
 		return inv, err
 	}

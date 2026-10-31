@@ -17,7 +17,7 @@ import (
 
 var supplier = Supplier{Company: store.Company{
 	Name: "Krnáč s.r.o.", Street: "Hlavná 12", Zip: "040 01", City: "Košice", ICO: "12345678", DIC: "2020123456",
-	ICDPH: "SK2020123456", IBAN: "SK31 1200 0000 1987 4263 7541", Email: "faktury@krnac.sk", VATPayer: true,
+	ICDPH: "SK2020123456", IBAN: "SK31 1200 0000 1987 4263 7541", Email: "faktury@krnac.sk", Phone: "+421 55 123 4567", VATPayer: true,
 }}
 
 func sample(mod func(*invoice.Invoice)) invoice.Invoice {
@@ -68,9 +68,14 @@ func TestInvoice(t *testing.T) {
 	}{
 		{"faktúra", nil,
 			[]string{"Faktúra – daňový doklad", "2026001", "Dodávateľ", "Krnáč s.r.o.", "Odberateľ", "Žltý dom, a.s.", "IČ DPH", "SK2020123456",
-				"Prevodom na účet", "SK31 1200 0000 1987 4263 7541", "Cena za MJ bez DPH", "12,5", "1\u00a0250,00", "23 %", "5 %", "K úhrade", "1\u00a0708,44 €"},
-			[]string{"Koncept", "Dodávateľ nie je platiteľ DPH"}},
+				"Tel.", "+421 55 123 4567", "E-mail", "faktury@krnac.sk", "Prevodom na účet", "SK31 1200 0000 1987 4263 7541", "Cena za MJ bez DPH", "12,5", "1\u00a0250,00", "23 %", "5 %", "K úhrade", "1\u00a0708,44 €"},
+			[]string{"Koncept", "Dodávateľ nie je platiteľ DPH", "Dodacia adresa", "Kontakt"}},
 		{"koncept", func(i *invoice.Invoice) { i.Status = invoice.StatusDraft; i.Number = "" }, []string{"Koncept"}, nil},
+		{"kontaktná osoba a dodacia adresa", func(i *invoice.Invoice) {
+			i.Customer.Email = "fakturacia@dom.sk"
+			i.Attention = &invoice.Person{Name: "Peter Kováč", Phone: "+421 905 123 456"}
+			i.Delivery = &invoice.Address{Name: "Sklad Petržalka", Street: "Krátka 2", Zip: "851 01", City: "Bratislava", Country: "SK"}
+		}, []string{"Kontakt", "Peter Kováč", "Tel.", "+421 905 123 456", "fakturacia@dom.sk", "Dodacia adresa", "Sklad Petržalka", "Krátka 2", "851 01 Bratislava"}, nil},
 		{"stornovaná", func(i *invoice.Invoice) { i.Status = invoice.StatusCancelled }, []string{"Stornovaná"}, nil},
 		{"neplatiteľ DPH", func(i *invoice.Invoice) { i.NonVATPayer = true },
 			[]string{"Faktúra\n", "Dodávateľ nie je platiteľ DPH.", "Cena za MJ\n"}, []string{"Sadzba DPH", "23 %"}},

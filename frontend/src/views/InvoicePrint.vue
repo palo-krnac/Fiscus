@@ -2,6 +2,7 @@
 // Faktúra alebo cenová ponuka (quote) na tlač / uloženie do PDF (A4).
 // PDF vytvorí prehliadač cez „Tlačiť → Uložiť ako PDF“.
 import { computed, onMounted, ref } from 'vue'
+import { addressLines, customerGroups, deliveryLines, supplierGroups } from '../lib/parties.js'
 import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import { api } from '../lib/api.js'
@@ -57,13 +58,8 @@ onMounted(async () => {
   }
 })
 
-const addressLines = (p) => [p.street, [p.zip, p.city].filter(Boolean).join(' ')].filter(Boolean)
-const ids = (p) =>
-  [
-    p.ico && ['IČO', p.ico],
-    p.dic && ['DIČ', p.dic],
-    p.icdph && ['IČ DPH', p.icdph],
-  ].filter(Boolean)
+// adresy, identifikátory a kontakt — rovnako ako PDF zo servera
+const deliveryOf = (i) => deliveryLines(i, countryName)
 </script>
 
 <template>
@@ -111,19 +107,22 @@ const ids = (p) =>
           <h2>Dodávateľ</h2>
           <p class="name">{{ company.name }}</p>
           <p v-for="l in addressLines(company)" :key="l">{{ l }}</p>
-          <dl class="ids">
-            <template v-for="[k, v] in ids(company)" :key="k"><dt>{{ k }}</dt><dd>{{ v }}</dd></template>
+          <dl v-for="(g, i) in supplierGroups(company)" :key="i" class="ids">
+            <template v-for="[k, v] in g" :key="k"><dt>{{ k }}</dt><dd>{{ v }}</dd></template>
           </dl>
-          <p v-if="company.email || company.phone" class="contact">{{ [company.email, company.phone].filter(Boolean).join(', ') }}</p>
         </div>
         <div class="party">
           <h2>{{ quote ? 'Pre' : 'Odberateľ' }}</h2>
           <p class="name">{{ inv.customer.name }}</p>
           <p v-for="l in addressLines(inv.customer)" :key="l">{{ l }}</p>
           <p v-if="inv.customer.country && inv.customer.country !== 'SK'">{{ countryName(inv.customer.country) }}</p>
-          <dl class="ids">
-            <template v-for="[k, v] in ids(inv.customer)" :key="k"><dt>{{ k }}</dt><dd>{{ v }}</dd></template>
+          <dl v-for="(g, i) in customerGroups(inv)" :key="i" class="ids">
+            <template v-for="[k, v] in g" :key="k"><dt>{{ k }}</dt><dd>{{ v }}</dd></template>
           </dl>
+          <template v-if="deliveryOf(inv).length">
+            <h2 class="delivery">Dodacia adresa</h2>
+            <p v-for="l in deliveryOf(inv)" :key="l">{{ l }}</p>
+          </template>
         </div>
       </section>
 
@@ -411,7 +410,7 @@ const ids = (p) =>
 }
 .ids {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: 14mm 1fr; /* rovnaký stĺpec popisov u oboch strán */
   gap: 0 4mm;
   margin: 2mm 0 0;
 }
@@ -422,9 +421,8 @@ const ids = (p) =>
   margin: 0;
   font-variant-numeric: tabular-nums;
 }
-.contact {
-  margin-top: 2mm !important;
-  color: #4e5866;
+.party h2.delivery {
+  margin-top: 3mm;
 }
 
 .payment {
