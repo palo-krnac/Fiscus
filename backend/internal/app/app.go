@@ -484,6 +484,7 @@ func (a *App) Issue(ctx context.Context, companyID, id int64) (invoice.Invoice, 
 	}
 	a.record(ctx, companyID, audit.CatInvoices, "issue", "invoice", inv.ID,
 		what+inv.Number+" pre "+inv.Customer.Name+", "+inv.Summary.Total.Display()+" €", nil, inv)
+	a.syncInvoiceStock(ctx, companyID, inv)
 	if inv.Kind == invoice.KindCreditNote {
 		if err := a.offsetCreditNote(ctx, companyID, &inv); err != nil {
 			return inv, err
@@ -568,7 +569,11 @@ func (a *App) Unpay(ctx context.Context, companyID, id int64) (invoice.Invoice, 
 
 // Cancel stornuje faktúru.
 func (a *App) Cancel(ctx context.Context, companyID, id int64) (invoice.Invoice, error) {
-	return a.transition(ctx, companyID, id, "cancel", "Stornovaná ", (*invoice.Invoice).Cancel)
+	inv, err := a.transition(ctx, companyID, id, "cancel", "Stornovaná ", (*invoice.Invoice).Cancel)
+	if err == nil {
+		a.syncInvoiceStock(ctx, companyID, inv) // storno zruší výdajku
+	}
+	return inv, err
 }
 
 func (a *App) transition(ctx context.Context, companyID, id int64, action, what string, fn func(*invoice.Invoice) error) (invoice.Invoice, error) {

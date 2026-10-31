@@ -116,6 +116,9 @@ var schemaV32 string
 //go:embed schema_v33.sql
 var schemaV33 string
 
+//go:embed schema_v34.sql
+var schemaV34 string
+
 //go:embed schema_v26.sql
 var schemaV26 string
 
@@ -124,7 +127,7 @@ var schemaV25 string
 
 // migrations[i] prevedie schému z verzie i na i+1. Existujúce migrácie sa
 // nikdy nemenia — zmena schémy je vždy nová migrácia na konci.
-var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4, schemaV5, schemaV6, schemaV7, schemaV8, schemaV9, schemaV10, schemaV11, schemaV12, schemaV13, schemaV14, schemaV15, schemaV16, schemaV17, schemaV18, schemaV19, schemaV20, schemaV21, schemaV22, schemaV23, schemaV24, schemaV25, schemaV26, schemaV27, schemaV28, schemaV29, schemaV30, schemaV31, schemaV32, schemaV33}
+var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4, schemaV5, schemaV6, schemaV7, schemaV8, schemaV9, schemaV10, schemaV11, schemaV12, schemaV13, schemaV14, schemaV15, schemaV16, schemaV17, schemaV18, schemaV19, schemaV20, schemaV21, schemaV22, schemaV23, schemaV24, schemaV25, schemaV26, schemaV27, schemaV28, schemaV29, schemaV30, schemaV31, schemaV32, schemaV33, schemaV34}
 
 // Store je SQLite úložisko.
 type Store struct{ db *sql.DB }
@@ -447,7 +450,7 @@ type fxData struct {
 
 func (s *Store) loadLines(ctx context.Context, inv *invoice.Invoice) error {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT description, quantity, unit, unit_price, vat_rate, amount, reverse, commodity, a2_quantity, a2_unit
+		`SELECT description, quantity, unit, unit_price, vat_rate, amount, reverse, commodity, a2_quantity, a2_unit, item_id
 		 FROM invoice_lines WHERE invoice_id = ? ORDER BY position`, inv.ID)
 	if err != nil {
 		return err
@@ -460,7 +463,7 @@ func (s *Store) loadLines(ctx context.Context, inv *invoice.Invoice) error {
 		var r int
 		var a2q sql.NullInt64
 		var a2u string
-		if err := rows.Scan(&l.Description, &q, &l.Unit, &p, &r, &a, &l.Reverse, &l.Commodity, &a2q, &a2u); err != nil {
+		if err := rows.Scan(&l.Description, &q, &l.Unit, &p, &r, &a, &l.Reverse, &l.Commodity, &a2q, &a2u, &l.ItemID); err != nil {
 			return err
 		}
 		l.Quantity, l.UnitPrice, l.Amount, l.Rate = money.FromRaw(q), money.FromRaw(p), money.FromRaw(a), vat.Rate(r)
@@ -610,10 +613,10 @@ func (s *Store) SaveInvoice(ctx context.Context, companyID int64, inv *invoice.I
 	}
 	for i, l := range inv.Lines {
 		if _, err := tx.ExecContext(ctx, `INSERT INTO invoice_lines
-			(invoice_id, position, description, quantity, unit, unit_price, vat_rate, amount, reverse, commodity, a2_quantity, a2_unit)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			(invoice_id, position, description, quantity, unit, unit_price, vat_rate, amount, reverse, commodity, a2_quantity, a2_unit, item_id)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			inv.ID, i, l.Description, l.Quantity.Raw(), l.Unit, l.UnitPrice.Raw(), int(l.Rate), l.Amount.Raw(), string(l.Reverse), l.Commodity,
-			a2Qty(l.A2), a2Unit(l.A2)); err != nil {
+			a2Qty(l.A2), a2Unit(l.A2), l.ItemID); err != nil {
 			return err
 		}
 	}

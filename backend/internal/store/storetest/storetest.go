@@ -26,6 +26,7 @@ import (
 	"github.com/palo-krnac/fiscus/backend/internal/quote"
 	"github.com/palo-krnac/fiscus/backend/internal/recurring"
 	"github.com/palo-krnac/fiscus/backend/internal/reminder"
+	"github.com/palo-krnac/fiscus/backend/internal/stock"
 	"github.com/palo-krnac/fiscus/backend/internal/store"
 	"github.com/palo-krnac/fiscus/backend/internal/vat"
 )
@@ -87,7 +88,7 @@ func Run(t *testing.T, newStore Factory) {
 		}
 		// položka s tuzemským prenesením a kódom colného sadzobníka
 		got.Lines = append(got.Lines, invoice.Line{Description: "Oceľ", Quantity: m.MustParse("2"), Unit: "t", UnitPrice: m.MustParse("2600"),
-			Rate: vat.Rate23, Reverse: invoice.RCMetals, Commodity: "7308", A2: &invoice.A2Qty{Quantity: m.MustParse("12.5"), Unit: "t"}})
+			Rate: vat.Rate23, Reverse: invoice.RCMetals, Commodity: "7308", A2: &invoice.A2Qty{Quantity: m.MustParse("12.5"), Unit: "t"}, ItemID: 42})
 		if err := got.Recalculate(); err != nil {
 			t.Fatal(err)
 		}
@@ -96,7 +97,7 @@ func Run(t *testing.T, newStore Factory) {
 		}
 		rc, _ := s.GetInvoice(ctx, c.ID, inv.ID)
 		if l := rc.Lines[len(rc.Lines)-1]; l.Reverse != invoice.RCMetals || l.Commodity != "7308" || !rc.Summary.Rates[len(rc.Summary.Rates)-1].Reverse ||
-			l.A2 == nil || l.A2.Quantity.String() != "12.50" || l.A2.Unit != "t" || rc.Lines[0].A2 != nil {
+			l.A2 == nil || l.A2.Quantity.String() != "12.50" || l.A2.Unit != "t" || rc.Lines[0].A2 != nil || l.ItemID != 42 || rc.Lines[0].ItemID != 0 {
 			t.Fatalf("prenesenie pri položke sa neuložilo: %+v %+v", l, rc.Summary.Rates)
 		}
 		got = rc
@@ -1134,6 +1135,60 @@ func Run(t *testing.T, newStore Factory) {
 		}
 		if err := s.UpdateBankTransaction(ctx, b.ID, got); !errors.Is(err, store.ErrNotFound) {
 			t.Fatal("úprava pohybu inej firmy")
+		}
+	})
+
+	t.Run("sklad", func(t *testing.T) {
+		s := newStore(t)
+		a, _ := s.CreateCompany(ctx, store.Company{Name: "Alfa"})
+		b, _ := s.CreateCompany(ctx, store.Company{Name: "Beta"})
+		mk := func(num string, k stock.Kind, date string) *stock.Doc {
+			return &stock.Doc{Number: num, Kind: k, Date: invoice.MustDate(date), Warehouse: "HL", Partner: "Dodávateľ", LinkKind: "purchase", LinkID: 7,
+				Lines: []stock.Line{{ItemID: 3, Name: "Kábel CYKY 3x1,5", Unit: "m", Quantity: m.MustParse("100"), UnitCost: m.MustParse("0.85"), Total: m.MustParse("85")}}}
+		}
+		d2 := mk("VY2026001", stock.Issue, "2026-03-02")
+		d1 := mk("PR2026001", stock.Receipt, "2026-03-01")
+		for _, d := range []*stock.Doc{d2, d1} {
+			if err := s.SaveStockDoc(ctx, a.ID, d); err != nil || d.ID == 0 || d.CompanyID != a.ID {
+				t.Fatalf("uloženie: %v %+v", err, d)
+			}
+		}
+		got, err := s.GetStockDoc(ctx, a.ID, d1.ID)
+		if err != nil || !reflect.DeepEqual(got, *d1) {
+			t.Fatalf("načítanie:\n got %+v\nwant %+v", got, *d1)
+		}
+		list, _ := s.ListStockDocs(ctx, a.ID)
+		if len(list) != 2 || list[0].Number != "PR2026001" {
+			t.Fatalf("poradie podľa dátumu: %+v", list)
+		}
+		got.Lines[0].Quantity = m.MustParse("1")
+		if again, _ := s.GetStockDoc(ctx, a.ID, d1.ID); !again.Lines[0].Quantity.Equal(m.MustParse("100")) {
+			t.Fatal("úložisko vracia zdieľanú referenciu")
+		}
+		d1.Lines[0].Quantity, d1.Note = m.MustParse("120"), "doplnené"
+		if err := s.SaveStockDoc(ctx, a.ID, d1); err != nil {
+			t.Fatal(err)
+		}
+		if again, _ := s.GetStockDoc(ctx, a.ID, d1.ID); again.Note != "doplnené" || again.Lines[0].Quantity.String() != "120.00" {
+			t.Fatalf("úprava: %+v", again)
+		}
+		if _, err := s.GetStockDoc(ctx, b.ID, d1.ID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("doklad inej firmy")
+		}
+		if err := s.SaveStockDoc(ctx, b.ID, d1); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("prepis dokladu inej firmy")
+		}
+		if other, _ := s.ListStockDocs(ctx, b.ID); len(other) != 0 {
+			t.Fatal("doklady inej firmy")
+		}
+		if err := s.DeleteStockDoc(ctx, b.ID, d2.ID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatal("zmazanie dokladu inej firmy")
+		}
+		if err := s.DeleteStockDoc(ctx, a.ID, d2.ID); err != nil {
+			t.Fatal(err)
+		}
+		if list, _ = s.ListStockDocs(ctx, a.ID); len(list) != 1 {
+			t.Fatalf("po zmazaní: %+v", list)
 		}
 	})
 

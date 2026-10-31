@@ -129,5 +129,6 @@ func (a *App) amendIssued(ctx context.Context, companyID int64, old, inv invoice
 	}
 	a.record(ctx, companyID, audit.CatInvoices, "amend", "invoice", inv.ID,
 		"Úprava vystavenej faktúry "+inv.Number+" pre "+inv.Customer.Name, old, inv)
+	a.syncInvoiceStock(ctx, companyID, inv)
 	return inv, nil
 }

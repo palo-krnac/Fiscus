@@ -22,14 +22,14 @@ func TestSeed(t *testing.T) {
 	list, _ := a.Store.ListInvoices(context.Background(), c.ID, store.InvoiceFilter{})
 	// + koncept z ponuky, dnešná pravidelná faktúra, 2 zálohové faktúry,
 	// doklad k prijatej platbe, koncept vyúčtovania, faktúra s prenesením pri položkách
-	// a koncept z pravidelnej fakturácie na kontrolu
+	// a koncept z pravidelnej fakturácie na kontrolu, faktúra s výdajkou zo skladu
 	rc := 0
 	for _, inv := range list {
 		if inv.DomesticReverse() && inv.Status == invoice.StatusIssued {
 			rc++
 		}
 	}
-	if len(list) != 51 || rc != 1 {
+	if len(list) != 52 || rc != 1 {
 		t.Fatalf("%d faktúr, s prenesením %d", len(list), rc)
 	}
 	rec, _ := a.Recurring(context.Background(), c.ID)
