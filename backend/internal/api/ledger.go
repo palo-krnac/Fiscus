@@ -1,6 +1,7 @@
 package api
 
 import (
+	"io"
 	"net/http"
 	"strconv"
 
@@ -171,4 +172,21 @@ func (s *Server) postFXRevaluation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, doc)
+}
+
+// importOpening: POST …/ledger/opening/import — tabuľka zostatkov účtov
+// (CSV/Excel) → návrh počiatočných stavov (nič sa neukladá).
+func (s *Server) importOpening(w http.ResponseWriter, r *http.Request) {
+	cid, _ := pathID(w, r, "cid")
+	data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, app.MaxImportBytes))
+	if err != nil {
+		writeErr(w, http.StatusRequestEntityTooLarge, "Súbor je príliš veľký (najviac 5 MB)", nil)
+		return
+	}
+	res, err := s.App.ImportOpening(r.Context(), cid, data)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
 }
