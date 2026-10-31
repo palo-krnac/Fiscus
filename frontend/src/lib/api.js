@@ -350,6 +350,11 @@ export const api = {
   importItems: (cid, file, apply = false) => request('POST', `/api/companies/${cid}/items/import${apply ? '?apply=1' : ''}`, file),
   importOpening: (cid, file) => request('POST', `/api/companies/${cid}/ledger/opening/import`, file),
   importContacts: (cid, file, apply = false) => request('POST', `/api/companies/${cid}/contacts/import${apply ? '?apply=1' : ''}`, file),
+  mobile: () => request('GET', '/api/mobile'),
+  setMobile: (enabled, port) => request('PUT', '/api/mobile', { enabled, port }),
+  newPairing: () => request('POST', '/api/mobile/pairing', {}),
+  removeDevice: (id) => request('DELETE', `/api/mobile/devices/${id}`),
+  pairMobile: (code, name) => request('POST', '/api/mobile/pair', { code, name }),
   scanReceipt: (cid, { qr, payment, photo }) => {
     const f = new FormData()
     f.append('qr', qr)

@@ -24,6 +24,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -70,6 +71,7 @@ func main() {
 	viesURL := flag.String("vies-url", registry.VIESBaseURL, "adresa VIES na overenie IČ DPH; prázdne = vypnuté")
 	ruzURL := flag.String("ruz-url", registry.RUZBaseURL, "adresa API Registra účtovných závierok (záloha RPO, DIČ); prázdne = vypnuté")
 	ecbRateURL := flag.String("ecb-rate-url", reminder.ECBDataURL, "adresa základnej úrokovej sadzby ECB (CSV) pre úrok z omeškania; prázdne = vypnuté")
+	lanIP := flag.String("lan-ip", "", "adresa počítača v sieti pre telefóny (čiarkou viac); prázdne = zistiť samo")
 	ekasaURL := flag.String("ekasa-url", ekasa.DefaultURL, "adresa služby eKasa (bločky z mobilu)")
 	ecbURL := flag.String("ecb-url", fx.ECB90, "adresa kurzov ECB (posledných 90 dní); prázdne = vypnuté, kurzy sa zadávajú ručne")
 	claudeURL := flag.String("claude-url", "", "adresa Claude API na čítanie dokladov (prázdne = api.anthropic.com)")
@@ -256,6 +258,18 @@ func main() {
 		}
 	}
 
+	// mobil v sieti (desktop): druhé počúvanie na všetkých adresách pre spárované telefóny
+	if caps.Mode == edition.Desktop {
+		mob := &mobileListener{handler: apiSrv.LANHandler(apiSrv.Handler())}
+		a.OnMobile = mob.set
+		if *lanIP != "" {
+			ips := strings.Split(*lanIP, ",")
+			a.LANAddresses = func() []string { return ips }
+		}
+		a.StartMobile(context.Background())
+		defer mob.set(false, 0)
+	}
+
 	runCtx, stopRecurring := context.WithCancel(context.Background())
 	go recurringLoop(runCtx, a)
 	go ratesLoop(runCtx, a)
@@ -404,4 +418,38 @@ type quietStderr struct{}
 func (quietStderr) Write(p []byte) (int, error) {
 	_, _ = os.Stderr.Write(p)
 	return len(p), nil
+}
+
+// mobileListener zapína a vypína počúvanie pre telefóny v sieti.
+type mobileListener struct {
+	mu      sync.Mutex
+	handler http.Handler
+	srv     *http.Server
+	port    int
+}
+
+func (m *mobileListener) set(enabled bool, port int) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.srv != nil && (!enabled || port != m.port) {
+		_ = m.srv.Close()
+		m.srv = nil
+		log.Print("mobil v sieti: vypnutý")
+	}
+	if !enabled || m.srv != nil {
+		return nil
+	}
+	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	if err != nil {
+		return fmt.Errorf("port %d sa nedá použiť (%v) — zvoľte iný", port, err)
+	}
+	m.srv = &http.Server{Handler: m.handler, ReadHeaderTimeout: 10 * time.Second}
+	m.port = port
+	go func(srv *http.Server) {
+		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Printf("mobil v sieti: %v", err)
+		}
+	}(m.srv)
+	log.Printf("mobil v sieti: počúva na porte %d %v", port, app.LANAddresses())
+	return nil
 }

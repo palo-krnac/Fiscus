@@ -26,6 +26,8 @@ type Actor struct {
 	// MFASetup: inštalácia vyžaduje 2FA a používateľ ho ešte nemá — smie
 	// iba nastaviť dvojfázové overenie alebo sa odhlásiť.
 	MFASetup bool `json:"-"`
+	// Mobile: spárovaný telefón v sieti (desktop) — nespravuje párovanie.
+	Mobile bool `json:"mobile,omitempty"`
 }
 
 // System je actor pre akcie programu.
