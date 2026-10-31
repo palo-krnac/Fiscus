@@ -127,6 +127,7 @@ Referenčný prehľad funkcií pochádza z českých systémov MyInvoice (MIT) a
 - [x] KROS Omega (textový export podľa špecifikácie KROS: partneri T04, skladové karty T03, fakturácia T01, doklady EUD T00 s úhradami a dobropismi)
 - [x] iDoklad: export pre POHODU (ZIP s XML po druhoch dokladov, aj jednotlivé XML); kontakty sa založia z odberateľov a dodávateľov na faktúrach
 - [x] MRP-K/S: XML tabuľky vydaných faktúr (FAKVY, FAKVYPOL) a adresára (FV_ADRES), aj v ZIP; odberateľ podľa IČO z adresára, dobropisy, sadzby z pomeru dane a základu
+- [x] Import kontaktov priamo v Adresári: vizitky vCard (.vcf, verzie 2.1–4.0) a tabuľky vrátane exportov z Outlooku a Google Kontaktov (meno a priezvisko, pracovná alebo domáca adresa, IBAN); kontaktná osoba do poznámky
 - [ ] SuperFaktúra a Fakturoid (API); KROS Alfa; prijaté faktúry z MRP; počiatočné stavy
 - [ ] Konektory na e-shopy (Shoptet, WooCommerce, Shopify, PrestaShop, Upgates, Drupal Commerce, Magento): zásoby, ceny, objednávky, faktúry — podľa verejnej dokumentácie, neoverené na živom obchode
 

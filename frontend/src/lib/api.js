@@ -336,6 +336,7 @@ export const api = {
   deleteItem: (cid, id) => request('DELETE', `/api/companies/${cid}/items/${id}`),
   // súbor CSV/XLSX; apply=false vráti iba náhľad
   importItems: (cid, file, apply = false) => request('POST', `/api/companies/${cid}/items/import${apply ? '?apply=1' : ''}`, file),
+  importContacts: (cid, file, apply = false) => request('POST', `/api/companies/${cid}/contacts/import${apply ? '?apply=1' : ''}`, file),
   importMigrate: (cid, source, file, { apply = false, paidUntil = '', kind = '' } = {}) => {
     const q = new URLSearchParams()
     if (apply) q.set('apply', '1')

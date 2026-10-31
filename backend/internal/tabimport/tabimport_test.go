@@ -165,3 +165,33 @@ func TestParseContacts(t *testing.T) {
 		t.Errorf("stĺpce: %v", sh.Columns)
 	}
 }
+
+func TestParseContactExports(t *testing.T) {
+	tests := []struct {
+		name, csv                           string
+		wantName, person, city, email, iban string
+	}{
+		{"Outlook anglicky", "First Name;Last Name;Company;E-mail Address;Business Phone;Business Street;Home Street;Business City;Home City\n" +
+			"Ján;Novák;Novák s.r.o.;jan@novak.sk;+421 900 111 222;;Lipová 1;;Žilina", "Novák s.r.o.", "Ján Novák", "Žilina", "jan@novak.sk", ""},
+		{"Outlook slovensky", "Meno;Priezvisko;Spoločnosť;E-mailová adresa;Mesto (práca)\nEva;Malá;;eva@mala.sk;Nitra", "Eva Malá", "Eva Malá", "Nitra", "eva@mala.sk", ""},
+		{"Google", "Name;Given Name;Family Name;Organization 1 - Name;E-mail 1 - Value;Address 1 - City\nPeter Kováč;Peter;Kováč;Kováč a syn;p@k.sk;Nitra",
+			"Kováč a syn", "Peter Kováč", "Nitra", "p@k.sk", ""},
+		{"vlastný s IBAN", "Názov;IČO;IBAN\nFirma;36123455;SK31 1200 0000 1987 4263 7541", "Firma", "", "", "", "SK3112000000198742637541"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			rows := split(tc.csv)
+			if Detect(rows) != KindContacts {
+				t.Fatalf("druh: %q", Detect(rows))
+			}
+			sh, err := Parse(rows, KindContacts, vat.Rate23)
+			if err != nil {
+				t.Fatal(err)
+			}
+			p := sh.Contacts[0].Party
+			if p.Name != tc.wantName || p.Person != tc.person || p.City != tc.city || p.Email != tc.email || p.IBAN != tc.iban {
+				t.Errorf("%+v", p)
+			}
+		})
+	}
+}

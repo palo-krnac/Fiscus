@@ -3,20 +3,16 @@
 import { computed, ref } from 'vue'
 import { useToast } from 'primevue/usetoast'
 import Button from 'primevue/button'
-import InputText from 'primevue/inputtext'
-import IconField from 'primevue/iconfield'
-import InputIcon from 'primevue/inputicon'
 import Message from 'primevue/message'
 import Checkbox from 'primevue/checkbox'
 import DatePicker from 'primevue/datepicker'
 import Select from 'primevue/select'
-import ExportButton from '../components/ExportButton.vue'
+import ImportWarnings from '../components/ImportWarnings.vue'
 import { api, ApiError } from '../lib/api.js'
 import { session, can } from '../lib/session.js'
-import { importWarningColumns } from '../lib/columns.js'
 import { toISODate } from '../lib/format.js'
 import { downloadCSV } from '../lib/export.js'
-import { filterWarnings, kindLabel, maxImportBytes, newTotal, otherText, sources, summaryRows, tableKinds, templateExport } from '../lib/migrate.js'
+import { kindLabel, maxImportBytes, newTotal, otherText, sources, summaryRows, tableKinds, templateExport } from '../lib/migrate.js'
 
 const toast = useToast()
 const canWrite = computed(() => can('invoices.write') && can('purchases.write') && can('contacts.write'))
@@ -26,7 +22,6 @@ const fileInput = ref(null)
 const file = ref(null)
 const report = ref(null)
 const busy = ref(false)
-const search = ref('')
 // faktúry so splatnosťou do dátumu budú uhradené (staré roky sú vyrovnané)
 const paidOn = ref(false)
 const paidUntil = ref(null)
@@ -43,7 +38,6 @@ function downloadTemplate() {
 const paidISO = computed(() => (paidOn.value && paidUntil.value ? toISODate(paidUntil.value) : ''))
 
 const rows = computed(() => summaryRows(report.value))
-const warnings = computed(() => filterWarnings(report.value?.warnings, search.value))
 const other = computed(() => otherText(report.value?.other))
 const nothingNew = computed(() => report.value && !report.value.done && newTotal(report.value) === 0)
 
@@ -55,7 +49,6 @@ function choose(s) {
 function reset() {
   file.value = null
   report.value = null
-  search.value = ''
   paidOn.value = false
   paidUntil.value = null
   kind.value = 'auto'
@@ -201,20 +194,7 @@ async function run() {
             <Button label="Zrušiť" text size="small" @click="reset" />
           </div>
 
-          <section v-if="report.warnings?.length" class="warnings">
-            <div class="warn-head">
-              <h3>Upozornenia <span class="count">{{ report.warnings.length }}</span></h3>
-              <IconField class="search">
-                <InputIcon class="pi pi-search" />
-                <InputText v-model="search" placeholder="Hľadať v upozorneniach" size="small" aria-label="Hľadať v upozorneniach" />
-              </IconField>
-              <ExportButton name="Prenos dát – upozornenia" :columns="importWarningColumns" :rows="warnings" />
-            </div>
-            <ol>
-              <li v-for="w in warnings" :key="w.n" :value="w.n">{{ w.text }}</li>
-            </ol>
-            <p v-if="!warnings.length" class="hint">Nič sa nenašlo.</p>
-          </section>
+          <ImportWarnings :warnings="report.warnings ?? []" />
         </template>
       </section>
     </div>
@@ -399,37 +379,6 @@ async function run() {
   color: var(--tone-draft);
   font-weight: 600;
 }
-.warnings {
-  margin-top: 16px;
-  border-top: 1px solid var(--rule);
-  padding-top: 12px;
-}
-.warn-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.warn-head h3 {
-  margin: 0;
-  font-size: var(--fs-md);
-  font-weight: 600;
-  margin-right: auto;
-}
-.count {
-  color: var(--ink-faint);
-  font-weight: 400;
-}
-.warnings ol {
-  margin: 10px 0 0;
-  padding-left: 2.2em;
-  font-size: var(--fs-sm);
-  max-height: 320px;
-  overflow: auto;
-}
-.warnings li {
-  padding: 2px 0;
-}
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -462,10 +411,6 @@ async function run() {
   }
   .summary .num {
     width: auto;
-  }
-  .warn-head .search {
-    flex: 1 1 100%;
-    order: 3;
   }
 }
 </style>

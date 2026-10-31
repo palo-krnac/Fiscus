@@ -94,7 +94,7 @@ func tableParty(p tabimport.Party) (invoice.Party, string) {
 		}
 		country = "SK"
 	}
-	return invoice.Party{Name: p.Name, Street: p.Street, City: p.City, Zip: p.Zip, Country: country, ICO: p.ICO, DIC: p.DIC, ICDPH: p.ICDPH,
+	return invoice.Party{Name: p.Name, Street: p.Street, City: p.City, Zip: strings.ReplaceAll(p.Zip, " ", ""), Country: country, ICO: p.ICO, DIC: p.DIC, ICDPH: p.ICDPH,
 		Email: p.Email}, warn
 }
 
@@ -104,7 +104,8 @@ func tableMigration(m *migration, sh tabimport.Sheet) {
 		if warn != "" {
 			m.Warnings = append(m.Warnings, fmt.Sprintf("Adresár, riadok %d: %s", c.Line, warn))
 		}
-		m.Contacts = append(m.Contacts, migContact{Party: p, Phone: c.Party.Phone, Note: c.Party.Note})
+		m.Contacts = append(m.Contacts, migContact{Party: p, Phone: c.Party.Phone, IBAN: c.Party.IBAN,
+			Note: contactNote(p.Name, c.Party.Person, c.Party.Note)})
 	}
 	for _, d := range sh.Docs {
 		ref := fmt.Sprintf("riadok %d", d.Line)

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { filterWarnings, kindLabel, newTotal, otherText, sources, summaryRows, tableKinds, templateExport } from './migrate.js'
+import { contactsLabel, filterWarnings, kindLabel, newTotal, otherText, sources, summaryRows, tableKinds, templateExport } from './migrate.js'
 
 describe('prenos dát', () => {
   const report = {
@@ -34,10 +34,10 @@ describe('prenos dát', () => {
   ])('hľadanie v upozorneniach „%s“', (q, n) => {
     expect(filterWarnings(report.warnings, q)).toHaveLength(n)
   })
-  it.each(['pohoda', 'money', 'omega', 'idoklad', 'mrp', 'table'])('zdroj %s je hotový', (id) => {
+  it.each(['pohoda', 'money', 'omega', 'idoklad', 'mrp', 'vcard', 'table'])('zdroj %s je hotový', (id) => {
     const s = sources.find((x) => x.id === id)
     expect(s.ready).toBe(true)
-    expect(s.accept).toMatch({ table: /\.xlsx/, omega: /\.txt/, idoklad: /\.zip/, mrp: /\.zip/ }[id] ?? /\.xml/)
+    expect(s.accept).toMatch({ table: /\.xlsx/, omega: /\.txt/, idoklad: /\.zip/, mrp: /\.zip/, vcard: /\.vcf/ }[id] ?? /\.xml/)
   })
   it('agendy Money S3', () => {
     expect(otherText({ ObjPrij: 3, PokDokl: 1 })).toBe('prijaté objednávky 3, pokladničné doklady 1')
@@ -55,4 +55,13 @@ describe('tabuľka Excel/CSV', () => {
     expect(kindLabel('purchases')).toBe('Prijaté faktúry')
     expect(kindLabel('x')).toBe('')
   })
+})
+
+describe('import kontaktov', () => {
+  it.each([
+    [1, 'Pridať 1 kontakt'],
+    [3, 'Pridať 3 kontakty'],
+    [5, 'Pridať 5 kontaktov'],
+    [0, 'Pridať 0 kontaktov'],
+  ])('%i → %s', (n, text) => expect(contactsLabel(n)).toBe(text))
 })

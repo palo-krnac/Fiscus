@@ -95,6 +95,7 @@ func (s *Server) importMigrate(w http.ResponseWriter, r *http.Request) {
 		"omega":   report(s.App.ImportOmega),
 		"idoklad": report(s.App.ImportIDoklad),
 		"mrp":     report(s.App.ImportMRP),
+		"vcard":   report(s.App.ImportVCard),
 		"table": func(ctx context.Context, cid int64, data []byte, opt app.MigrateOptions, apply bool) (any, error) {
 			return s.App.ImportTable(ctx, cid, data, opt, apply)
 		},
@@ -118,6 +119,23 @@ func (s *Server) importMigrate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res, err := run(r.Context(), cid, data, opt, r.URL.Query().Get("apply") == "1")
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+// importContacts: POST …/contacts/import — vizitky vCard alebo tabuľka
+// kontaktov; ?apply=1 import vykoná, inak vráti náhľad.
+func (s *Server) importContacts(w http.ResponseWriter, r *http.Request) {
+	cid, _ := pathID(w, r, "cid")
+	data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, app.MaxMigrateBytes))
+	if err != nil {
+		writeErr(w, http.StatusRequestEntityTooLarge, "Súbor je príliš veľký (najviac 50 MB)", nil)
+		return
+	}
+	res, err := s.App.ImportContacts(r.Context(), cid, data, r.URL.Query().Get("apply") == "1")
 	if err != nil {
 		fail(w, err)
 		return
