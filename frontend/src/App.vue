@@ -112,6 +112,10 @@ const isActive = (path) =>
   <!-- mobil (bločky): vlastná hlavička bez bočného menu -->
   <template v-else-if="route.meta.mobile">
     <RouterView v-if="session.ready && session.companyId && allowed" />
+    <div v-else-if="session.ready" class="mobile-msg">
+      <i class="pi" :class="session.error ? 'pi-link' : 'pi-lock'" aria-hidden="true" />
+      <p>{{ session.error || (!session.companyId ? 'Zatiaľ tu nie je žiadna firma.' : 'Na bločky nemáte oprávnenie.') }}</p>
+    </div>
     <Toast position="top-center" />
   </template>
   <!-- tlačové zobrazenie bez menu a hlavičky -->
@@ -219,6 +223,21 @@ const isActive = (path) =>
 </template>
 
 <style scoped>
+.mobile-msg {
+  max-width: 420px;
+  margin: 64px auto;
+  padding: 0 16px;
+  text-align: center;
+  color: var(--ink-soft);
+}
+.mobile-msg p::first-letter {
+  text-transform: uppercase;
+}
+.mobile-msg .pi {
+  font-size: 2rem;
+  color: var(--blue);
+  margin-bottom: 10px;
+}
 .shell {
   display: grid;
   grid-template-columns: var(--sidebar-w) 1fr;

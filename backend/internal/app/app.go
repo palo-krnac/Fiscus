@@ -64,6 +64,11 @@ type App struct {
 	// z omeškania ("" = nesťahovať, sadzby sa zadávajú ručne).
 	ECBRateURL string
 	FetchRates func(ctx context.Context, url string) ([]fx.Rate, error)
+	// OnMobile zapne (true) alebo vypne počúvanie pre telefóny v sieti na
+	// porte (nastaví program; nil = funkcia nie je). LANAddresses nahradí
+	// zistenie adries počítača v testoch.
+	OnMobile     func(enabled bool, port int) error
+	LANAddresses func() []string
 	// EKasaURL je adresa služby eKasa na vyhľadanie bločku ("" = ekasa.DefaultURL).
 	EKasaURL string
 	// AIBaseURL je adresa Claude API ("" = api.anthropic.com; v testoch falošný server).
@@ -76,6 +81,7 @@ type App struct {
 	Mailer   mail.Sender
 	lic      atomic.Pointer[license.License]
 	recurMu  sync.Mutex // jeden beh pravidelnej fakturácie naraz
+	mobile   mobileState
 	quoteMu  sync.Mutex // odpovede zákazníkov na ponuky
 	calMu    sync.Mutex // vlastné termíny v kalendári
 	coefMu   sync.Mutex // koeficient § 50

@@ -52,7 +52,9 @@ func (s *Server) csrf(h http.HandlerFunc) http.HandlerFunc {
 func (s *Server) authed(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var actor auth.Actor
-		if !s.authRequired() {
+		if dev, ok := fromLAN(r.Context()); ok {
+			actor = dev // spárovaný telefón v sieti (overil LANHandler)
+		} else if !s.authRequired() {
 			// desktop s PIN-om: okno musí byť odomknuté
 			if s.App.PINEnabled(r.Context()) {
 				c, err := r.Cookie(pinCookie)

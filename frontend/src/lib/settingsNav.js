@@ -19,6 +19,7 @@ export const settingsGroups = [
     items: [
       { path: '/nastavenia/bezpecnost', label: 'Bezpečnosť', icon: 'pi-lock', perm: 'settings.write' },
       { path: '/pouzivatelia', label: 'Používatelia', icon: 'pi-users', perm: 'users.manage', serverOnly: true },
+      { path: '/nastavenia/mobil', label: 'Mobil v sieti', icon: 'pi-mobile', superAdmin: true, desktopOnly: true },
       { path: '/ai', label: 'Prístup pre AI', icon: 'pi-sparkles' },
       { path: '/firmy', label: 'Firmy a licencia', icon: 'pi-building', superAdmin: true, serverOnly: true },
     ],

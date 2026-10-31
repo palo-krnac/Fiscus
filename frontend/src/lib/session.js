@@ -33,7 +33,11 @@ export function can(perm) {
 
 /** Vidí používateľ položku menu (právo, správca, iba serverová verzia)? */
 export function canSee(item) {
-  return (item.superAdmin ? isSuperAdmin() : can(item.perm)) && (!item.serverOnly || session.caps.mode === 'server')
+  return (
+    (item.superAdmin ? isSuperAdmin() : can(item.perm)) &&
+    (!item.serverOnly || session.caps.mode === 'server') &&
+    (!item.desktopOnly || session.caps.mode === 'desktop')
+  )
 }
 
 export function currentRole() {
