@@ -50,7 +50,10 @@ type EshopConn struct {
 	// OnlyPaid: faktúra vznikne až z uhradenej objednávky.
 	OnlyPaid bool `json:"onlyPaid"`
 	// Auto: objednávky sa načítajú samé každú hodinu (v mene toho, kto to zapol).
-	Auto      bool   `json:"auto"`
+	Auto bool `json:"auto"`
+	// Manage: Fiškus riadi obchod — každú hodinu pošle zmeny cenníka a zásoby.
+	Manage    bool   `json:"manage"`
+	LastPush  string `json:"lastPush"`
 	LastError string `json:"lastError"`
 	// Since: objednávky od tohto dňa (pri prvom načítaní).
 	Since invoice.Date `json:"since"`
@@ -70,11 +73,12 @@ type eshopImport struct {
 // eshopStored je obchod v nastaveniach (aj s tajnými údajmi).
 type eshopStored struct {
 	EshopConn
-	StoredKey    string        `json:"storedKey"`
-	StoredSecret string        `json:"storedSecret"`
-	Cursor       time.Time     `json:"cursor"` // odkiaľ načítať nabudúce
-	AutoUser     int64         `json:"autoUser"`
-	Done         []eshopImport `json:"done"`
+	StoredKey    string            `json:"storedKey"`
+	StoredSecret string            `json:"storedSecret"`
+	Cursor       time.Time         `json:"cursor"` // odkiaľ načítať nabudúce
+	AutoUser     int64             `json:"autoUser"`
+	Pushed       map[string]string `json:"pushed"` // kód → odtlačok poslaného produktu
+	Done         []eshopImport     `json:"done"`
 }
 
 func (s eshopStored) view() EshopConn {
@@ -201,10 +205,11 @@ func (a *App) SaveEshops(ctx context.Context, companyID int64, in []EshopConn) (
 			bad(i, "secret", "Zadajte "+info.SecretLbl)
 		}
 		s.OnlyPaid = c.OnlyPaid
-		if c.Auto && !s.Auto {
+		if (c.Auto && !s.Auto) || (c.Manage && !s.Manage) {
 			s.AutoUser = auth.ActorFrom(ctx).UserID
 		}
 		s.Auto = c.Auto
+		s.Manage = c.Manage && info.Catalog
 		if c.Since != s.Since {
 			s.Since, s.Cursor = c.Since, time.Time{} // nový začiatok: načítať odznova (prenesené sa nezopakujú)
 		}
@@ -636,6 +641,12 @@ func (a *App) SyncAllEshops(ctx context.Context) {
 			continue
 		}
 		for _, s := range list {
+			if s.Manage {
+				if err := a.manageEshop(ctx, co.ID, s); err != nil {
+					log.Printf("e-shop %s (firma %d): %v", s.Name, co.ID, err)
+					a.eshopFailed(ctx, co.ID, s.ID, err)
+				}
+			}
 			if !s.Auto {
 				continue
 			}
@@ -672,4 +683,167 @@ func (a *App) eshopFailed(ctx context.Context, companyID int64, id string, cause
 		}
 	}
 	_ = a.saveEshops(ctx, companyID, list)
+}
+
+// manageEshop pošle do riadeného obchodu zmeny cenníka a stav zásob.
+func (a *App) manageEshop(ctx context.Context, companyID int64, s eshopStored) error {
+	actx, err := a.eshopActor(ctx, s.AutoUser)
+	if err != nil {
+		return err
+	}
+	rep, err := a.PushEshopCatalog(actx, companyID, s.ID, false)
+	if err != nil {
+		return err
+	}
+	if rep.Created+rep.Updated > 0 {
+		log.Printf("e-shop %s (firma %d): cenník — nových %d, upravených %d", s.Name, companyID, rep.Created, rep.Updated)
+	}
+	if len(rep.Errors) > 0 {
+		return errors.New("cenník: " + rep.Errors[0])
+	}
+	if info, _ := eshop.InfoOf(s.Platform); info.Stock {
+		if cfg, err := a.loadStock(actx, companyID); err == nil && len(cfg.Items) > 0 {
+			if _, err := a.PushEshopStock(actx, companyID, s.ID); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (a *App) eshopCatalog(ctx context.Context, companyID int64, id string) ([]eshopStored, int, eshop.Catalog, error) {
+	list, i, conn, err := a.eshopConn(ctx, companyID, id)
+	if err != nil {
+		return nil, 0, nil, err
+	}
+	cat, ok := conn.(eshop.Catalog)
+	if !ok {
+		return nil, 0, nil, shopErr(errors.New("tento druh e-shopu zatiaľ nevie prenášať cenník a zákazníkov"))
+	}
+	return list, i, cat, nil
+}
+
+// ImportEshopCatalog prenesie z obchodu produkty do cenníka a zákazníkov
+// do adresára (apply=false: iba náhľad). Existujúce položky a kontakty ostanú.
+func (a *App) ImportEshopCatalog(ctx context.Context, companyID int64, id string, apply bool) (ImportReport, error) {
+	if err := a.requireMigrate(ctx, companyID); err != nil {
+		return ImportReport{}, err
+	}
+	list, i, cat, err := a.eshopCatalog(ctx, companyID, id)
+	if err != nil {
+		return ImportReport{}, err
+	}
+	products, err := cat.Products(ctx)
+	if err != nil {
+		return ImportReport{}, shopErr(err)
+	}
+	customers, err := cat.Customers(ctx)
+	if err != nil {
+		return ImportReport{}, shopErr(err)
+	}
+	m := migration{Source: list[i].Name, Other: map[string]int{}}
+	for _, p := range products {
+		r := vat.Rate(p.Rate)
+		if p.Rate < 0 || !r.ValidOn(a.Today().String()) {
+			m.Skips = append(m.Skips, migSkip{Agenda: agItems, Text: fmt.Sprintf("Produkt %s: neznáma sadzba DPH — doplňte ho do cenníka ručne", p.SKU)})
+			continue
+		}
+		it := catalog.Item{Code: p.SKU, Name: p.Name, Unit: "ks", Price: p.Net, PriceMode: vat.PriceNet, Rate: r, Archived: !p.Active}
+		m.Items = append(m.Items, it)
+	}
+	for _, c := range customers {
+		p := shopParty(c)
+		if strings.TrimSpace(p.Name) == "" {
+			continue
+		}
+		m.Contacts = append(m.Contacts, migContact{Party: p, Phone: c.Phone, Persons: contactPersons(p.Name, c.Name, c.Email, c.Phone)})
+	}
+	return a.migrate(ctx, companyID, m, MigrateOptions{}, apply)
+}
+
+// EshopCatalogReport je výsledok odoslania cenníka.
+type EshopCatalogReport struct {
+	Created   int      `json:"created"`
+	Updated   int      `json:"updated"`
+	Unchanged int      `json:"unchanged"`
+	NotInShop int      `json:"notInShop"` // služby a nesledované položky, ktoré obchod nemá
+	Errors    []string `json:"errors"`
+}
+
+func pushPrint(p eshop.Product) string {
+	return fmt.Sprintf("%s|%s|%s|%d|%v|%v", p.Name, p.Net, p.Gross, p.Rate, p.Active, p.Create)
+}
+
+// PushEshopCatalog pošle cenník do obchodu: položky s kódom podľa kódu
+// upraví (názov, cena, DPH, viditeľnosť). Chýbajúcu založí ako koncept iba
+// vtedy, keď je položka na sklade (služby a voľné položky do obchodu nejdú).
+// Bez all sa posielajú iba položky zmenené od posledného odoslania.
+func (a *App) PushEshopCatalog(ctx context.Context, companyID int64, id string, all bool) (EshopCatalogReport, error) {
+	rep := EshopCatalogReport{Errors: []string{}}
+	if err := a.Require(ctx, companyID, auth.PermInvoicesWrite); err != nil {
+		return rep, err
+	}
+	eshopMu.Lock()
+	defer eshopMu.Unlock()
+	list, i, cat, err := a.eshopCatalog(ctx, companyID, id)
+	if err != nil {
+		return rep, err
+	}
+	items, err := a.Store.ListItems(ctx, companyID)
+	if err != nil {
+		return rep, err
+	}
+	cfg, err := a.loadStock(ctx, companyID)
+	if err != nil {
+		return rep, err
+	}
+	s := &list[i]
+	if s.Pushed == nil {
+		s.Pushed = map[string]string{}
+	}
+	sent := 0
+	for _, it := range items {
+		if it.Code == "" {
+			continue
+		}
+		pr := it.Prices()
+		_, stocked := cfg.item(it.ID)
+		p := eshop.Product{SKU: it.Code, Name: it.Name, Net: pr.Net, Gross: pr.Gross, Rate: int(it.Rate), Active: !it.Archived, Create: stocked}
+		fp := pushPrint(p)
+		if !all && s.Pushed[strings.ToUpper(it.Code)] == fp {
+			rep.Unchanged++
+			continue
+		}
+		if sent >= MaxStockPush {
+			rep.Errors = append(rep.Errors, fmt.Sprintf("Odoslaných prvých %d položiek, zvyšok pri ďalšom odoslaní", MaxStockPush))
+			break
+		}
+		sent++
+		created, err := cat.PushProduct(ctx, p)
+		switch {
+		case errors.Is(err, eshop.ErrAuth):
+			return rep, shopErr(err)
+		case errors.Is(err, eshop.ErrNoSKU):
+			rep.NotInShop++
+		case err != nil:
+			if len(rep.Errors) < 20 {
+				rep.Errors = append(rep.Errors, it.Code+": "+err.Error())
+			}
+			continue
+		case created:
+			rep.Created++
+		default:
+			rep.Updated++
+		}
+		s.Pushed[strings.ToUpper(it.Code)] = fp
+	}
+	s.LastPush = a.now().Format(time.RFC3339)
+	if err := a.saveEshops(ctx, companyID, list); err != nil {
+		return rep, err
+	}
+	if rep.Created+rep.Updated > 0 {
+		a.record(ctx, companyID, audit.CatCatalog, "update", "eshop_catalog", 0,
+			fmt.Sprintf("Cenník odoslaný do e-shopu %s: nových %d, upravených %d", s.Name, rep.Created, rep.Updated), nil, nil)
+	}
+	return rep, nil
 }

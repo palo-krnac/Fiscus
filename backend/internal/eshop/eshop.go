@@ -45,6 +45,7 @@ type Info struct {
 	Help      string   `json:"help"`        // kde údaje v obchode vytvoriť
 	Docs      string   `json:"docs"`        // odkaz na dokumentáciu API
 	Stock     bool     `json:"stock"`       // vie prijať stav zásob
+	Catalog   bool     `json:"catalog"`     // vie riadiť cenník a zákazníkov z Fiškusu
 	Verified  bool     `json:"verified"`    // overené na živom obchode
 	Note      string   `json:"note,omitempty"`
 }
@@ -53,7 +54,7 @@ type Info struct {
 var Platforms = []Info{
 	{Platform: WooCommerce, Name: "WooCommerce", URLHint: "https://mojobchod.sk", KeyLabel: "Consumer key", SecretLbl: "Consumer secret",
 		Help: "WooCommerce → Nastavenia → Pokročilé → REST API → Pridať kľúč s oprávnením Čítanie/Zápis.",
-		Docs: "https://woocommerce.github.io/woocommerce-rest-api-docs/", Stock: true},
+		Docs: "https://woocommerce.github.io/woocommerce-rest-api-docs/", Stock: true, Catalog: true},
 	{Platform: Shopify, Name: "Shopify", URLHint: "mojobchod.myshopify.com", SecretLbl: "Admin API access token",
 		Help: "Shopify admin → Settings → Apps → Develop apps → vlastná aplikácia s právami read_orders, read_products, write_inventory, read_locations.",
 		Docs: "https://shopify.dev/docs/api/admin-graphql", Stock: true},
@@ -189,7 +190,7 @@ func New(c Conn) (Connector, error) {
 	}
 	switch c.Platform {
 	case WooCommerce:
-		return &woo{c}, nil
+		return &woo{c: c}, nil
 	case Shopify:
 		return &shopify{c}, nil
 	case PrestaShop:

@@ -7,13 +7,15 @@ import Password from 'primevue/password'
 import Select from 'primevue/select'
 import Checkbox from 'primevue/checkbox'
 import { useToast } from 'primevue/usetoast'
+import { useConfirm } from 'primevue/useconfirm'
 import FormField from './FormField.vue'
 import { api, ApiError } from '../lib/api.js'
 import { can, session } from '../lib/session.js'
 import { formatMoney } from '../lib/format.js'
-import { blankConn, connErrors, formatWhen, orderStatus, splitError, stockSummary, toSave } from '../lib/eshops.js'
+import { blankConn, catalogSummary, connErrors, formatWhen, importSummary, orderStatus, splitError, stockSummary, toSave } from '../lib/eshops.js'
 
 const toast = useToast()
+const confirm = useConfirm()
 const platforms = ref([])
 const conns = ref([])
 const saved = ref('[]')
@@ -77,9 +79,35 @@ async function run(c, what) {
       results.value = { ...results.value, [c.id]: r }
       toast.add({ severity: r.failed ? 'warn' : 'success', summary: `Nové koncepty faktúr: ${r.created}`, life: 4000 })
       await load()
+    } else if (what === 'import') {
+      const preview = await api.importEshopCatalog(session.companyId, c.id, false)
+      busy.value = ''
+      confirm.require({
+        header: 'Prevziať z obchodu',
+        message: `${importSummary(preview)}. Položky a kontakty, ktoré už vo Fiškuse sú, ostanú bez zmeny.`,
+        acceptLabel: 'Prevziať',
+        rejectLabel: 'Zrušiť',
+        accept: async () => {
+          busy.value = 'import' + c.id
+          try {
+            const r = await api.importEshopCatalog(session.companyId, c.id, true)
+            toast.add({ severity: 'success', summary: 'Prevzaté z obchodu', detail: importSummary(r), life: 6000 })
+          } catch (e) {
+            toast.add({ severity: 'error', summary: 'Prenos zlyhal', detail: e.message, life: 8000 })
+          } finally {
+            busy.value = ''
+          }
+        },
+      })
+      return
+    } else if (what === 'catalog') {
+      const r = await api.pushEshopCatalog(session.companyId, c.id)
+      stockResults.value = { ...stockResults.value, [c.id]: { text: catalogSummary(r) } }
+      toast.add({ severity: r.errors.length ? 'warn' : 'success', summary: 'Cenník odoslaný', detail: catalogSummary(r), life: 6000 })
+      await load()
     } else {
       const r = await api.pushEshopStock(session.companyId, c.id)
-      stockResults.value = { ...stockResults.value, [c.id]: r }
+      stockResults.value = { ...stockResults.value, [c.id]: { text: stockSummary(r) } }
       toast.add({ severity: r.missing.length || r.errors.length ? 'warn' : 'success', summary: 'Zásoby odoslané', detail: stockSummary(r), life: 6000 })
       await load()
     }
@@ -96,7 +124,7 @@ async function run(c, what) {
     <legend>Napojené obchody</legend>
     <p class="lead">
       Fiškus načíta objednávky z e-shopu ako <strong>koncepty faktúr</strong> — skontrolujete ich a vystavíte. Položky s rovnakým kódom
-      ako v cenníku sa naviažu na cenník a pri vystavení sa vydajú zo skladu. Do obchodu vie poslať stav zásob zo skladu.
+      ako v cenníku sa naviažu na cenník a pri vystavení sa vydajú zo skladu. Obchod sa dá riadiť z Fiškusu: cenník (názvy, ceny, DPH) a zásoby idú z Fiškusu do obchodu, produkty a zákazníkov z obchodu prevezmete jedným tlačidlom.
     </p>
     <p class="unverified">
       <i class="pi pi-info-circle" aria-hidden="true" />
@@ -139,6 +167,10 @@ async function run(c, what) {
           <Checkbox v-model="c.auto" binary />
           <span>Načítavať automaticky každú hodinu<small>Kým beží Fiškus; koncepty počkajú na kontrolu</small></span>
         </label>
+        <label v-if="info(c.platform).catalog" class="check">
+          <Checkbox v-model="c.manage" binary />
+          <span>Riadiť obchod z Fiškusu<small>Každú hodinu pošle zmeny cenníka (názov, cena, DPH, vyradenie) a zásoby; novú skladovú položku založí ako koncept, služby nie</small></span>
+        </label>
       </div>
       <p v-if="splitError(c.lastError)" class="auto-error">
         <i class="pi pi-exclamation-triangle" aria-hidden="true" />
@@ -154,13 +186,15 @@ async function run(c, what) {
           <Button label="Otestovať spojenie" icon="pi pi-wifi" size="small" outlined :loading="busy === 'test' + c.id" :disabled="dirty || !!busy" @click="run(c, 'test')" />
           <Button v-if="can('invoices.write')" label="Načítať objednávky" icon="pi pi-download" size="small" :loading="busy === 'orders' + c.id" :disabled="dirty || !!busy" @click="run(c, 'orders')" />
           <Button v-if="can('purchases.write') && info(c.platform).stock" label="Poslať zásoby" icon="pi pi-upload" size="small" outlined :loading="busy === 'stock' + c.id" :disabled="dirty || !!busy" @click="run(c, 'stock')" />
+          <Button v-if="can('invoices.write') && info(c.platform).catalog" label="Prevziať produkty a zákazníkov" icon="pi pi-file-import" size="small" outlined :loading="busy === 'import' + c.id" :disabled="dirty || !!busy" @click="run(c, 'import')" />
+          <Button v-if="can('invoices.write') && info(c.platform).catalog" label="Poslať cenník" icon="pi pi-tags" size="small" outlined :loading="busy === 'catalog' + c.id" :disabled="dirty || !!busy" @click="run(c, 'catalog')" />
           <span v-if="dirty" class="muted">Najprv uložte zmeny.</span>
           <span v-else-if="!info(c.platform).stock" class="muted">Tento obchod stav zásob cez API neprijíma.</span>
           <span v-else-if="c.lastStock" class="muted">Zásoby odoslané {{ formatWhen(c.lastStock) }}</span>
         </template>
       </div>
 
-      <div v-if="stockResults[c.id]" class="result">{{ stockSummary(stockResults[c.id]) }}</div>
+      <div v-if="stockResults[c.id]" class="result">{{ stockResults[c.id].text }}</div>
       <div v-if="results[c.id]" class="result">
         <p v-if="!results[c.id].orders.length" class="muted">Žiadne nové objednávky.</p>
         <table v-else class="orders">

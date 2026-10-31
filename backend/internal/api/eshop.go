@@ -88,3 +88,29 @@ func (s *Server) pushEshopStock(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, out)
 }
+
+func (s *Server) importEshopCatalog(w http.ResponseWriter, r *http.Request) {
+	cid, ok := s.company(w, r)
+	if !ok {
+		return
+	}
+	out, err := s.App.ImportEshopCatalog(r.Context(), cid, r.PathValue("id"), r.URL.Query().Get("apply") == "1")
+	if err != nil {
+		failEshop(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) pushEshopCatalog(w http.ResponseWriter, r *http.Request) {
+	cid, ok := s.company(w, r)
+	if !ok {
+		return
+	}
+	out, err := s.App.PushEshopCatalog(r.Context(), cid, r.PathValue("id"), r.URL.Query().Get("all") == "1")
+	if err != nil {
+		failEshop(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}

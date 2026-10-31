@@ -182,6 +182,8 @@ export const api = {
   testEshop: (cid, id) => request('POST', `/api/companies/${cid}/eshops/${id}/test`, {}),
   syncEshopOrders: (cid, id) => request('POST', `/api/companies/${cid}/eshops/${id}/orders`, {}),
   pushEshopStock: (cid, id) => request('POST', `/api/companies/${cid}/eshops/${id}/stock`, {}),
+  importEshopCatalog: (cid, id, apply) => request('POST', `/api/companies/${cid}/eshops/${id}/catalog/import${apply ? '?apply=1' : ''}`, {}),
+  pushEshopCatalog: (cid, id, all = false) => request('POST', `/api/companies/${cid}/eshops/${id}/catalog/push${all ? '?all=1' : ''}`, {}),
   revokeStockFeed: (cid) => request('DELETE', `/api/companies/${cid}/stock/feed`),
   stockCard: (cid, warehouse, item) => request('GET', `/api/companies/${cid}/stock/cards/${encodeURIComponent(warehouse)}/${item}`),
   ledger: (cid, year) => request('GET', `/api/companies/${cid}/ledger` + query({ year })),
