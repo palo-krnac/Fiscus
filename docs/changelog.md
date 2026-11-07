@@ -11,7 +11,7 @@ tags: [prehľad]
 Verzie sú značky v repozitári (`v0.2.0`). Podrobný zoznam funkcií po
 etapách je v [pláne vývoja](./ROADMAP.md).
 
-## Pripravuje sa (0.5)
+## 0.7.0
 
 - **Fio banka priamo**: pohyby z účtu vo Fio sa stiahnu tlačidlom cez API
   (token iba na čítanie) a spárujú s faktúrami ako z výpisu.
@@ -31,11 +31,30 @@ etapách je v [pláne vývoja](./ROADMAP.md).
 - **Kniha jázd zo záznamu GPS**: trasa z mobilu alebo GPS jednotky (GPX,
   CSV) sa rozdelí na jazdy podľa zastávok, s pomenovanými miestami,
   nadväzujúcim tachometrom a kontrolou už zapísaných jázd.
+- **Kurzové rozdiely pri čiastočných úhradách** faktúr v cudzej mene.
+- **E-faktúra**: vyúčtovanie zálohy.
+- **Domácnosť**: plán platieb po mesiacoch, pokuty a pripomienky; detail
+  bločku s položkami a údajmi z eKasy.
+- **Vyskúšať na ukážkovej firme**, aj vo verzii v prehliadači.
+- **Fiškus bez licencií**: žiadny predaj ani limit počtu firiem.
+- Návod a web so snímkami obrazovky na fiskus.online a docs.fiskus.online.
+
+## 0.6.0
+
+- **Domácnosť**: účet Hotovosť hneď po založení, bločky v telefóne aj bez
+  účtu.
+
+## 0.5.0
+
+- **Mobil**: výber firmy alebo domácnosti pri bločkoch, diagnostika
+  pripojenia v sieti a brána firewall.
+- **Bločky**: spoľahlivejšie čítanie QR kódu.
+
+## 0.4.0
+
 - **Účtovné odpisy** v podvojnom účtovníctve: účet majetku, doba
   odpisovania v mesiacoch, účtovný odpisový plán s rozdielom k daňovým
   odpisom a zaúčtovanie za rok jedným interným dokladom.
-
-## 0.4.0
 
 - **Mzdy**: zamestnanci a dohodári, výpočet mzdy, odvodov po fondoch,
   zdravotného poistenia, preddavku na daň a daňového bonusu za roky 2025
